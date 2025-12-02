@@ -261,9 +261,10 @@ export default function CompanyDashboard() {
       ? window.location.origin
       : "http://localhost:3000";
 
- const investorUrl = latestLink
-  ? `${baseUrl}/investor?token=${latestLink.access_token}`
+  const investorUrl = latestLink
+  ? `${baseUrl}/investor/${latestLink.access_token}`
   : null;
+
 
   // Vis ikke "rejected" i lista
   const visibleRequests = requests.filter((r) => r.status !== "rejected");
@@ -563,18 +564,18 @@ export default function CompanyDashboard() {
                     Status: <span className="font-semibold">{req.status}</span>
                   </p>
 
-                  {req.link && (
-                    <p className="mt-2 text-xs text-emerald-400 break-all">
-                      Tilgangslenke:{" "}
-                      {`${baseUrl}/investor?token=${req.link.access_token}`}
-                      <br />
-                      (Utgår:{" "}
-                      {new Date(
-                        req.link.expires_at
-                      ).toLocaleDateString("nb-NO")}
-                      )
-                    </p>
-                  )}
+                 {req.link && (
+  <p className="mt-2 text-xs text-emerald-400 break-all">
+    Tilgangslenke:{" "}
+    {`${baseUrl}/investor?token=${req.link.access_token}`}
+    <br />
+    (Utgår:{" "}
+      {new Date(req.link.expires_at).toLocaleDateString("nb-NO")}
+    )
+  </p>
+)}
+
+
 
                   <RequestActions req={req} onUpdated={loadData} />
                 </div>
