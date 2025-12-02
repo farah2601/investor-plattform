@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabaseClient";
 import { KpiCard } from "../../components/ui/KpiCard";
 import { Button } from "../../components/ui/button";
@@ -128,7 +129,7 @@ function RequestActions({
     <div className="flex gap-2 mt-3">
       <Button
         size="sm"
-        className="bg-emerald-600 hover:bg-emerald-500"
+        className="bg-emerald-600 hover:bg-emerald-500 text-white"
         onClick={() => updateStatus("approved")}
         disabled={isPending}
       >
@@ -156,9 +157,16 @@ const INTEGRATIONS = [
 ];
 
 export default function CompanyDashboard() {
+  const router = useRouter();
+
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [company, setCompany] = useState<CompanyKpi | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // 🔐 ny state: har vi sjekket auth?
+  const [authChecked, setAuthChecked] = useState(false);
+
+  // KPI-modal-state
   const [kpiDialogOpen, setKpiDialogOpen] = useState(false);
   const [savingKpi, setSavingKpi] = useState(false);
   const [kpiForm, setKpiForm] = useState({
@@ -169,6 +177,27 @@ export default function CompanyDashboard() {
     churn: "",
     growth_percent: "",
   });
+
+  // 🔐 AUTH-SJEKK
+  useEffect(() => {
+    async function checkAuthAndLoad() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      // Ikke logget inn → send til login
+      if (!session) {
+        router.replace("/login");
+        return;
+      }
+
+      // Logget inn → last data
+      setAuthChecked(true);
+      await loadData();
+    }
+
+    checkAuthAndLoad();
+  }, [router]);
 
   async function loadData() {
     setError(null);
@@ -204,7 +233,7 @@ export default function CompanyDashboard() {
 
     setRequests(withLinks);
 
-    // 3) Selskapets KPI-er (MVP: første rad)
+    // 3) Første company (MVP)
     const { data: companiesData, error: companyError } = await supabase
       .from("companies")
       .select(
@@ -232,7 +261,6 @@ export default function CompanyDashboard() {
     const first = (companiesData?.[0] as CompanyKpi) || null;
     setCompany(first);
 
-    // prefill kpiForm
     if (first) {
       setKpiForm({
         mrr: first.mrr != null ? String(first.mrr) : "",
@@ -247,28 +275,21 @@ export default function CompanyDashboard() {
     }
   }
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
   const approvedWithLink = requests.filter(
     (r) => r.status === "approved" && r.link
   );
-
   const latestLink = approvedWithLink[0]?.link ?? null;
+
   const baseUrl =
     typeof window !== "undefined"
       ? window.location.origin
       : "http://localhost:3000";
 
   const investorUrl = latestLink
-  ? `${baseUrl}/investor?token=${latestLink.access_token}`
-  : null;
+    ? `${baseUrl}/investor?token=${latestLink.access_token}`
+    : null;
 
-  
-
-
-  // Vis ikke "rejected" i lista
+  // ikke vis "rejected"
   const visibleRequests = requests.filter((r) => r.status !== "rejected");
 
   async function copyLink() {
@@ -344,6 +365,15 @@ export default function CompanyDashboard() {
     alert("Tall oppdatert ✅");
   }
 
+  // 🔄 Viser "sjekker tilgang" mens vi ikke vet om bruker er logget inn
+  if (!authChecked) {
+    return (
+      <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center">
+        <p className="text-sm text-slate-400">Sjekker tilgang…</p>
+      </main>
+    );
+  }
+
   if (error) {
     return (
       <main className="min-h-screen bg-slate-950 text-slate-50 p-10">
@@ -358,17 +388,29 @@ export default function CompanyDashboard() {
       <main className="min-h-screen bg-slate-950 text-slate-50">
         <div className="max-w-5xl mx-auto px-4 py-10 space-y-8">
           {/* HEADER */}
-          <header className="space-y-2">
-            <p className="text-xs tracking-[0.2em] text-slate-500 uppercase">
-              Selskap
-            </p>
-            <h1 className="text-3xl font-bold">Selskapets dashboard</h1>
-            <p className="text-sm text-slate-400">
-              Kontrollpanel for KPI-er, integrasjoner og investortilgang.
-            </p>
-          </header>
+          <header className="flex items-start justify-between gap-4">
+  <div className="space-y-2">
+    <p className="text-xs tracking-[0.2em] text-slate-500 uppercase">
+      Selskap
+    </p>
+    <h1 className="text-3xl font-bold">Selskapets dashboard</h1>
+    <p className="text-sm text-slate-400">
+      Kontrollpanel for KPI-er, integrasjoner og investortilgang.
+    </p>
+  </div>
 
-          {/* KPI-SEKSJON – SAMME SOM INVESTOR SER */}
+  <Link href="/logout">
+    <Button
+      variant="outline"
+      size="sm"
+      className="border-slate-600 text-slate-100 bg-transparent hover:bg-slate-800/60"
+    >
+      Logg ut
+    </Button>
+  </Link>
+</header>
+
+          {/* KPI */}
           {company && (
             <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl space-y-4">
               <div className="flex items-center justify-between gap-4">
@@ -422,9 +464,9 @@ export default function CompanyDashboard() {
             </section>
           )}
 
-          {/* DEL INVESTORVISNING + OPPDATER KPI-ER */}
+          {/* DELBAR LENKE + OPPDATER KPI */}
           <section className="grid gap-4 md:grid-cols-[2fr,1fr]">
-            {/* Delbar lenke */}
+            {/* Delbar investor-lenke */}
             <div className="rounded-2xl border border-slate-800 bg-[#13171E] p-6 space-y-4">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-medium text-slate-200">
@@ -480,7 +522,7 @@ export default function CompanyDashboard() {
             </div>
           </section>
 
-          {/* INTEGRASJONER – COMPACT */}
+          {/* Integrasjoner */}
           <section className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Integrasjoner</h2>
@@ -526,7 +568,7 @@ export default function CompanyDashboard() {
             </div>
           </section>
 
-          {/* FORESPØRSLER FRA INVESTORER */}
+          {/* Forespørsler */}
           <section className="space-y-4">
             <h2 className="text-lg font-semibold">Selskapets forespørsler</h2>
 
@@ -566,18 +608,18 @@ export default function CompanyDashboard() {
                     Status: <span className="font-semibold">{req.status}</span>
                   </p>
 
-                 {req.link && (
-  <p className="mt-2 text-xs text-emerald-400 break-all">
-    Tilgangslenke:{" "}
-    {`${baseUrl}/investor?token=${req.link.access_token}`}
-    <br />
-    (Utgår:{" "}
-      {new Date(req.link.expires_at).toLocaleDateString("nb-NO")}
-    )
-  </p>
-)}
-
-
+                  {req.link && (
+                    <p className="mt-2 text-xs text-emerald-400 break-all">
+                      Tilgangslenke:{" "}
+                      {`${baseUrl}/investor?token=${req.link.access_token}`}
+                      <br />
+                      (Utgår:{" "}
+                      {new Date(
+                        req.link.expires_at
+                      ).toLocaleDateString("nb-NO")}
+                      )
+                    </p>
+                  )}
 
                   <RequestActions req={req} onUpdated={loadData} />
                 </div>
@@ -624,7 +666,9 @@ export default function CompanyDashboard() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs text-slate-400">Burn rate (kr / mnd)</label>
+              <label className="text-xs text-slate-400">
+                Burn rate (kr / mnd)
+              </label>
               <Input
                 value={kpiForm.burn_rate}
                 onChange={(e) =>
@@ -636,7 +680,9 @@ export default function CompanyDashboard() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs text-slate-400">Runway (måneder)</label>
+              <label className="text-xs text-slate-400">
+                Runway (måneder)
+              </label>
               <Input
                 value={kpiForm.runway_months}
                 onChange={(e) =>
@@ -700,5 +746,3 @@ export default function CompanyDashboard() {
     </>
   );
 }
-
-
