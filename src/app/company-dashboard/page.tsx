@@ -262,8 +262,10 @@ export default function CompanyDashboard() {
       : "http://localhost:3000";
 
   const investorUrl = latestLink
-  ? `${baseUrl}/investor/${latestLink.access_token}`
+  ? `${baseUrl}/investor?token=${latestLink.access_token}`
   : null;
+
+  
 
 
   // Vis ikke "rejected" i lista
