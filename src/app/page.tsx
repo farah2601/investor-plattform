@@ -169,28 +169,78 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              {/* mini "chart" */}
-              <div className="space-y-2 rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-[11px] uppercase text-slate-400">
-                    MRR trend · 12 months
-                  </p>
-                  <span className="text-[11px] text-emerald-400">+74% YoY</span>
-                </div>
-                <div className="flex h-20 w-full items-end overflow-hidden rounded-xl border border-cyan-500/25 bg-gradient-to-tr from-cyan-500/15 via-cyan-400/10 to-transparent">
-                  <div className="flex w-full flex-1 items-end gap-[2px] px-2 pb-2">
-                    {[25, 40, 35, 50, 60, 55, 70, 72, 80, 78, 86, 92].map(
-                      (h, i) => (
-                        <div
-                          key={i}
-                          className="flex-1 rounded-full bg-cyan-400/80"
-                          style={{ height: `${h}%` }}
-                        />
-                      )
-                    )}
-                  </div>
-                </div>
-              </div>
+            {/* mini "chart" – refined MRR trend */}
+<div className="space-y-2 rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3">
+  <div className="flex items-center justify-between">
+    <p className="text-[11px] uppercase text-slate-400 tracking-[0.18em]">
+      MRR TREND · 12 MONTHS
+    </p>
+    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-400">
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+      +74% YoY
+    </span>
+  </div>
+
+  <div className="mt-1 rounded-2xl border border-cyan-500/30 bg-gradient-to-b from-cyan-500/15 via-slate-900 to-slate-950 px-3 py-2 shadow-[0_0_40px_rgba(34,211,238,0.25)]">
+    <svg
+      viewBox="0 0 100 60"
+      className="h-24 w-full"
+      preserveAspectRatio="none"
+    >
+      <defs>
+        <linearGradient id="mrrArea" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+
+      {/* subtle grid */}
+      <g stroke="#0f172a" strokeWidth="0.6">
+        <line x1="0" y1="50" x2="100" y2="50" />
+        <line x1="0" y1="37" x2="100" y2="37" />
+        <line x1="0" y1="24" x2="100" y2="24" />
+      </g>
+
+      {/* area under line */}
+      <path
+        d="M0 50 L8 49 L16 47 L24 44 L32 41 L40 38 L48 35 L56 32 L64 29 L72 26 L80 23 L88 20 L96 18 L100 17 L100 60 L0 60 Z"
+        fill="url(#mrrArea)"
+      />
+
+      {/* glow line */}
+      <path
+        d="M0 50 L8 49 L16 47 L24 44 L32 41 L40 38 L48 35 L56 32 L64 29 L72 26 L80 23 L88 20 L96 18 L100 17"
+        fill="none"
+        stroke="#22d3ee"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity="0.75"
+      />
+
+      {/* highlight last point */}
+      <circle cx="100" cy="17" r="3" fill="#22d3ee" />
+      <circle
+        cx="100"
+        cy="17"
+        r="6"
+        fill="none"
+        stroke="#22d3ee"
+        strokeWidth="1"
+        opacity="0.5"
+      />
+    </svg>
+
+    {/* x-axis labels */}
+    <div className="mt-1 flex justify-between text-[10px] text-slate-500">
+      <span>Jan</span>
+      <span>Apr</span>
+      <span>Jul</span>
+      <span>Oct</span>
+      <span>Dec</span>
+    </div>
+  </div>
+</div>
 
               {/* AI insight bubble */}
               <div className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-900/80 px-4 py-3">
