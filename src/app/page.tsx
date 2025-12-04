@@ -1,21 +1,17 @@
 // src/app/page.tsx
 
 export default function LandingPage() {
-  const year = new Date().getFullYear();
-
   return (
-    <main className="min-h-screen bg-[#050712] text-slate-50">
-      {/* FIXED NAVBAR – STRIPE STYLE */}
-      <div className="fixed inset-x-0 top-0 z-40 border-b border-white/10 bg-[#050712]/80 backdrop-blur-lg">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 md:px-6 lg:px-8">
+    <main className="min-h-screen bg-[#020617] text-slate-50 antialiased">
+      {/* NAVBAR */}
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-white/5 bg-slate-950/60 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4 sm:px-10 lg:px-24">
           {/* Logo + brand */}
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-cyan-400/50 bg-cyan-500/20">
-              <span className="text-xs font-semibold text-cyan-200">
-                MCP
-              </span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-500/20 ring-1 ring-sky-400/60">
+              <span className="text-sm font-semibold text-sky-300">M</span>
             </div>
-            <div className="flex flex-col">
+            <div className="flex flex-col leading-tight">
               <span className="text-sm font-semibold tracking-tight">
                 MCP Insights
               </span>
@@ -25,456 +21,668 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Desktop nav */}
-          <nav className="hidden items-center gap-6 text-sm md:flex">
-            <a href="#product" className="text-slate-300 hover:text-slate-50 transition">
+          {/* Nav links */}
+          <nav className="hidden items-center gap-8 text-sm text-slate-300 md:flex">
+            <a href="#product" className="hover:text-slate-50">
               Product
             </a>
-            <a href="#founders" className="text-slate-300 hover:text-slate-50 transition">
+            <a href="#for-founders" className="hover:text-slate-50">
               For founders
             </a>
-            <a href="#investors" className="text-slate-300 hover:text-slate-50 transition">
+            <a href="#for-investors" className="hover:text-slate-50">
               For investors
             </a>
-            <a href="#pricing" className="text-slate-300 hover:text-slate-50 transition">
+            <a href="#pricing" className="hover:text-slate-50">
               Pricing
-            </a>
-
-            <a
-              href="/login"
-              className="text-slate-300 hover:text-slate-50 transition"
-            >
-              Log in
-            </a>
-            <a
-              href="/onboarding"
-              className="inline-flex items-center rounded-full bg-cyan-500 px-4 py-1.5 text-xs font-medium text-slate-950 shadow-lg shadow-cyan-500/25 hover:bg-cyan-400 transition"
-            >
-              Start free
             </a>
           </nav>
 
-          {/* Mobile nav (simple) */}
-          <div className="flex items-center gap-2 md:hidden">
-            <a href="/login" className="text-[11px] text-slate-300 underline underline-offset-4">
+          {/* Auth buttons */}
+          <div className="flex items-center gap-3 text-sm">
+            <a
+              href="/login"
+              className="hidden text-slate-300 hover:text-slate-50 sm:inline"
+            >
               Log in
             </a>
             <a
               href="/onboarding"
-              className="inline-flex items-center rounded-full bg-cyan-500 px-3 py-1.5 text-[11px] font-medium text-slate-950 shadow-lg shadow-cyan-500/25 hover:bg-cyan-400 transition"
+              className="inline-flex items-center rounded-full bg-sky-500 px-4 py-1.5 text-xs font-semibold text-slate-950 shadow-lg shadow-sky-500/40 hover:bg-sky-400 sm:text-sm"
             >
               Start free
             </a>
           </div>
         </div>
-      </div>
+      </header>
 
       {/* PAGE CONTENT */}
-      <div className="mx-auto max-w-6xl px-4 pb-16 pt-24 md:px-6 lg:px-8 md:pt-28 space-y-20 md:space-y-24">
+      <div className="pt-24 lg:pt-28">
         {/* HERO */}
-        <section className="grid items-center gap-12 md:grid-cols-2">
-          {/* Left – text */}
-          <div className="space-y-7">
-            <p className="text-[11px] uppercase tracking-[0.25em] text-slate-400">
-              AI-NATIVE INVESTOR PLATFORM
-            </p>
+        <section
+          id="product"
+          className="border-b border-slate-800/60 bg-gradient-to-b from-sky-500/10 via-transparent to-transparent"
+        >
+          <div className="mx-auto flex max-w-6xl flex-col gap-12 px-6 pb-20 pt-10 sm:px-10 lg:flex-row lg:px-24 lg:pb-24 lg:pt-16">
+            {/* Left: copy */}
+            <div className="flex-1 space-y-6">
+              <p className="text-xs font-semibold tracking-[0.3em] text-sky-400 uppercase">
+                AI-NATIVE INVESTOR PLATFORM
+              </p>
 
-            <h1 className="text-4xl font-semibold leading-tight md:text-5xl lg:text-6xl">
-              Be{" "}
-              <span className="bg-gradient-to-r from-cyan-400 via-sky-400 to-cyan-300 bg-clip-text text-transparent">
-                investor-ready
-              </span>{" "}
-              on autopilot.
-            </h1>
+              <h1 className="text-4xl font-semibold leading-tight sm:text-5xl lg:text-6xl">
+                Be{" "}
+                <span className="bg-gradient-to-r from-sky-400 via-cyan-300 to-sky-500 bg-clip-text text-transparent">
+                  investor-ready
+                </span>{" "}
+                on autopilot.
+              </h1>
 
-            <p className="max-w-xl text-sm text-slate-300 md:text-base">
-              Connect your data once, let the MCP agent keep your KPIs fresh,
-              and share a single secure link with investors — no decks, no
-              spreadsheets.
-            </p>
+              <p className="max-w-xl text-sm text-slate-300 sm:text-base">
+                Connect your data once, let the MCP agent keep your KPIs fresh,
+                and share a single secure link with investors — no decks, no
+                spreadsheets.
+              </p>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <a
-                href="/onboarding"
-                className="inline-flex items-center justify-center rounded-full bg-cyan-500 px-6 py-2.5 text-sm font-medium text-slate-950 shadow-lg shadow-cyan-500/25 hover:bg-cyan-400 transition"
-              >
-                Start free
-              </a>
-              <a
-                href="#demo"
-                className="inline-flex items-center justify-center rounded-full border border-slate-600/70 px-6 py-2.5 text-sm font-medium text-slate-100 hover:bg-slate-900/70 transition"
-              >
-                Watch product flow
-              </a>
+              <div className="flex flex-col gap-3 pt-2 sm:flex-row">
+                <a
+                  href="/onboarding"
+                  className="inline-flex items-center justify-center rounded-full bg-sky-500 px-6 py-2.5 text-sm font-semibold text-slate-950 shadow-lg shadow-sky-500/40 hover:bg-sky-400"
+                >
+                  Start free
+                </a>
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center rounded-full border border-slate-700 bg-slate-900/50 px-6 py-2.5 text-sm font-semibold text-slate-100 hover:bg-slate-900"
+                >
+                  Watch product flow
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-500">
+                Built for founders who need to show real numbers to investors
+                automatically.
+              </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
-              <span>Built for B2B SaaS and digital products</span>
-              <span className="h-1 w-1 rounded-full bg-slate-500" />
-              <span>No PDF decks · No reporting spreadsheets</span>
+            {/* Right: Investor preview card */}
+            <div className="flex-1">
+              <div className="mx-auto max-w-md rounded-3xl border border-sky-500/30 bg-slate-950/80 p-4 shadow-[0_0_60px_-20px_rgba(56,189,248,0.7)]">
+                {/* Header */}
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="text-[10px] tracking-[0.3em] text-slate-400 uppercase">
+                      Investor View · Live
+                    </p>
+                    <p className="text-sm font-semibold text-slate-50">
+                      MCP SaaS · Series A ready
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
+                      <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                      Auto-updated
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      Updated 2 min ago
+                    </span>
+                  </div>
+                </div>
+
+                {/* KPI row */}
+                <div className="mb-4 grid grid-cols-3 gap-3 text-xs">
+                  <div className="rounded-2xl border border-sky-500/40 bg-sky-500/5 px-3 py-3">
+                    <p className="text-[10px] tracking-[0.25em] text-slate-400 uppercase">
+                      MRR
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-slate-50">
+                      €82,400
+                    </p>
+                    <p className="mt-1 text-[11px] font-medium text-emerald-400">
+                      +8.2% last 30 days
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-700 bg-slate-900/60 px-3 py-3">
+                    <p className="text-[10px] tracking-[0.25em] text-slate-400 uppercase">
+                      Runway
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-slate-50">
+                      14 months
+                    </p>
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      €145k monthly burn
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-700 bg-slate-900/60 px-3 py-3">
+                    <p className="text-[10px] tracking-[0.25em] text-slate-400 uppercase">
+                      Net revenue churn
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-slate-50">
+                      2.7%
+                    </p>
+                    <p className="mt-1 text-[11px] font-medium text-emerald-400">
+                      Stable last quarter
+                    </p>
+                  </div>
+                </div>
+
+                {/* Trend chart */}
+                <div className="mb-4 rounded-2xl border border-sky-500/30 bg-gradient-to-b from-sky-500/15 via-slate-950 to-slate-950 px-4 py-3">
+                  <div className="mb-2 flex items-center justify-between text-[11px] text-slate-400">
+                    <span>MRR trend · 12 months</span>
+                    <span className="text-emerald-400 font-medium">
+                      +74% YoY
+                    </span>
+                  </div>
+
+                  <div className="relative h-28 overflow-hidden rounded-xl bg-slate-950/80">
+                    {/* Grid lines */}
+                    <div className="absolute inset-0">
+                      {[0, 1, 2, 3].map((i) => (
+                        <div
+                          key={i}
+                          className="absolute inset-x-0 border-t border-slate-800/70"
+                          style={{ top: `${(i * 100) / 3}%` }}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Line (simple SVG) */}
+                    <svg
+                      viewBox="0 0 120 40"
+                      className="relative z-10 h-full w-full"
+                      preserveAspectRatio="none"
+                    >
+                      <defs>
+                        <linearGradient
+                          id="lineGradient"
+                          x1="0"
+                          y1="0"
+                          x2="1"
+                          y2="0"
+                        >
+                          <stop offset="0%" stopColor="#38bdf8" />
+                          <stop offset="100%" stopColor="#22d3ee" />
+                        </linearGradient>
+                        <linearGradient
+                          id="fillGradient"
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1"
+                        >
+                          <stop
+                            offset="0%"
+                            stopColor="#0ea5e9"
+                            stopOpacity="0.35"
+                          />
+                          <stop
+                            offset="100%"
+                            stopColor="#020617"
+                            stopOpacity="0"
+                          />
+                        </linearGradient>
+                      </defs>
+
+                      {/* Area under curve */}
+                      <path
+                        d="M0 30 L15 28 L30 26 L45 24 L60 21 L75 19 L90 15 L105 11 L120 8 L120 40 L0 40 Z"
+                        fill="url(#fillGradient)"
+                      />
+
+                      {/* Line */}
+                      <path
+                        d="M0 30 L15 28 L30 26 L45 24 L60 21 L75 19 L90 15 L105 11 L120 8"
+                        fill="none"
+                        stroke="url(#lineGradient)"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                      />
+
+                      {/* Endpoint dot */}
+                      <circle
+                        cx="120"
+                        cy="8"
+                        r="2.4"
+                        fill="#22d3ee"
+                        stroke="#e0f2fe"
+                        strokeWidth={0.8}
+                      />
+                    </svg>
+
+                    {/* X-axis labels */}
+                    <div className="pointer-events-none absolute inset-x-0 bottom-1 flex justify-between px-3 text-[10px] text-slate-500">
+                      <span>Jan</span>
+                      <span>Apr</span>
+                      <span>Jul</span>
+                      <span>Oct</span>
+                      <span>Dec</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* AI insight */}
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-[11px] text-slate-200">
+                  <div className="mb-1 flex items-center gap-2 text-xs font-medium text-sky-300">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-sky-500/15 text-[10px]">
+                      AI
+                    </span>
+                    AI insight
+                  </div>
+                  <p className="text-[11px] text-slate-300">
+                    MRR grew 8% last month, burn efficiency improved, and
+                    runway is stable at 14 months. Investors see this live.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
+        </section>
 
-          {/* Right – visual “live investor view” */}
-          <div className="relative">
-            <div className="pointer-events-none absolute -inset-4 rounded-3xl bg-cyan-500/15 blur-3xl" />
-            <div className="relative space-y-4 rounded-3xl border border-slate-700 bg-gradient-to-br from-[#0B0F19] to-[#020617] p-5 shadow-2xl shadow-cyan-500/15 md:p-6">
-              {/* header row */}
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">
-                    Investor view · Live
-                  </p>
-                  <p className="text-sm font-medium text-slate-100">
-                    MCP SaaS · Series A ready
-                  </p>
+        {/* SOCIAL PROOF */}
+        <section className="border-b border-slate-800/60 bg-[#020617]">
+          <div className="mx-auto max-w-6xl px-6 py-10 sm:px-10 lg:px-24 lg:py-12">
+            <p className="mb-4 text-xs font-medium tracking-[0.25em] text-slate-500 uppercase">
+              TRUSTED BY EARLY BUILDERS
+            </p>
+            <div className="flex flex-wrap items-center gap-x-10 gap-y-4 text-sm text-slate-400">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-full bg-sky-500/20 border border-sky-500/40" />
+                <span className="font-medium text-slate-200">AlphaTech</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-full bg-emerald-500/15 border border-emerald-500/40" />
+                <span className="font-medium text-slate-200">
+                  Nordic SaaS Fund
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-full bg-purple-500/15 border border-purple-500/40" />
+                <span className="font-medium text-slate-200">Launch Studio</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* VALUE PROPS (3 columns) */}
+        <section className="border-b border-slate-800/60 bg-[#020617]">
+          <div className="mx-auto max-w-6xl px-6 py-16 sm:px-10 lg:px-24">
+            <div className="mb-10 max-w-2xl space-y-3">
+              <p className="text-xs font-semibold tracking-[0.3em] text-sky-400 uppercase">
+                WHY MCP
+              </p>
+              <h2 className="text-2xl font-semibold sm:text-3xl">
+                The live KPI engine behind investor-ready companies.
+              </h2>
+              <p className="text-sm text-slate-300">
+                Replace static decks with a single, always-current investor
+                view. MCP Insights combines accounting-grade metrics, AI
+                commentary, and secure sharing.
+              </p>
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-3">
+              <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/50 p-5">
+                <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sky-500/15 text-sky-300">
+                  ●
                 </div>
-                <div className="flex flex-col items-end gap-1">
-                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/50 bg-emerald-500/15 px-3 py-1 text-[11px] text-emerald-200">
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-300" />
-                    Auto-updated
-                  </span>
-                  <span className="text-[10px] text-slate-500">
-                    Updated 2 min ago
-                  </span>
-                </div>
+                <h3 className="text-sm font-semibold text-slate-50">
+                  Live KPI engine
+                </h3>
+                <p className="text-sm text-slate-300">
+                  Accounting-grade metrics: MRR, ARR, burn, churn, runway.
+                  Pulled directly from your systems, always synced.
+                </p>
               </div>
 
-              {/* KPI row */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1 rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-3">
-                  <p className="text-[10px] uppercase text-slate-400">MRR</p>
-                  <p className="text-sm font-semibold">€82,400</p>
-                  <p className="text-[11px] text-emerald-400">
-                    +8.2% last 30 days
-                  </p>
+              <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/50 p-5">
+                <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sky-500/15 text-sky-300">
+                  ✦
                 </div>
-                <div className="space-y-1 rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-3">
-                  <p className="text-[10px] uppercase text-slate-400">
-                    Runway
-                  </p>
-                  <p className="text-sm font-semibold">14 months</p>
-                  <p className="text-[11px] text-slate-400">
-                    €145k monthly burn
-                  </p>
-                </div>
-                <div className="space-y-1 rounded-2xl border border-slate-700 bg-slate-900/70 px-3 py-3">
-                  <p className="text-[10px] uppercase text-slate-400">
-                    Net revenue churn
-                  </p>
-                  <p className="text-sm font-semibold">2.7%</p>
-                  <p className="text-[11px] text-emerald-400">
-                    Stable last quarter
-                  </p>
-                </div>
+                <h3 className="text-sm font-semibold text-slate-50">
+                  AI investor narrative
+                </h3>
+                <p className="text-sm text-slate-300">
+                  The MCP agent explains the story behind your numbers in plain
+                  language investors actually understand.
+                </p>
               </div>
 
-            {/* mini "chart" – refined MRR trend */}
-<div className="space-y-2 rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3">
-  <div className="flex items-center justify-between">
-    <p className="text-[11px] uppercase text-slate-400 tracking-[0.18em]">
-      MRR TREND · 12 MONTHS
-    </p>
-    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-400">
-      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-      +74% YoY
-    </span>
-  </div>
-
-  <div className="mt-1 rounded-2xl border border-cyan-500/30 bg-gradient-to-b from-cyan-500/15 via-slate-900 to-slate-950 px-3 py-2 shadow-[0_0_40px_rgba(34,211,238,0.25)]">
-    <svg
-      viewBox="0 0 100 60"
-      className="h-24 w-full"
-      preserveAspectRatio="none"
-    >
-      <defs>
-        <linearGradient id="mrrArea" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-
-      {/* subtle grid */}
-      <g stroke="#0f172a" strokeWidth="0.6">
-        <line x1="0" y1="50" x2="100" y2="50" />
-        <line x1="0" y1="37" x2="100" y2="37" />
-        <line x1="0" y1="24" x2="100" y2="24" />
-      </g>
-
-      {/* area under line */}
-      <path
-        d="M0 50 L8 49 L16 47 L24 44 L32 41 L40 38 L48 35 L56 32 L64 29 L72 26 L80 23 L88 20 L96 18 L100 17 L100 60 L0 60 Z"
-        fill="url(#mrrArea)"
-      />
-
-      {/* glow line */}
-      <path
-        d="M0 50 L8 49 L16 47 L24 44 L32 41 L40 38 L48 35 L56 32 L64 29 L72 26 L80 23 L88 20 L96 18 L100 17"
-        fill="none"
-        stroke="#22d3ee"
-        strokeWidth="2.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        opacity="0.75"
-      />
-
-      {/* highlight last point */}
-      <circle cx="100" cy="17" r="3" fill="#22d3ee" />
-      <circle
-        cx="100"
-        cy="17"
-        r="6"
-        fill="none"
-        stroke="#22d3ee"
-        strokeWidth="1"
-        opacity="0.5"
-      />
-    </svg>
-
-    {/* x-axis labels */}
-    <div className="mt-1 flex justify-between text-[10px] text-slate-500">
-      <span>Jan</span>
-      <span>Apr</span>
-      <span>Jul</span>
-      <span>Oct</span>
-      <span>Dec</span>
-    </div>
-  </div>
-</div>
-
-              {/* AI insight bubble */}
-              <div className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-900/80 px-4 py-3">
-                <div className="flex h-7 w-7 items-center justify-center rounded-full border border-cyan-400/40 bg-cyan-500/20 text-xs">
-                  🤖
+              <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/50 p-5">
+                <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sky-500/15 text-sky-300">
+                  ⛶
                 </div>
-                <p className="text-[11px] text-slate-200">
-                  “MRR grew 8% last month, burn efficiency improved, and runway
-                  is stable at 14 months. Investors see this live.”
+                <h3 className="text-sm font-semibold text-slate-50">
+                  Secure investor link
+                </h3>
+                <p className="text-sm text-slate-300">
+                  Share once, stay current. Replace PDFs with a single
+                  token-secured link investors can check anytime.
                 </p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* MICRO VALUE BAR */}
-        <section className="space-y-2">
-          <p className="text-[11px] text-slate-500">
-            From “data everywhere” to one investor-ready source of truth.
-          </p>
-          <div className="flex flex-wrap gap-4 text-[11px] text-slate-500">
-            <span>• Replace monthly investor updates</span>
-            <span>• One link instead of six attachments</span>
-            <span>• AI commentary on top of your KPIs</span>
-          </div>
-        </section>
-
-        {/* 3-COL VALUE PROPOSITION */}
-        <section id="product" className="space-y-6">
-          <div className="space-y-2">
-            <h2 className="text-xl font-semibold md:text-2xl">
-              One system for numbers, narrative, and access.
-            </h2>
-            <p className="max-w-xl text-sm text-slate-400">
-              MCP Insights behaves like an AI operating system for your investor
-              story — always up to date, always shareable.
-            </p>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-2 rounded-2xl border border-slate-800 bg-[#0B0F19] p-4">
-              <p className="text-xs font-medium text-cyan-300">
-                Live KPI engine
+        {/* HOW IT WORKS */}
+        <section className="border-b border-slate-800/60 bg-[#020617]">
+          <div className="mx-auto max-w-6xl px-6 py-16 sm:px-10 lg:px-24">
+            <div className="mb-10 max-w-2xl space-y-3">
+              <p className="text-xs font-semibold tracking-[0.3em] text-sky-400 uppercase">
+                HOW IT WORKS
               </p>
-              <p className="text-sm font-semibold">Accounting-grade metrics</p>
-              <p className="text-xs text-slate-400">
-                Pull MRR, ARR, burn, runway and churn directly from your
-                accounting and CRM. No manual spreadsheets.
-              </p>
-            </div>
-            <div className="space-y-2 rounded-2xl border border-slate-800 bg-[#0B0F19] p-4">
-              <p className="text-xs font-medium text-cyan-300">
-                AI investor narrative
-              </p>
-              <p className="text-sm font-semibold">The story behind numbers</p>
-              <p className="text-xs text-slate-400">
-                The MCP agent writes short, investor-style commentary on growth,
-                efficiency, runway and risk.
-              </p>
-            </div>
-            <div className="space-y-2 rounded-2xl border border-slate-800 bg-[#0B0F19] p-4">
-              <p className="text-xs font-medium text-cyan-300">
-                Secure investor link
-              </p>
-              <p className="text-sm font-semibold">Share once, stay current</p>
-              <p className="text-xs text-slate-400">
-                Approve an investor, send a token-based link, and let them see
-                live KPIs and your profile — no new decks every month.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* HOW IT WORKS – 1–2–3 */}
-        <section id="founders" className="space-y-6">
-          <div className="space-y-2">
-            <h2 className="text-xl font-semibold md:text-2xl">
-              For founders: always investor-ready, without reporting days.
-            </h2>
-            <p className="max-w-xl text-sm text-slate-400">
-              Instead of assembling updates every month, MCP Insights keeps one
-              live investor view synced in the background.
-            </p>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-3">
-            {[
-              {
-                step: "01",
-                title: "Connect data once",
-                text: "Start with Google Sheets or your accounting tool. Add CRM when you're ready. Setup in minutes.",
-              },
-              {
-                step: "02",
-                title: "Let the agent run",
-                text: "The MCP agent computes KPIs and AI insights on a schedule. Zero manual reporting work.",
-              },
-              {
-                step: "03",
-                title: "Share a live link",
-                text: "Investors always see the newest version through a secure token link — no PDFs or outdated decks.",
-              },
-            ].map((s) => (
-              <div
-                key={s.step}
-                className="space-y-3 rounded-2xl border border-slate-800 bg-[#0B0F19] p-4"
-              >
-                <p className="text-xs text-slate-500">{s.step}</p>
-                <p className="text-sm font-semibold">{s.title}</p>
-                <p className="text-xs text-slate-400">{s.text}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* FOR FOUNDERS / FOR INVESTORS SPLIT */}
-        <section id="investors" className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-3 rounded-2xl border border-slate-800 bg-[#070b17] p-5">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
-              For founders
-            </p>
-            <h3 className="text-sm font-semibold">
-              From “data everywhere” to one control panel
-            </h3>
-            <p className="text-xs text-slate-400">
-              Update KPIs, manage investor access and integrations from a single
-              dashboard. Your team and investors see the same live numbers.
-            </p>
-            <ul className="mt-2 space-y-1 text-xs text-slate-400">
-              <li>• No spreadsheets</li>
-              <li>• No manual decks</li>
-              <li>• No copy/paste reporting days</li>
-            </ul>
-          </div>
-
-          <div className="space-y-3 rounded-2xl border border-slate-800 bg-[#070b17] p-5">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
-              For investors
-            </p>
-            <h3 className="text-sm font-semibold">
-              The cleanest investor dashboard you’ve seen
-            </h3>
-            <p className="text-xs text-slate-400">
-              No logins, no messy files. Just a dark, premium dashboard with
-              KPIs, runway and AI commentary – accessed through a secure token.
-            </p>
-            <ul className="mt-2 space-y-1 text-xs text-slate-400">
-              <li>• No login required</li>
-              <li>• Real numbers, always fresh</li>
-              <li>• AI insights included by default</li>
-            </ul>
-          </div>
-        </section>
-
-        {/* EARLY ACCESS / PRICING */}
-        <section
-          id="pricing"
-          className="space-y-4 rounded-3xl border border-slate-800 bg-[#070a14] p-6 md:p-8"
-        >
-          <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">
-            Early access
-          </p>
-          <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
-            <div className="space-y-2 max-w-md">
-              <h2 className="text-lg font-semibold md:text-xl">
-                Start with your first investor view in days, not months.
+              <h2 className="text-2xl font-semibold sm:text-3xl">
+                Three steps from “data everywhere” to always investor-ready.
               </h2>
-              <p className="text-sm text-slate-400">
-                We’re working closely with a small group of SaaS companies to
-                shape the MCP agent and investor experience.
-              </p>
             </div>
-            <div className="space-y-2 text-sm">
-              <p className="text-slate-200">Founder-friendly terms</p>
-              <p className="text-xs text-slate-400">
-                Flat early access fee · Priority input on roadmap · No surprise
-                usage tiers.
-              </p>
+
+            <div className="grid gap-6 md:grid-cols-3">
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+                <p className="text-xs font-semibold text-sky-300">Step 1</p>
+                <h3 className="mt-2 text-sm font-semibold text-slate-50">
+                  Connect data once
+                </h3>
+                <p className="mt-2 text-sm text-slate-300">
+                  Start with Google Sheets, CRM, or accounting. Typical setup:
+                  under 2 minutes.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+                <p className="text-xs font-semibold text-sky-300">Step 2</p>
+                <h3 className="mt-2 text-sm font-semibold text-slate-50">
+                  Let the MCP agent run
+                </h3>
+                <p className="mt-2 text-sm text-slate-300">
+                  The agent computes KPIs and generates AI insights on a
+                  schedule. Zero manual reporting.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+                <p className="text-xs font-semibold text-sky-300">Step 3</p>
+                <h3 className="mt-2 text-sm font-semibold text-slate-50">
+                  Share a live link
+                </h3>
+                <p className="mt-2 text-sm text-slate-300">
+                  Investors get real-time visibility into your KPIs — always the
+                  latest version, no attachments.
+                </p>
+              </div>
             </div>
           </div>
         </section>
 
-        {/* FINAL CTA + FOOTER */}
+        {/* FEATURE GRID */}
+        <section className="border-b border-slate-800/60 bg-[#020617]">
+          <div className="mx-auto max-w-6xl px-6 py-16 sm:px-10 lg:px-24">
+            <div className="mb-10 max-w-2xl space-y-3">
+              <p className="text-xs font-semibold tracking-[0.3em] text-sky-400 uppercase">
+                FEATURES
+              </p>
+              <h2 className="text-2xl font-semibold sm:text-3xl">
+                Everything you need to stay investor-ready.
+              </h2>
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-3">
+              {[
+                {
+                  title: "Auto-updating metrics",
+                  body: "MRR, ARR, churn, burn, runway — always fresh and consistent across every investor update.",
+                },
+                {
+                  title: "AI commentary",
+                  body: "Narratives that translate raw numbers into clear, board-ready insights.",
+                },
+                {
+                  title: "CRM + accounting integrations",
+                  body: "Start with Sheets. Grow into Pipedrive, HubSpot, Fiken, Tripletex and more.",
+                },
+                {
+                  title: "Team profile auto-generation",
+                  body: "Pull team highlights from LinkedIn and your website. (Coming soon.)",
+                },
+                {
+                  title: "Founder control panel",
+                  body: "Approve investor access with one click and see who’s engaging with your view.",
+                },
+                {
+                  title: "Security & access",
+                  body: "Token-based sharing. No investor accounts required, no public exposure.",
+                },
+              ].map((feature) => (
+                <div
+                  key={feature.title}
+                  className="group rounded-2xl border border-slate-800 bg-slate-900/60 p-5 transition hover:border-sky-500/60 hover:bg-slate-900"
+                >
+                  <h3 className="text-sm font-semibold text-slate-50">
+                    {feature.title}
+                  </h3>
+                  <p className="mt-2 text-sm text-slate-300">{feature.body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* FOR FOUNDERS */}
         <section
-          id="demo"
-          className="space-y-8 border-t border-slate-900 pt-10"
+          id="for-founders"
+          className="border-b border-slate-800/60 bg-[#020617]"
         >
-          <div className="space-y-4 text-center">
-            <h2 className="text-xl font-semibold md:text-2xl">
+          <div className="mx-auto max-w-6xl px-6 py-16 sm:px-10 lg:px-24">
+            <div className="grid gap-10 md:grid-cols-2 md:items-center">
+              <div className="space-y-4">
+                <p className="text-xs font-semibold tracking-[0.3em] text-sky-400 uppercase">
+                  FOR FOUNDERS
+                </p>
+                <h2 className="text-2xl font-semibold sm:text-3xl">
+                  From “data everywhere” to always investor-ready.
+                </h2>
+                <p className="text-sm text-slate-300">
+                  Instead of rebuilding spreadsheets and decks every month, MCP
+                  Insights keeps a single source of truth updated automatically.
+                </p>
+                <ul className="mt-2 space-y-2 text-sm text-slate-300">
+                  <li>• No spreadsheets to maintain.</li>
+                  <li>• No manual PDF decks.</li>
+                  <li>• No endless copy/paste from different tools.</li>
+                </ul>
+              </div>
+
+              <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-sm text-slate-300">
+                <p className="text-xs font-semibold text-sky-300">
+                  Founder workflow
+                </p>
+                <p>
+                  1. Connect the systems you already use for revenue and
+                  customers.
+                </p>
+                <p>
+                  2. Let the MCP agent compute KPIs and generate a clean
+                  investor dashboard.
+                </p>
+                <p>
+                  3. Approve which investors to invite — and send a single link
+                  instead of a giant folder of files.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* FOR INVESTORS */}
+        <section
+          id="for-investors"
+          className="border-b border-slate-800/60 bg-[#020617]"
+        >
+          <div className="mx-auto max-w-6xl px-6 py-16 sm:px-10 lg:px-24">
+            <div className="grid gap-10 md:grid-cols-2 md:items-center">
+              <div className="space-y-4">
+                <p className="text-xs font-semibold tracking-[0.3em] text-sky-400 uppercase">
+                  FOR INVESTORS
+                </p>
+                <h2 className="text-2xl font-semibold sm:text-3xl">
+                  The cleanest investor dashboard you’ve ever seen.
+                </h2>
+                <p className="text-sm text-slate-300">
+                  No file hunting. No outdated decks. Just real numbers,
+                  refreshed automatically, with AI insights built in.
+                </p>
+                <ul className="mt-2 space-y-2 text-sm text-slate-300">
+                  <li>• No login required — access via secure link.</li>
+                  <li>• No messy spreadsheets or hidden tabs.</li>
+                  <li>• Real KPIs, always up-to-date.</li>
+                </ul>
+              </div>
+
+              <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-sm text-slate-300">
+                <p className="text-xs font-semibold text-sky-300">
+                  For partners, funds & angels
+                </p>
+                <p>
+                  Share a consistent MCP view across your portfolio and use the
+                  same language for MRR, churn, runway and growth across all
+                  companies.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* MID-PAGE CTA */}
+<section
+  id="pricing"
+  className="border-b border-slate-800/60 bg-gradient-to-r from-sky-500/10 via-sky-500/5 to-transparent"
+>
+  <div className="mx-auto flex max-w-6xl flex-col justify-between gap-10 px-6 py-16 sm:px-10 md:flex-row md:items-center lg:px-24">
+    <div className="max-w-xl space-y-3">
+      <p className="text-xs font-medium tracking-[0.3em] text-sky-400 uppercase">
+        EARLY ACCESS
+      </p>
+      <h2 className="text-2xl font-semibold sm:text-3xl">
+        Start with your first live investor view this week.
+      </h2>
+      <p className="text-sm text-slate-300">
+        We’re working closely with a small group of B2B SaaS and digital
+        product companies to refine the MCP agent and investor
+        experience.
+      </p>
+      <ul className="mt-2 space-y-1 text-sm text-slate-300">
+        <li>• Founder-friendly terms.</li>
+        <li>• Priority input on the roadmap.</li>
+        <li>• Flat early access fee.</li>
+      </ul>
+    </div>
+
+    {/* Buttons column – now vertically centered */}
+    <div className="flex w-full flex-col gap-3 md:w-auto md:items-end md:justify-center">
+      <a
+        href="/onboarding"
+        className="inline-flex items-center justify-center rounded-full bg-sky-500 px-6 py-2.5 text-sm font-semibold text-slate-950 shadow-lg shadow-sky-500/40 hover:bg-sky-400"
+      >
+        Start free
+      </a>
+      <button className="inline-flex items-center justify-center rounded-full border border-slate-700 bg-slate-900/60 px-6 py-2.5 text-sm font-semibold text-slate-100 hover:bg-slate-900">
+        Book a demo call
+      </button>
+    </div>
+  </div>
+</section>
+
+        {/* TESTIMONIALS */}
+        <section className="border-b border-slate-800/60 bg-[#020617]">
+          <div className="mx-auto max-w-6xl px-6 py-16 sm:px-10 lg:px-24">
+            <p className="mb-4 text-xs font-medium tracking-[0.25em] text-slate-500 uppercase">
+              WHAT FOUNDERS ARE SAYING
+            </p>
+            <div className="grid gap-6 md:grid-cols-3">
+              <figure className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+                <p className="text-sm text-slate-200">
+                  “We stopped sending PDF decks every month. Now our investors
+                  just use the live link.”
+                </p>
+                <figcaption className="mt-4 text-xs text-slate-400">
+                  <span className="font-semibold text-slate-100">
+                    CEO, B2B SaaS
+                  </span>{" "}
+                  · Seed stage
+                </figcaption>
+              </figure>
+              <figure className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+                <p className="text-sm text-slate-200">
+                  “The MCP agent surfaces the same insights our board asks
+                  about, without us building custom reports.”
+                </p>
+                <figcaption className="mt-4 text-xs text-slate-400">
+                  <span className="font-semibold text-slate-100">
+                    Founder, Fintech
+                  </span>{" "}
+                  · Series A
+                </figcaption>
+              </figure>
+              <figure className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+                <p className="text-sm text-slate-200">
+                  “MCP has become the single source of truth for our KPI
+                  communication.”
+                </p>
+                <figcaption className="mt-4 text-xs text-slate-400">
+                  <span className="font-semibold text-slate-100">
+                    COO, Analytics SaaS
+                  </span>
+                </figcaption>
+              </figure>
+            </div>
+          </div>
+        </section>
+
+        {/* FINAL CTA */}
+        <section className="border-b border-slate-800/60 bg-gradient-to-b from-sky-500/10 via-slate-950 to-slate-950">
+          <div className="mx-auto max-w-6xl px-6 py-20 text-center sm:px-10 lg:px-24 lg:py-24">
+            <h2 className="text-3xl font-semibold sm:text-4xl">
               Ready to make “investor-ready” your default state?
             </h2>
-            <p className="mx-auto max-w-md text-sm text-slate-400">
-              Connect your data once, let the MCP agent do the work, and share a
-              single link instead of building a deck every time someone asks for
-              “a quick update”.
+            <p className="mx-auto mt-4 max-w-2xl text-sm text-slate-300 sm:text-base">
+              Connect your data once, let the MCP agent do the work, and share
+              a single live link instead of a new deck every month.
             </p>
-
-            <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
               <a
                 href="/onboarding"
-                className="inline-flex items-center justify-center rounded-full bg-cyan-500 px-6 py-2.5 text-sm font-medium text-slate-950 shadow-lg shadow-cyan-500/25 hover:bg-cyan-400 transition"
+                className="inline-flex items-center justify-center rounded-full bg-sky-500 px-8 py-2.5 text-sm font-semibold text-slate-950 shadow-lg shadow-sky-500/40 hover:bg-sky-400"
               >
                 Start free
               </a>
-              <a
-                href="mailto:founder@yourdomain.com"
-                className="inline-flex items-center justify-center rounded-full border border-slate-600 px-6 py-2.5 text-sm font-medium text-slate-100 hover:bg-slate-900/70 transition"
-              >
+              <button className="inline-flex items-center justify-center rounded-full border border-slate-700 bg-slate-900/60 px-8 py-2.5 text-sm font-semibold text-slate-100 hover:bg-slate-900">
                 Book a demo call
-              </a>
+              </button>
             </div>
           </div>
+        </section>
 
-          <footer className="flex flex-col items-center justify-between gap-3 border-t border-slate-900 pt-6 text-[11px] text-slate-500 md:flex-row">
-            <div className="flex flex-col">
-              <span>MCP Insights</span>
-              <span className="text-slate-500">
-                AI-native investor readiness
-              </span>
+        {/* FOOTER */}
+        <footer className="border-t border-slate-800 bg-[#020617]">
+          <div className="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-6 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-10 lg:px-24">
+            <div className="space-y-1">
+              <p className="font-medium text-slate-300">MCP Insights</p>
+              <p>AI-native investor readiness</p>
             </div>
-            <div className="flex gap-4">
-              <a href="#docs" className="hover:text-slate-300">
+            <div className="flex items-center gap-5">
+              <a href="#" className="hover:text-slate-300">
                 Docs
               </a>
-              <a href="#privacy" className="hover:text-slate-300">
+              <a href="#" className="hover:text-slate-300">
                 Privacy
               </a>
-              <a href="#terms" className="hover:text-slate-300">
+              <a href="#" className="hover:text-slate-300">
                 Terms
               </a>
             </div>
-            <p>© {year} MCP Insights. All rights reserved.</p>
-          </footer>
-        </section>
+            <p>
+              © {new Date().getFullYear()} MCP Insights. All rights reserved.
+            </p>
+          </div>
+        </footer>
       </div>
     </main>
   );
