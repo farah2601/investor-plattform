@@ -1,44 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabaseClient";
 
+import { cn } from "@/lib/utils";
+
+import { Card } from "../../components/ui/card";
+import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Button } from "../../components/ui/button";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from "../../components/ui/card";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
-
-type ExperienceItem = {
-  company: string;
-  role: string;
-};
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 type TeamMember = {
   name: string;
   role: string;
-  image_url?: string;
   linkedin_url?: string;
-  experience?: ExperienceItem[];
+  experience?: string;
 };
 
 type CompanyProfile = {
@@ -53,855 +32,708 @@ type CompanyProfile = {
   market: string | null;
   product_details: string | null;
   website_url: string | null;
-  linkedin_urls: string[]; // parsed from jsonb
-  team: TeamMember[]; // parsed from jsonb
-  profile_published: boolean;
+  linkedin_urls: string[] | null;
+  team: TeamMember[] | null;
+  profile_published: boolean | null;
 };
 
-type GenerateProfileResponse = {
+type FormState = {
+  name: string;
+  industry: string;
+  stage: string;
+  description: string;
   problem: string;
   solution: string;
   why_now: string;
   market: string;
   product_details: string;
-  team?: TeamMember[];
+  website_url: string;
+  linkedin_urls: string[];
+  team: TeamMember[];
 };
 
+const tabs = [
+  "Company basics",
+  "Pitch & narrative",
+  "Product",
+  "Market & traction",
+  "Team",
+  "Links",
+];
+
 export default function CompanyProfilePage() {
-  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [publishLoading, setPublishLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [profile, setProfile] = useState<CompanyProfile | null>(null);
+  const [company, setCompany] = useState<CompanyProfile | null>(null);
+  const [form, setForm] = useState<FormState | null>(null);
+  const [activeTab, setActiveTab] = useState<string>("Company basics");
 
-  // ---------- LOAD PROFILE FOR LOGGED-IN USER ----------
+  // ---------- LOAD COMPANY ----------
   useEffect(() => {
-    async function load() {
-      setError(null);
-      setLoading(true);
+    const loadCompany = async () => {
+      try {
+        setLoading(true);
+        setError(null);
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
 
-      if (userError || !user) {
+        if (userError || !user) {
+          console.error("Supabase auth error:", userError);
+          setError("You must be logged in to see your company profile.");
+          setLoading(false);
+          return;
+        }
+
+        const { data, error: companyError } = await supabase
+          .from("companies")
+          .select("*")
+          .eq("owner_id", user.id);
+
+        if (companyError) {
+          console.error("Supabase company error:", companyError);
+          setError(companyError.message || "Could not load company profile.");
+          setLoading(false);
+          return;
+        }
+
+        if (!data || data.length === 0) {
+          setError("No company profile found for this account.");
+          setLoading(false);
+          return;
+        }
+
+        const row = data[0] as CompanyProfile;
+
+        setCompany(row);
+        setForm({
+          name: row.name ?? "",
+          industry: row.industry ?? "",
+          stage: row.stage ?? "",
+          description: row.description ?? "",
+          problem: row.problem ?? "",
+          solution: row.solution ?? "",
+          why_now: row.why_now ?? "",
+          market: row.market ?? "",
+          product_details: row.product_details ?? "",
+          website_url: row.website_url ?? "",
+          linkedin_urls: (row.linkedin_urls ?? []) as string[],
+          team: (row.team ?? []) as TeamMember[],
+        });
+
         setLoading(false);
-        router.push("/login");
-        return;
-      }
-
-      const { data, error: companyError } = await supabase
-  .from("companies")
-  .select("*")
-  .eq("owner_id", user.id)
-  .maybeSingle();
-
-      if (companyError) {
-        console.error(companyError);
-        setError("Could not load company profile.");
+      } catch (err: any) {
+        console.error("Unexpected error loading company profile:", err);
+        setError(
+          typeof err?.message === "string"
+            ? err.message
+            : "Could not load company profile."
+        );
         setLoading(false);
-        return;
       }
+    };
 
-      if (!data) {
-        setError("No company profile found for this account.");
-        setLoading(false);
-        return;
-      }
+    loadCompany();
+  }, []);
 
-      const parsedTeam: TeamMember[] = Array.isArray(data.team)
-        ? data.team
-        : [];
+  // ---------- HANDLERS ----------
 
-      const parsedLinkedin: string[] = Array.isArray(data.linkedin_urls)
-        ? data.linkedin_urls
-        : [];
+  const handleFieldChange = (
+    field: keyof FormState,
+    value: string | TeamMember[] | string[]
+  ) => {
+    if (!form) return;
+    setForm({ ...form, [field]: value } as FormState);
+  };
 
-      const profileData: CompanyProfile = {
-        id: data.id,
-        name: data.name ?? "",
-        industry: data.industry ?? "",
-        stage: data.stage ?? "",
-        description: data.description ?? "",
-        problem: data.problem ?? "",
-        solution: data.solution ?? "",
-        why_now: data.why_now ?? "",
-        market: data.market ?? "",
-        product_details: data.product_details ?? "",
-        website_url: data.website_url ?? "",
-        linkedin_urls: parsedLinkedin,
-        team: parsedTeam,
-        profile_published: data.profile_published ?? false,
-      };
-
-      setProfile(profileData);
-      setLoading(false);
-    }
-
-    load();
-  }, [router]);
-
-  // ---------- HELPERS ----------
-
-  function updateField<K extends keyof CompanyProfile>(
-    key: K,
-    value: CompanyProfile[K]
-  ) {
-    if (!profile) return;
-    setProfile({ ...profile, [key]: value });
-  }
-
-  function updateTeamMember(
-    index: number,
-    partial: Partial<TeamMember>
-  ) {
-    if (!profile) return;
-    const team = [...profile.team];
-    team[index] = { ...team[index], ...partial };
-    setProfile({ ...profile, team });
-  }
-
-  function addTeamMember() {
-    if (!profile) return;
-    setProfile({
-      ...profile,
-      team: [
-        ...profile.team,
-        { name: "", role: "", image_url: "", linkedin_url: "", experience: [] },
-      ],
-    });
-  }
-
-  function removeTeamMember(index: number) {
-    if (!profile) return;
-    const team = profile.team.filter((_, i) => i !== index);
-    setProfile({ ...profile, team });
-  }
-
-  function updateLinkedinUrl(index: number, value: string) {
-    if (!profile) return;
-    const urls = [...profile.linkedin_urls];
-    urls[index] = value;
-    setProfile({ ...profile, linkedin_urls: urls });
-  }
-
-  function addLinkedinUrl() {
-    if (!profile) return;
-    setProfile({
-      ...profile,
-      linkedin_urls: [...profile.linkedin_urls, ""],
-    });
-  }
-
-  function removeLinkedinUrl(index: number) {
-    if (!profile) return;
-    const urls = profile.linkedin_urls.filter((_, i) => i !== index);
-    setProfile({ ...profile, linkedin_urls: urls });
-  }
-
-  // ---------- SAVE TO SUPABASE ----------
-
-  async function handleSave() {
-    if (!profile) return;
+  const handleSave = async () => {
+    if (!company || !form) return;
     setSaving(true);
     setError(null);
 
-    const { id, ...rest } = profile;
+    try {
+      const { error: updateError } = await supabase
+        .from("companies")
+        .update({
+          name: form.name,
+          industry: form.industry || null,
+          stage: form.stage || null,
+          description: form.description || null,
+          problem: form.problem || null,
+          solution: form.solution || null,
+          why_now: form.why_now || null,
+          market: form.market || null,
+          product_details: form.product_details || null,
+          website_url: form.website_url || null,
+          linkedin_urls: form.linkedin_urls ?? [],
+          team: form.team ?? [],
+        })
+        .eq("id", company.id);
 
-    const { error: updateError } = await supabase
-      .from("companies")
-      .update({
-        ...rest,
-        team: rest.team,
-        linkedin_urls: rest.linkedin_urls,
-      })
-      .eq("id", id);
-
-    setSaving(false);
-
-    if (updateError) {
-      console.error(updateError);
-      setError("Could not save profile changes.");
-      return;
+      if (updateError) {
+        console.error("Supabase update error:", updateError);
+        setError(updateError.message || "Could not save profile.");
+      } else {
+        setCompany({
+          ...company,
+          ...form,
+        });
+      }
+    } catch (err: any) {
+      console.error("Unexpected save error:", err);
+      setError(
+        typeof err?.message === "string"
+          ? err.message
+          : "Could not save profile."
+      );
+    } finally {
+      setSaving(false);
     }
-  }
+  };
 
-  // ---------- AI GENERATE PLACEHOLDER ----------
-
-  async function handleGenerateWithAI() {
-    if (!profile) return;
-    setAiLoading(true);
+  const handlePublish = async () => {
+    if (!company) return;
+    setSaving(true);
     setError(null);
 
     try {
-      const res = await fetch("/api/generate-profile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          website_url: profile.website_url,
-          linkedin_urls: profile.linkedin_urls,
-        }),
-      });
+      const { error: updateError } = await supabase
+        .from("companies")
+        .update({ profile_published: true })
+        .eq("id", company.id);
 
-      if (!res.ok) {
-        throw new Error("Failed to call AI profile generator.");
+      if (updateError) {
+        console.error("Supabase publish error:", updateError);
+        setError(updateError.message || "Could not publish profile.");
+      } else {
+        setCompany({ ...company, profile_published: true });
       }
-
-      const data: GenerateProfileResponse = await res.json();
-
-      setProfile((prev) =>
-        prev
-          ? {
-              ...prev,
-              problem: data.problem ?? prev.problem,
-              solution: data.solution ?? prev.solution,
-              why_now: data.why_now ?? prev.why_now,
-              market: data.market ?? prev.market,
-              product_details:
-                data.product_details ?? prev.product_details,
-              team: data.team ?? prev.team,
-            }
-          : prev
+    } catch (err: any) {
+      console.error("Unexpected publish error:", err);
+      setError(
+        typeof err?.message === "string"
+          ? err.message
+          : "Could not publish profile."
       );
-    } catch (e) {
-      console.error(e);
-      setError("AI profile generation failed. Try again later.");
     } finally {
-      setAiLoading(false);
+      setSaving(false);
     }
-  }
-
-  // ---------- PUBLISH PROFILE ----------
-
-  async function handlePublish() {
-    if (!profile) return;
-    setPublishLoading(true);
-    setError(null);
-
-    const { error: updateError } = await supabase
-      .from("companies")
-      .update({ profile_published: true })
-      .eq("id", profile.id);
-
-    setPublishLoading(false);
-
-    if (updateError) {
-      console.error(updateError);
-      setError("Could not publish profile.");
-      return;
-    }
-
-    setProfile({ ...profile, profile_published: true });
-  }
+  };
 
   // ---------- RENDER ----------
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#020617] text-slate-50 flex items-center justify-center">
-        <p className="text-sm text-slate-400">
-          Loading company profile…
-        </p>
-      </main>
+      <div className="min-h-screen w-full bg-slate-950 text-slate-50 flex items-center justify-center">
+        <p className="text-sm text-slate-400">Loading company profile…</p>
+      </div>
     );
   }
 
-  if (error && !profile) {
+  if (error || !form || !company) {
     return (
-      <main className="min-h-screen bg-[#020617] text-slate-50 flex items-center justify-center">
-        <p className="text-sm text-red-400">{error}</p>
-      </main>
-    );
-  }
-
-  if (!profile) {
-    return (
-      <main className="min-h-screen bg-[#020617] text-slate-50 flex items-center justify-center">
-        <p className="text-sm text-red-400">
-          No company profile found for this account.
+      <div className="min-h-screen w-full bg-slate-950 text-slate-50 flex items-center justify-center">
+        <p className="text-sm text-red-400 max-w-md text-center">
+          {error || "Could not load company profile."}
         </p>
-      </main>
+      </div>
     );
   }
 
-  const firstLetter = profile.name?.[0]?.toUpperCase() ?? "C";
+  const initial = company.name?.charAt(0)?.toUpperCase() || "C";
 
   return (
-    <main className="min-h-screen bg-[#020617] text-slate-50">
-      <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8 lg:py-12 space-y-8">
-        {/* HEADER / TOP BANNER */}
-        <Card className="border-slate-800 bg-gradient-to-r from-slate-950 via-slate-950 to-slate-900/80">
-          <CardContent className="flex flex-col gap-6 p-6 sm:p-8 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-start gap-4">
-              <Avatar className="h-14 w-14 rounded-xl border border-slate-700 bg-slate-900">
-                {profile.website_url && (
-                  <AvatarImage
-                    src={profile.website_url + "/favicon.ico"}
-                    alt={profile.name}
-                  />
+    <div className="min-h-screen w-full overflow-x-hidden bg-slate-950 text-slate-50">
+      <main className="mx-auto w-full max-w-5xl px-4 py-8 space-y-8 sm:px-6 lg:px-8">
+        {/* HEADER CARD */}
+        <Card className="flex flex-col gap-6 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8 lg:flex-row lg:items-center lg:justify-between">
+          {/* Left */}
+          <div className="flex items-start gap-4">
+            <Avatar className="h-12 w-12 rounded-xl">
+              <AvatarFallback>{initial}</AvatarFallback>
+            </Avatar>
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-lg font-semibold text-white sm:text-xl">
+                  {form.name || "Company name"}
+                </h1>
+                {form.industry && (
+                  <Badge
+                    variant="outline"
+                    className="border-sky-500/60 bg-sky-500/15 text-[10px] uppercase tracking-wide text-sky-100"
+                  >
+                    {form.industry}
+                  </Badge>
                 )}
-                <AvatarFallback className="text-lg font-semibold">
-                  {firstLetter}
-                </AvatarFallback>
-              </Avatar>
-
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-2xl font-semibold sm:text-3xl">
-                    {profile.name}
-                  </h1>
-                  {profile.stage && (
-                    <Badge variant="outline" className="text-xs">
-                      {profile.stage}
-                    </Badge>
-                  )}
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                  {profile.industry && (
-                    <Badge
-                      variant="secondary"
-                      className="bg-slate-800 text-slate-200"
-                    >
-                      {profile.industry}
-                    </Badge>
-                  )}
-                  {profile.website_url && (
-                    <a
-                      href={profile.website_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-sky-400 hover:text-sky-300 underline-offset-2 hover:underline"
-                    >
-                      Visit website
-                    </a>
-                  )}
-                </div>
-                {profile.description && (
-                  <p className="text-sm text-slate-300 max-w-xl">
-                    {profile.description}
-                  </p>
+                {form.stage && (
+                  <Badge
+                    variant="secondary"
+                    className="border border-emerald-500/60 bg-emerald-500/15 text-[10px] uppercase tracking-wide text-emerald-100"
+                  >
+                    {form.stage}
+                  </Badge>
                 )}
               </div>
+              {form.description && (
+                <p className="max-w-xl text-sm text-slate-400">
+                  {form.description}
+                </p>
+              )}
+              {form.website_url && (
+                <a
+                  href={form.website_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-sky-400 hover:underline"
+                >
+                  {form.website_url.replace(/^https?:\/\//, "")}
+                </a>
+              )}
             </div>
+          </div>
 
-            <div className="flex flex-col items-start gap-3 text-xs text-slate-400 md:items-end">
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleSave}
-                  disabled={saving}
-                >
-                  {saving ? "Saving…" : "Save changes"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={handleGenerateWithAI}
-                  disabled={aiLoading}
-                >
-                  {aiLoading ? "Generating…" : "Generate profile with AI"}
-                </Button>
-              </div>
-              <Separator className="hidden md:block bg-slate-800" />
-              <div className="space-y-1 text-right">
-                <p>
-                  Status:{" "}
-                  {profile.profile_published ? (
-                    <span className="text-emerald-400">
-                      Published to investors
-                    </span>
-                  ) : (
-                    <span className="text-slate-400">
-                      Draft (not visible to investors)
-                    </span>
-                  )}
-                </p>
-                <Button
-                  size="sm"
-                  className="mt-1"
-                  onClick={handlePublish}
-                  disabled={publishLoading || profile.profile_published}
-                >
-                  {profile.profile_published
-                    ? "Profile is published"
-                    : publishLoading
-                    ? "Publishing…"
-                    : "Approve & publish"}
-                </Button>
-                <p className="text-[11px] text-slate-500">
-                  Regenerated by MCP agent (placeholder timestamp)
-                </p>
-              </div>
+          {/* Right */}
+          <div className="space-y-3 text-right">
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={saving}
+                onClick={handleSave}
+              >
+                {saving ? "Saving…" : "Save changes"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={saving}
+                onClick={() => {
+                  console.log("Generate profile with AI – TODO");
+                }}
+              >
+                Generate profile with AI
+              </Button>
+              <Button size="sm" disabled={saving} onClick={handlePublish}>
+                {company.profile_published ? "Published" : "Approve & publish"}
+              </Button>
             </div>
-          </CardContent>
+            <div className="space-y-0.5 text-xs text-slate-400">
+              <p>
+                Status:{" "}
+                <span
+                  className={cn(
+                    "font-medium",
+                    company.profile_published
+                      ? "text-emerald-400"
+                      : "text-amber-300"
+                  )}
+                >
+                  {company.profile_published
+                    ? "Published to investors"
+                    : "Draft (not visible to investors)"}
+                </span>
+              </p>
+              <p>Regenerated by MCP agent (placeholder timestamp)</p>
+            </div>
+          </div>
         </Card>
 
-        {error && (
-          <p className="text-xs text-red-400">
-            {error}
-          </p>
+        {/* TABS */}
+        <div className="border-b border-white/10">
+          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+            {tabs.map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setActiveTab(tab)}
+                className={cn(
+                  "whitespace-nowrap rounded-full px-3 py-1.5 text-xs sm:text-sm transition",
+                  activeTab === tab
+                    ? "bg-white text-slate-950"
+                    : "bg-slate-900/60 text-slate-300 hover:bg-slate-800"
+                )}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ACTIVE SECTION */}
+        {activeTab === "Company basics" && (
+          <Card className="mt-4 space-y-5 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
+            <div>
+              <h2 className="text-base font-semibold text-white sm:text-lg">
+                Company basics
+              </h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Name, industry, stage and short description.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-300">Company name</Label>
+                <Input
+                  className="border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500"
+                  value={form.name}
+                  onChange={(e) => handleFieldChange("name", e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-300">Industry</Label>
+                <Input
+                  className="border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500"
+                  value={form.industry}
+                  onChange={(e) =>
+                    handleFieldChange("industry", e.target.value)
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-300">Stage</Label>
+                <Input
+                  placeholder="Pre-seed, Seed, Series A…"
+                  className="border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500"
+                  value={form.stage}
+                  onChange={(e) => handleFieldChange("stage", e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-300">
+                  Short description
+                </Label>
+                <Textarea
+                  className="min-h-[80px] border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500"
+                  placeholder="One or two sentences explaining what you do."
+                  value={form.description}
+                  onChange={(e) =>
+                    handleFieldChange("description", e.target.value)
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-300">Website URL</Label>
+                <Input
+                  className="border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500"
+                  placeholder="https://example.com"
+                  value={form.website_url}
+                  onChange={(e) =>
+                    handleFieldChange("website_url", e.target.value)
+                  }
+                />
+              </div>
+            </div>
+          </Card>
         )}
 
-        {/* MAIN TABS: Basics / Pitch / Product / Market / Team */}
-        <Tabs defaultValue="basics" className="space-y-8">
-          <TabsList className="bg-slate-900/60 border border-slate-800">
-            <TabsTrigger value="basics">Company basics</TabsTrigger>
-            <TabsTrigger value="pitch">Pitch & narrative</TabsTrigger>
-            <TabsTrigger value="product">Product</TabsTrigger>
-            <TabsTrigger value="market">Market & traction</TabsTrigger>
-            <TabsTrigger value="team">Team</TabsTrigger>
-            <TabsTrigger value="links">Links</TabsTrigger>
-          </TabsList>
+        {activeTab === "Pitch & narrative" && (
+          <Card className="mt-4 space-y-5 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
+            <div>
+              <h2 className="text-base font-semibold text-white sm:text-lg">
+                Company narrative
+              </h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Problem, solution and why now — the story investors read first.
+              </p>
+            </div>
 
-          {/* BASICS */}
-          <TabsContent value="basics" className="space-y-6">
-            <Card className="border-slate-800 bg-slate-950/70">
-              <CardHeader>
-                <CardTitle className="text-lg">
-                  Company basics
-                </CardTitle>
-                <CardDescription>
-                  Name, industry, stage and short description.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-300">
-                    Company name
-                  </label>
-                  <Input
-                    value={profile.name}
-                    onChange={(e) =>
-                      updateField("name", e.target.value)
-                    }
-                    className="bg-slate-900 border-slate-700"
-                  />
-                </div>
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-300">Problem</Label>
+                <Textarea
+                  className="min-h-[96px] border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500"
+                  value={form.problem}
+                  onChange={(e) =>
+                    handleFieldChange("problem", e.target.value)
+                  }
+                />
+              </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-slate-300">
-                      Industry
-                    </label>
-                    <Input
-                      value={profile.industry ?? ""}
-                      onChange={(e) =>
-                        updateField("industry", e.target.value)
-                      }
-                      className="bg-slate-900 border-slate-700"
-                    />
-                  </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-300">Solution</Label>
+                <Textarea
+                  className="min-h-[96px] border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500"
+                  value={form.solution}
+                  onChange={(e) =>
+                    handleFieldChange("solution", e.target.value)
+                  }
+                />
+              </div>
 
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-slate-300">
-                      Stage
-                    </label>
-                    <Input
-                      placeholder="Pre-seed, Seed, Series A…"
-                      value={profile.stage ?? ""}
-                      onChange={(e) =>
-                        updateField("stage", e.target.value)
-                      }
-                      className="bg-slate-900 border-slate-700"
-                    />
-                  </div>
-                </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-300">Why now</Label>
+                <Textarea
+                  className="min-h-[96px] border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500"
+                  value={form.why_now}
+                  onChange={(e) =>
+                    handleFieldChange("why_now", e.target.value)
+                  }
+                />
+              </div>
+            </div>
+          </Card>
+        )}
 
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-300">
-                    Short description
-                  </label>
-                  <Textarea
-                    rows={3}
-                    placeholder="One or two sentences explaining what you do."
-                    value={profile.description ?? ""}
-                    onChange={(e) =>
-                      updateField("description", e.target.value)
-                    }
-                    className="bg-slate-900 border-slate-700"
-                  />
-                </div>
+        {activeTab === "Product" && (
+          <Card className="mt-4 space-y-5 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
+            <div>
+              <h2 className="text-base font-semibold text-white sm:text-lg">
+                Product
+              </h2>
+              <p className="mt-1 text-sm text-slate-400">
+                What you&apos;re building and how it works.
+              </p>
+            </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-300">
-                    Website URL
-                  </label>
-                  <Input
-                    placeholder="https://example.com"
-                    value={profile.website_url ?? ""}
-                    onChange={(e) =>
-                      updateField("website_url", e.target.value)
-                    }
-                    className="bg-slate-900 border-slate-700"
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-300">
+                  Product overview
+                </Label>
+                <Textarea
+                  className="min-h-[120px] border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500"
+                  value={form.product_details}
+                  onChange={(e) =>
+                    handleFieldChange("product_details", e.target.value)
+                  }
+                />
+              </div>
 
-          {/* PITCH & NARRATIVE */}
-          <TabsContent value="pitch" className="space-y-6">
-            <Card className="border-slate-800 bg-slate-950/70">
-              <CardHeader>
-                <CardTitle className="text-lg">
-                  Company narrative
-                </CardTitle>
-                <CardDescription>
-                  Problem, solution and timing. AI drafts this based on
-                  your input and website.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-2">
-                  <h3 className="text-sm font-semibold text-slate-100">
-                    Problem
-                  </h3>
-                  <Textarea
-                    rows={4}
-                    placeholder="Describe the core problem you are solving. Max 3–4 sentences."
-                    value={profile.problem ?? ""}
-                    onChange={(e) =>
-                      updateField("problem", e.target.value)
-                    }
-                    className="bg-slate-900 border-slate-700"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <h3 className="text-sm font-semibold text-slate-100">
-                    Solution
-                  </h3>
-                  <Textarea
-                    rows={4}
-                    placeholder="How your product solves the problem. Focus on value, not features."
-                    value={profile.solution ?? ""}
-                    onChange={(e) =>
-                      updateField("solution", e.target.value)
-                    }
-                    className="bg-slate-900 border-slate-700"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <h3 className="text-sm font-semibold text-slate-100">
-                    Why now
-                  </h3>
-                  <Textarea
-                    rows={4}
-                    placeholder="Explain why this is the right time: market shifts, regulation, technology, behaviour."
-                    value={profile.why_now ?? ""}
-                    onChange={(e) =>
-                      updateField("why_now", e.target.value)
-                    }
-                    className="bg-slate-900 border-slate-700"
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* PRODUCT */}
-          <TabsContent value="product" className="space-y-6">
-            <Card className="border-slate-800 bg-slate-950/70">
-              <CardHeader>
-                <CardTitle className="text-lg">Product</CardTitle>
-                <CardDescription>
-                  What you&apos;re building and how it works.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-300">
-                    Product overview
-                  </label>
-                  <Textarea
-                    rows={5}
-                    placeholder="High-level explanation, target users and core value proposition."
-                    value={profile.product_details ?? ""}
-                    onChange={(e) =>
-                      updateField("product_details", e.target.value)
-                    }
-                    className="bg-slate-900 border-slate-700"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-slate-400">
-                    Screenshots (coming soon)
-                  </p>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    {[0, 1, 2].map((i) => (
-                      <div
-                        key={i}
-                        className="flex h-28 items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-900/60 text-[11px] text-slate-500"
-                      >
-                        Screenshot placeholder
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* MARKET & TRACTION */}
-          <TabsContent value="market" className="space-y-6">
-            <Card className="border-slate-800 bg-slate-950/70">
-              <CardHeader>
-                <CardTitle className="text-lg">
-                  Market & traction
-                </CardTitle>
-                <CardDescription>
-                  High-level numbers investors expect. TAM/SAM/SOM can be
-                  rough placeholders to start.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-300">
-                    Market overview
-                  </label>
-                  <Textarea
-                    rows={5}
-                    placeholder="Describe target market, segments and size. TAM / SAM / SOM, key verticals, geography."
-                    value={profile.market ?? ""}
-                    onChange={(e) =>
-                      updateField("market", e.target.value)
-                    }
-                    className="bg-slate-900 border-slate-700"
-                  />
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-3 text-xs text-slate-400">
-                  <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-                    <p className="font-semibold text-slate-100 text-sm">
-                      TAM
-                    </p>
-                    <p className="mt-1">
-                      Placeholder now – can be AI-generated later.
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-                    <p className="font-semibold text-slate-100 text-sm">
-                      SAM
-                    </p>
-                    <p className="mt-1">
-                      Serviceable market you actively target.
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-                    <p className="font-semibold text-slate-100 text-sm">
-                      SOM
-                    </p>
-                    <p className="mt-1">
-                      Realistic share you can capture in the next years.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* TEAM */}
-          <TabsContent value="team" className="space-y-6">
-            <Card className="border-slate-800 bg-slate-950/70">
-              <CardHeader className="flex flex-row items-center justify-between gap-4">
-                <div>
-                  <CardTitle className="text-lg">Team</CardTitle>
-                  <CardDescription>
-                    Key people behind the company. AI can prefill this
-                    from LinkedIn signals.
-                  </CardDescription>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={addTeamMember}
-                >
-                  Add team member
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {profile.team.length === 0 && (
-                  <p className="text-xs text-slate-500">
-                    No team members added yet.
-                  </p>
-                )}
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  {profile.team.map((member, index) => (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-300">
+                  Screenshot placeholders
+                </Label>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  {[1, 2, 3].map((i) => (
                     <div
-                      key={index}
-                      className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 space-y-3"
+                      key={i}
+                      className="flex h-32 items-center justify-center rounded-xl border border-dashed border-slate-600 bg-slate-950/40 text-xs text-slate-500"
                     >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <Avatar className="h-12 w-12 rounded-xl border border-slate-700 bg-slate-950">
-                            {member.image_url && (
-                              <AvatarImage
-                                src={member.image_url}
-                                alt={member.name}
-                              />
-                            )}
-                            <AvatarFallback className="text-sm font-semibold">
-                              {(member.name ?? "T")[0]?.toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <Input
-                              placeholder="Name"
-                              value={member.name}
-                              onChange={(e) =>
-                                updateTeamMember(index, {
-                                  name: e.target.value,
-                                })
-                              }
-                              className="h-8 bg-slate-950 border-slate-700 text-sm"
-                            />
-                            <Input
-                              placeholder="Role"
-                              value={member.role}
-                              onChange={(e) =>
-                                updateTeamMember(index, {
-                                  role: e.target.value,
-                                })
-                              }
-                              className="mt-1 h-8 bg-slate-950 border-slate-700 text-xs"
-                            />
-                          </div>
-                        </div>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 text-slate-500 hover:text-red-400"
-                          onClick={() => removeTeamMember(index)}
-                        >
-                          ✕
-                        </Button>
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[11px] text-slate-400">
-                          LinkedIn URL
-                        </label>
-                        <Input
-                          placeholder="https://linkedin.com/in/…"
-                          value={member.linkedin_url ?? ""}
-                          onChange={(e) =>
-                            updateTeamMember(index, {
-                              linkedin_url: e.target.value,
-                            })
-                          }
-                          className="bg-slate-950 border-slate-700 text-xs"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[11px] text-slate-400">
-                          Previous experience (optional)
-                        </label>
-                        <Textarea
-                          rows={2}
-                          placeholder="Short background, e.g. 'Ex-Spotify, McKinsey, NTNU'. For now this is a single text field; AI can structure it later."
-                          value={
-                            member.experience
-                              ?.map((e) => `${e.role} @ ${e.company}`)
-                              .join("; ") ?? ""
-                          }
-                          onChange={(e) =>
-                            updateTeamMember(index, {
-                              experience: e.target.value
-                                .split(";")
-                                .map((s) => s.trim())
-                                .filter(Boolean)
-                                .map((entry) => {
-                                  const [role, company] =
-                                    entry.split("@").map((p) =>
-                                      p.trim()
-                                    );
-                                  return {
-                                    company: company ?? "",
-                                    role: role ?? "",
-                                  };
-                                }),
-                            })
-                          }
-                          className="bg-slate-950 border-slate-700 text-xs"
-                        />
-                      </div>
+                      Screenshot {i}
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+              </div>
+            </div>
+          </Card>
+        )}
 
-          {/* LINKS / LINKEDIN LIST */}
-          <TabsContent value="links" className="space-y-6">
-            <Card className="border-slate-800 bg-slate-950/70">
-              <CardHeader className="flex flex-row items-center justify-between gap-4">
-                <div>
-                  <CardTitle className="text-lg">
-                    LinkedIn & external links
-                  </CardTitle>
-                  <CardDescription>
-                    These profiles are used by the MCP agent to generate
-                    team and narrative.
-                  </CardDescription>
+        {activeTab === "Market & traction" && (
+          <Card className="mt-4 space-y-5 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
+            <div>
+              <h2 className="text-base font-semibold text-white sm:text-lg">
+                Market & traction
+              </h2>
+              <p className="mt-1 text-sm text-slate-400">
+                High-level market and traction description investors expect.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-300">
+                  Market overview
+                </Label>
+                <Textarea
+                  className="min-h-[96px] border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500"
+                  value={form.market}
+                  onChange={(e) =>
+                    handleFieldChange("market", e.target.value)
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs text-slate-300">
+                  TAM / SAM / SOM (placeholder)
+                </Label>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Input
+                    placeholder="TAM"
+                    className="border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500"
+                  />
+                  <Input
+                    placeholder="SAM"
+                    className="border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500"
+                  />
+                  <Input
+                    placeholder="SOM"
+                    className="border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500"
+                  />
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={addLinkedinUrl}
-                >
-                  Add LinkedIn URL
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {profile.linkedin_urls.length === 0 && (
-                  <p className="text-xs text-slate-500">
-                    No LinkedIn URLs added yet.
-                  </p>
-                )}
+              </div>
+            </div>
+          </Card>
+        )}
 
-                {profile.linkedin_urls.map((url, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center gap-2"
-                  >
-                    <Input
-                      placeholder="https://linkedin.com/in/…"
-                      value={url}
-                      onChange={(e) =>
-                        updateLinkedinUrl(index, e.target.value)
-                      }
-                      className="bg-slate-900 border-slate-700 text-xs"
-                    />
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7 text-slate-500 hover:text-red-400"
-                      onClick={() => removeLinkedinUrl(index)}
-                    >
-                      ✕
-                    </Button>
-                  </div>
-                ))}
-
-                <p className="mt-2 text-[11px] text-slate-500">
-                  The AI generator will use your website and these LinkedIn
-                  URLs as input to draft the profile.
+        {activeTab === "Team" && (
+          <Card className="mt-4 space-y-5 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-white sm:text-lg">
+                  Team
+                </h2>
+                <p className="mt-1 text-sm text-slate-400">
+                  Key people behind the company.
                 </p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
-    </main>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const next: TeamMember = {
+                    name: "",
+                    role: "",
+                    linkedin_url: "",
+                    experience: "",
+                  };
+                  handleFieldChange("team", [...form.team, next]);
+                }}
+              >
+                Add team member
+              </Button>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              {form.team.map((member, idx) => (
+                <div
+                  key={idx}
+                  className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4"
+                >
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-slate-300">Name</Label>
+                    <Input
+                      className="border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500"
+                      value={member.name}
+                      onChange={(e) => {
+                        const next = [...form.team];
+                        next[idx] = { ...next[idx], name: e.target.value };
+                        handleFieldChange("team", next);
+                      }}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-slate-300">Role</Label>
+                    <Input
+                      className="border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500"
+                      value={member.role}
+                      onChange={(e) => {
+                        const next = [...form.team];
+                        next[idx] = { ...next[idx], role: e.target.value };
+                        handleFieldChange("team", next);
+                      }}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-slate-300">
+                      LinkedIn URL
+                    </Label>
+                    <Input
+                      className="border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500"
+                      value={member.linkedin_url ?? ""}
+                      onChange={(e) => {
+                        const next = [...form.team];
+                        next[idx] = {
+                          ...next[idx],
+                          linkedin_url: e.target.value,
+                        };
+                        handleFieldChange("team", next);
+                      }}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-slate-300">
+                      Previous experience
+                    </Label>
+                    <Textarea
+                      className="min-h-[72px] border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500"
+                      value={member.experience ?? ""}
+                      onChange={(e) => {
+                        const next = [...form.team];
+                        next[idx] = {
+                          ...next[idx],
+                          experience: e.target.value,
+                        };
+                        handleFieldChange("team", next);
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {activeTab === "Links" && (
+          <Card className="mt-4 space-y-5 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
+            <div>
+              <h2 className="text-base font-semibold text-white sm:text-lg">
+                Links
+              </h2>
+              <p className="mt-1 text-sm text-slate-400">
+                External links investors may want to explore.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-300">Website URL</Label>
+                <Input
+                  className="border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500"
+                  value={form.website_url}
+                  onChange={(e) =>
+                    handleFieldChange("website_url", e.target.value)
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs text-slate-300">
+                  LinkedIn URLs
+                </Label>
+                <div className="space-y-2">
+                  {form.linkedin_urls.map((url, idx) => (
+                    <Input
+                      key={idx}
+                      className="border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500"
+                      value={url}
+                      onChange={(e) => {
+                        const next = [...form.linkedin_urls];
+                        next[idx] = e.target.value;
+                        handleFieldChange("linkedin_urls", next);
+                      }}
+                    />
+                  ))}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      handleFieldChange("linkedin_urls", [
+                        ...form.linkedin_urls,
+                        "",
+                      ])
+                    }
+                  >
+                    Add link
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
+      </main>
+    </div>
   );
 }
