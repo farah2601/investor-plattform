@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { supabase } from "../../lib/supabaseClient";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +18,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { AiInsightsCard } from "../../../components/investor/AiInsightsCard";
 
 type TeamMember = {
   name: string;
@@ -43,10 +45,10 @@ type CompanyProfile = {
   updated_at?: string | null;
 };
 
-const tabs = ["KPIs", "Profile"] as const;
-type TabKey = (typeof tabs)[number];
+type InvestorLinkMeta = {
+  expires_at?: string | null;
+};
 
-// Placeholder KPI-data – kan kobles til ekte Supabase-metrics senere
 const kpiCards = [
   {
     id: "mrr",
@@ -130,20 +132,19 @@ function formatDateLabel(dateString?: string | null): string {
     year: "numeric",
     month: "short",
     day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
 export default function InvestorCompanyPage() {
-  // Henter token fra URL: /investor/[token]
   const params = useParams<{ token: string }>();
   const token = params?.token;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabKey>("KPIs");
-
   const [company, setCompany] = useState<CompanyProfile | null>(null);
-  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [linkMeta, setLinkMeta] = useState<InvestorLinkMeta | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -155,7 +156,7 @@ export default function InvestorCompanyPage() {
 
         console.log("🔑 Investor token from URL:", token);
 
-        // 1) Slå opp investor_links-rad på access_token
+        // 1) investor_links → finn raden for dette tokenet
         const { data: linkRow, error: linkError } = await supabase
           .from("investor_links")
           .select("id, access_token, request_id, expires_at")
@@ -177,9 +178,11 @@ export default function InvestorCompanyPage() {
           return;
         }
 
-        setExpiresAt(linkRow.expires_at ?? null);
+        setLinkMeta({
+          expires_at: linkRow.expires_at ?? null,
+        });
 
-        // 2) Slå opp access_requests for å få company_id
+        // 2) access_requests → finn company_id
         const { data: requestRow, error: requestError } = await supabase
           .from("access_requests")
           .select("company_id")
@@ -206,19 +209,12 @@ export default function InvestorCompanyPage() {
 
         const companyId = requestRow.company_id as string;
 
-        // 3) Hent selskapet
+        // 3) companies → hent selskap
         const { data: companyRow, error: companyError } = await supabase
-  .from("companies")
-  .select("*") // samme stil som resten av appen din
-  .eq("id", companyId)
-  .maybeSingle();
-
-console.log("🏢 companies result:", {
-  companyId,
-  companyRow,
-  companyError: companyError ? JSON.stringify(companyError, null, 2) : null,
-});
-
+          .from("companies")
+          .select("*")
+          .eq("id", companyId)
+          .maybeSingle();
 
         console.log("🏢 companies result:", { companyRow, companyError });
 
@@ -261,7 +257,7 @@ console.log("🏢 companies result:", {
 
   if (error || !company) {
     return (
-      <div className="min-h-screen w-full bg-slate-950 text-slate-50 flex items-center justify-center">
+      <div className="min-h-screen w-full bg-slate-950 text-slate-50 flex items-center justify-center px-4">
         <p className="max-w-md text-center text-sm text-red-400">
           {error || "Could not load investor view for this link."}
         </p>
@@ -270,599 +266,351 @@ console.log("🏢 companies result:", {
   }
 
   const initial = company.name?.charAt(0)?.toUpperCase() || "C";
-
   const lastUpdated = company.updated_at || null;
   const aiUpdated = company.updated_at || null;
+  const expiresAt = linkMeta?.expires_at ?? null;
+  const isExpired =
+    expiresAt && new Date(expiresAt).getTime() < Date.now();
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-slate-950 text-slate-50">
-      <main className="mx-auto w-full max-w-5xl px-4 py-8 space-y-6 sm:px-6 lg:px-8">
-        {/* HEADER */}
-        <Card className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8 lg:flex-row lg:items-center lg:justify-between">
-          {/* Left: company summary */}
-          <div className="flex items-start gap-4">
-            <Avatar className="h-10 w-10 rounded-xl">
-              <AvatarFallback>{initial}</AvatarFallback>
-            </Avatar>
-            <div className="space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-lg font-semibold text-white sm:text-xl">
-                  {company.name}
-                </h1>
+      <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
+        {/* TOP AREA WITH GRADIENT BACKGROUND */}
+        <div className="rounded-3xl bg-gradient-to-br from-sky-500/15 via-slate-900/80 to-slate-950 p-[1px]">
+          <Card className="rounded-3xl bg-slate-950/80 border border-white/10">
+            <div className="flex flex-col gap-6 p-6 sm:p-8">
+              {/* 3-column layout */}
+              <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[auto,minmax(0,1fr),minmax(0,1.2fr)] lg:items-start">
+                {/* Logo */}
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-12 w-12 rounded-2xl bg-slate-900">
+                    <AvatarFallback className="text-lg font-semibold">
+                      {initial}
+                    </AvatarFallback>
+                  </Avatar>
+                </div>
 
-                {company.industry && (
-                  <Badge
-                    variant="outline"
-                    className="border-slate-600 bg-slate-900/80 text-[10px] uppercase tracking-wide text-slate-100"
-                  >
-                    {company.industry}
-                  </Badge>
-                )}
+                {/* Name + tags */}
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="text-xl sm:text-2xl font-semibold text-white">
+                      {company.name}
+                    </h1>
+                    {company.industry && (
+                      <Badge
+                        variant="outline"
+                        className="border-slate-600 bg-slate-900/80 text-[10px] uppercase tracking-wide text-slate-100"
+                      >
+                        {company.industry}
+                      </Badge>
+                    )}
+                    {company.stage && (
+                      <Badge
+                        variant="secondary"
+                        className="text-[10px] uppercase tracking-wide text-slate-950"
+                      >
+                        {company.stage}
+                      </Badge>
+                    )}
+                  </div>
 
-                {company.stage && (
-                  <Badge
-                    variant="secondary"
-                    className="text-[10px] uppercase tracking-wide text-slate-950"
-                  >
-                    {company.stage}
-                  </Badge>
-                )}
+                  {company.description && (
+                    <p className="max-w-xl text-sm text-slate-300">
+                      {company.description}
+                    </p>
+                  )}
+
+                  {company.website_url && (
+                    <a
+                      href={company.website_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-sky-400 hover:underline"
+                    >
+                      {company.website_url.replace(/^https?:\/\//, "")}
+                    </a>
+                  )}
+                </div>
+
+                {/* Metadata */}
+                <div className="space-y-2 text-xs text-slate-300 lg:text-right">
+                  <div className="flex items-center justify-between lg:justify-end gap-2">
+                    <span className="inline-flex items-center rounded-full border border-sky-500/40 bg-sky-500/10 px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-sky-300">
+                      Investor view — read only
+                    </span>
+                    {isExpired && (
+                      <span className="rounded-full bg-red-500/10 px-3 py-1 text-[10px] font-medium text-red-300 border border-red-500/40">
+                        Link expired
+                      </span>
+                    )}
+                  </div>
+
+                  <p>
+                    Status:{" "}
+                    <span
+                      className={cn(
+                        "font-medium",
+                        company.profile_published
+                          ? "text-emerald-400"
+                          : "text-amber-300"
+                      )}
+                    >
+                      {company.profile_published
+                        ? "Published by founders"
+                        : "Draft – contents may change"}
+                    </span>
+                  </p>
+
+                  <p>
+                    Last KPI update:{" "}
+                    <span className="text-slate-100">
+                      {formatDateLabel(lastUpdated)}
+                    </span>
+                  </p>
+
+                  <p>
+                    AI refreshed:{" "}
+                    <span className="text-slate-100">
+                      {formatDateLabel(aiUpdated)}
+                    </span>
+                  </p>
+
+                  {expiresAt && (
+                    <p>
+                      Token expiry:{" "}
+                      <span className="text-slate-100">
+                        {formatDateLabel(expiresAt)}
+                      </span>
+                    </p>
+                  )}
+
+                  <p className="text-slate-500">
+                    Secure token access. Do not forward or share publicly.
+                  </p>
+                </div>
               </div>
 
-              {company.description && (
-                <p className="max-w-xl text-sm text-slate-400">
-                  {company.description}
-                </p>
-              )}
+              {/* Tabs (KPI | Profile) – route-basert */}
+              <div className="border-t border-white/10 pt-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar snap-x">
+                    {/* KPIs – aktiv */}
+                    <span
+                      className={cn(
+                        "whitespace-nowrap rounded-full px-3 py-1.5 text-xs sm:text-sm transition snap-start",
+                        "bg-white text-slate-950 font-medium shadow-sm"
+                      )}
+                    >
+                      KPIs
+                    </span>
 
-              {company.website_url && (
-                <a
-                  href={company.website_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs text-sky-400 hover:underline"
-                >
-                  {company.website_url.replace(/^https?:\/\//, "")}
-                </a>
-              )}
+                    {/* Profile – lenke til /profile */}
+                    <Link
+                      href={`/investor/${token}/profile`}
+                      className={cn(
+                        "whitespace-nowrap rounded-full px-3 py-1.5 text-xs sm:text-sm transition snap-start",
+                        "bg-slate-900/70 text-slate-300 hover:bg-slate-800 border border-white/10"
+                      )}
+                    >
+                      Profile
+                    </Link>
+                  </div>
+
+                  <span className="hidden sm:inline-flex items-center rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-[10px] uppercase tracking-wide text-slate-400">
+                    MCP Agent package
+                  </span>
+                </div>
+              </div>
             </div>
-          </div>
-
-          {/* Right: meta */}
-          <div className="space-y-1 text-right text-xs text-slate-400">
-            <p className="text-sky-300 font-medium">Investor view (read-only)</p>
-            <p>
-              Status:{" "}
-              <span
-                className={cn(
-                  "font-medium",
-                  company.profile_published
-                    ? "text-emerald-400"
-                    : "text-amber-300"
-                )}
-              >
-                {company.profile_published
-                  ? "Published by founders"
-                  : "Draft – contents may change"}
-              </span>
-            </p>
-            <p>
-              Last updated:{" "}
-              <span className="text-slate-100">
-                {formatDateLabel(lastUpdated)}
-              </span>
-            </p>
-            <p>
-              AI commentary refreshed:{" "}
-              <span className="text-slate-100">
-                {formatDateLabel(aiUpdated)}
-              </span>
-            </p>
-            {expiresAt && (
-              <p>
-                Link expires:{" "}
-                <span className="text-slate-100">
-                  {formatDateLabel(expiresAt)}
-                </span>
-              </p>
-            )}
-            <p className="text-slate-500">
-              Secure token access – do not share publicly.
-            </p>
-          </div>
-        </Card>
-
-        {/* TABS */}
-        <div className="border-b border-white/10">
-          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-            {tabs.map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setActiveTab(tab)}
-                className={cn(
-                  "whitespace-nowrap rounded-full px-3 py-1.5 text-xs sm:text-sm transition",
-                  activeTab === tab
-                    ? "bg-white text-slate-950"
-                    : "bg-slate-900/60 text-slate-300 hover:bg-slate-800"
-                )}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
+          </Card>
         </div>
 
-        {/* KPI TAB */}
-        {activeTab === "KPIs" && (
-          <>
-            {/* Key metrics grid */}
-            <Card className="mt-4 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
-              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        {/* KPI CONTENT */}
+        <div className="space-y-8 pb-10">
+          {/* Key metrics grid */}
+          <Card className="mt-2 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
                 <h2 className="text-base font-semibold text-white sm:text-lg">
                   Key metrics
                 </h2>
                 <p className="text-xs text-slate-400">
-                  Accounting-grade KPIs maintained by the MCP Agent.
+                  Accounting-grade KPIs maintained by the MCP Agent (MVP placeholder).
                 </p>
               </div>
-
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {kpiCards.map((kpi) => (
-                  <Card
-                    key={kpi.id}
-                    className="rounded-xl border border-white/10 bg-slate-950/60 p-4"
-                  >
-                    <p className="text-xs text-slate-400">{kpi.label}</p>
-                    <p className="mt-1 text-xl font-semibold text-white">
-                      {kpi.value}
-                    </p>
-                    <div className="mt-1 flex items-center gap-2 text-xs">
-                      <Badge
-                        className={cn(
-                          "border-none px-2 py-0.5",
-                          kpi.trendPositive
-                            ? "bg-emerald-900/60 text-emerald-300"
-                            : "bg-red-900/60 text-red-300"
-                        )}
-                      >
-                        {kpi.trend}
-                      </Badge>
-                      <span className="text-slate-500">{kpi.helper}</span>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            </Card>
-
-            {/* Trends charts */}
-            <Card className="mt-6 space-y-6 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
-              <h2 className="text-base font-semibold text-white sm:text-lg">
-                Trends
-              </h2>
-              <div className="grid gap-6 lg:grid-cols-2">
-                {/* MRR chart */}
-                <div className="space-y-2">
-                  <p className="text-xs text-slate-400">MRR last 9 months</p>
-                  <div className="h-48 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={mrrChartData}>
-                        <XAxis
-                          dataKey="month"
-                          tickLine={false}
-                          axisLine={false}
-                          tick={{ fontSize: 10, fill: "#94a3b8" }}
-                        />
-                        <YAxis
-                          tickLine={false}
-                          axisLine={false}
-                          tick={{ fontSize: 10, fill: "#94a3b8" }}
-                          tickFormatter={(v) => `${Math.round(v / 1000)}k`}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: "#020617",
-                            borderRadius: 8,
-                            border: "1px solid rgba(148,163,184,0.4)",
-                          }}
-                          labelStyle={{ fontSize: 12, color: "#e2e8f0" }}
-                          itemStyle={{ fontSize: 12, color: "#e2e8f0" }}
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey="value"
-                          stroke="#38bdf8"
-                          fill="url(#mrrGradient)"
-                          strokeWidth={2}
-                        />
-                        <defs>
-                          <linearGradient
-                            id="mrrGradient"
-                            x1="0"
-                            y1="0"
-                            x2="0"
-                            y2="1"
-                          >
-                            <stop
-                              offset="5%"
-                              stopColor="#38bdf8"
-                              stopOpacity={0.4}
-                            />
-                            <stop
-                              offset="95%"
-                              stopColor="#38bdf8"
-                              stopOpacity={0}
-                            />
-                          </linearGradient>
-                        </defs>
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                {/* Burn chart */}
-                <div className="space-y-2">
-                  <p className="text-xs text-slate-400">Burn last 9 months</p>
-                  <div className="h-48 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={burnChartData}>
-                        <XAxis
-                          dataKey="month"
-                          tickLine={false}
-                          axisLine={false}
-                          tick={{ fontSize: 10, fill: "#94a3b8" }}
-                        />
-                        <YAxis
-                          tickLine={false}
-                          axisLine={false}
-                          tick={{ fontSize: 10, fill: "#94a3b8" }}
-                          tickFormatter={(v) => `${Math.round(v / 1000)}k`}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: "#020617",
-                            borderRadius: 8,
-                            border: "1px solid rgba(148,163,184,0.4)",
-                          }}
-                          labelStyle={{ fontSize: 12, color: "#e2e8f0" }}
-                          itemStyle={{ fontSize: 12, color: "#e2e8f0" }}
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey="value"
-                          stroke="#f97373"
-                          fill="url(#burnGradient)"
-                          strokeWidth={2}
-                        />
-                        <defs>
-                          <linearGradient
-                            id="burnGradient"
-                            x1="0"
-                            y1="0"
-                            x2="0"
-                            y2="1"
-                          >
-                            <stop
-                              offset="5%"
-                              stopColor="#ef4444"
-                              stopOpacity={0.4}
-                            />
-                            <stop
-                              offset="95%"
-                              stopColor="#ef4444"
-                              stopOpacity={0}
-                            />
-                          </linearGradient>
-                        </defs>
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
-            </Card>
-
-            {/* AI commentary */}
-            <Card className="mt-6 space-y-3 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
-              <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-sky-500/10 text-sky-300">
-                  <span className="text-sm">✦</span>
-                </div>
-                <h2 className="text-base font-semibold text-white sm:text-lg">
-                  AI commentary
-                </h2>
-              </div>
-              <p className="text-xs text-slate-400">
-                Generated by the MCP agent based on the latest KPIs.
+              <p className="text-[11px] text-slate-500">
+                Numbers are static demo values in the current version.
               </p>
-              <ul className="space-y-1.5 text-sm text-slate-200">
-                <li>
-                  • MRR grew 8% last month, driven mainly by expansion from
-                  existing customers.
-                </li>
-                <li>
-                  • Runway is stable at ~14 months after reduced burn and
-                  improved gross margin.
-                </li>
-                <li>
-                  • Net revenue churn is 2.7%, slightly above target but
-                  trending down over the last quarter.
-                </li>
-              </ul>
-            </Card>
-          </>
-        )}
+            </div>
 
-        {/* PROFILE TAB */}
-        {activeTab === "Profile" && (
-          <>
-            {/* Overview & narrative */}
-            <Card className="mt-4 space-y-4 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
-              <div>
-                <h2 className="text-base font-semibold text-white sm:text-lg">
-                  Overview
-                </h2>
-                <p className="mt-1 text-sm text-slate-400">
-                  High-level summary of the company, market and timing.
-                </p>
-              </div>
-
-              <div className="grid gap-4 text-sm text-slate-200 sm:grid-cols-2 lg:grid-cols-3">
-                <div>
-                  <p className="text-xs uppercase text-slate-500">Industry</p>
-                  <p>{company.industry || "—"}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-slate-500">Stage</p>
-                  <p>{company.stage || "—"}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-slate-500">Website</p>
-                  {company.website_url ? (
-                    <a
-                      href={company.website_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-sky-400 hover:underline"
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {kpiCards.map((kpi) => (
+                <Card
+                  key={kpi.id}
+                  className="rounded-xl border border-white/10 bg-slate-950/60 p-4"
+                >
+                  <p className="text-xs text-slate-400">{kpi.label}</p>
+                  <p className="mt-1 text-xl font-semibold text-white">
+                    {kpi.value}
+                  </p>
+                  <div className="mt-1 flex items-center gap-2 text-xs">
+                    <Badge
+                      className={cn(
+                        "border-none px-2 py-0.5",
+                        kpi.trendPositive
+                          ? "bg-emerald-900/60 text-emerald-300"
+                          : "bg-red-900/60 text-red-300"
+                      )}
                     >
-                      {company.website_url.replace(/^https?:\/\//, "")}
-                    </a>
-                  ) : (
-                    <p>—</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div>
-                  <p className="mb-1 text-xs uppercase text-slate-500">
-                    Problem
-                  </p>
-                  <p className="whitespace-pre-line text-sm text-slate-200">
-                    {company.problem || "Not provided."}
-                  </p>
-                </div>
-                <div>
-                  <p className="mb-1 text-xs uppercase text-slate-500">
-                    Solution
-                  </p>
-                  <p className="whitespace-pre-line text-sm text-slate-200">
-                    {company.solution || "Not provided."}
-                  </p>
-                </div>
-                <div>
-                  <p className="mb-1 text-xs uppercase text-slate-500">
-                    Why now
-                  </p>
-                  <p className="whitespace-pre-line text-sm text-slate-200">
-                    {company.why_now || "Not provided."}
-                  </p>
-                </div>
-              </div>
-            </Card>
-
-            {/* Product */}
-            <Card className="mt-6 space-y-4 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
-              <div>
-                <h2 className="text-base font-semibold text-white sm:text-lg">
-                  Product
-                </h2>
-                <p className="mt-1 text-sm text-slate-400">
-                  What they&apos;re building and how it works.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <p className="text-xs uppercase text-slate-500">
-                  Product overview
-                </p>
-                <p className="whitespace-pre-line text-sm text-slate-200">
-                  {company.product_details || "Not provided."}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <p className="text-xs uppercase text-slate-500">
-                  Screenshots
-                </p>
-                <div className="grid gap-4 sm:grid-cols-3">
-                  {[1, 2, 3].map((i) => (
-                    <div
-                      key={i}
-                      className="flex h-32 items-center justify-center rounded-xl border border-dashed border-slate-600 bg-slate-950/40 text-xs text-slate-500"
-                    >
-                      Screenshot placeholder {i}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </Card>
-
-            {/* Market & traction */}
-            <Card className="mt-6 space-y-4 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
-              <div>
-                <h2 className="text-base font-semibold text-white sm:text-lg">
-                  Market & traction
-                </h2>
-                <p className="mt-1 text-sm text-slate-400">
-                  High-level market view and traction highlights.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <p className="text-xs uppercase text-slate-500">
-                  Market overview
-                </p>
-                <p className="whitespace-pre-line text-sm text-slate-200">
-                  {company.market || "Not provided."}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <p className="text-xs uppercase text-slate-500">
-                  TAM / SAM / SOM (placeholder)
-                </p>
-                <div className="grid gap-3 text-sm text-slate-200 sm:grid-cols-3">
-                  <div className="rounded-lg border border-slate-700 bg-slate-950/40 p-3">
-                    <p className="text-xs text-slate-500">TAM</p>
-                    <p>—</p>
+                      {kpi.trend}
+                    </Badge>
+                    <span className="text-slate-500">{kpi.helper}</span>
                   </div>
-                  <div className="rounded-lg border border-slate-700 bg-slate-950/40 p-3">
-                    <p className="text-xs text-slate-500">SAM</p>
-                    <p>—</p>
-                  </div>
-                  <div className="rounded-lg border border-slate-700 bg-slate-950/40 p-3">
-                    <p className="text-xs text-slate-500">SOM</p>
-                    <p>—</p>
-                  </div>
-                </div>
-              </div>
-            </Card>
-
-            {/* Team */}
-            <Card className="mt-6 space-y-4 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
-              <div>
-                <h2 className="text-base font-semibold text-white sm:text-lg">
-                  Team
-                </h2>
-                <p className="mt-1 text-sm text-slate-400">
-                  Key people behind the company.
-                </p>
-              </div>
-
-              {company.team && company.team.length > 0 ? (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {company.team.map((member, idx) => {
-                    const initialMember =
-                      member.name?.charAt(0)?.toUpperCase() || "T";
-                    return (
-                      <div
-                        key={`${member.name}-${idx}`}
-                        className="flex gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4"
-                      >
-                        <Avatar className="h-10 w-10 rounded-xl">
-                          <AvatarFallback>{initialMember}</AvatarFallback>
-                        </Avatar>
-                        <div className="space-y-1 text-sm">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-slate-100">
-                              {member.name || "Unnamed"}
-                            </p>
-                            {member.linkedin_url && (
-                              <a
-                                href={member.linkedin_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-xs text-sky-400 hover:underline"
-                              >
-                                LinkedIn
-                              </a>
-                            )}
-                          </div>
-                          {member.role && (
-                            <p className="text-xs text-slate-400">
-                              {member.role}
-                            </p>
-                          )}
-                          {member.experience && (
-                            <p className="text-xs text-slate-400 whitespace-pre-line">
-                              {member.experience}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-sm text-slate-400">
-                  Team information has not been added yet.
-                </p>
-              )}
-            </Card>
-
-            {/* Links & documents */}
-            <Card className="mt-6 space-y-4 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8 mb-4">
-              <div>
-                <h2 className="text-base font-semibold text-white sm:text-lg">
-                  Links & documents
-                </h2>
-                <p className="mt-1 text-sm text-slate-400">
-                  External resources investors may want to explore.
-                </p>
-              </div>
-
-              <div className="space-y-3 text-sm text-slate-200">
-                <div>
-                  <p className="text-xs uppercase text-slate-500">Website</p>
-                  {company.website_url ? (
-                    <a
-                      href={company.website_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-sky-400 hover:underline"
-                    >
-                      {company.website_url.replace(/^https?:\/\//, "")}
-                    </a>
-                  ) : (
-                    <p>—</p>
-                  )}
-                </div>
-
-                <div>
-                  <p className="text-xs uppercase text-slate-500">LinkedIn</p>
-                  {company.linkedin_urls && company.linkedin_urls.length > 0 ? (
-                    <ul className="mt-1 space-y-1">
-                      {company.linkedin_urls.map((url, idx) => (
-                        <li key={idx}>
-                          <a
-                            href={url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-sky-400 hover:underline break-all"
-                          >
-                            {url}
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p>—</p>
-                  )}
-                </div>
-
-                <div>
-                  <p className="text-xs uppercase text-slate-500">
-                    Pitchdeck
+                  <p className="mt-2 text-[11px] text-slate-500">
+                    MCP Agent will keep this metric continuously updated from accounting/CRM systems.
                   </p>
-                  <p className="text-xs text-slate-500">
-                    Coming soon – founders can attach a deck and data room
-                    directly in MCP.
-                  </p>
+                </Card>
+              ))}
+            </div>
+          </Card>
+
+          {/* Trends charts */}
+          <Card className="space-y-6 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
+            <h2 className="text-base font-semibold text-white sm:text-lg">
+              Trends
+            </h2>
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* MRR chart */}
+              <div className="space-y-2">
+                <p className="text-xs text-slate-400">MRR last 9 months</p>
+                <div className="h-48 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={mrrChartData}>
+                      <XAxis
+                        dataKey="month"
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 10, fill: "#94a3b8" }}
+                      />
+                      <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 10, fill: "#94a3b8" }}
+                        tickFormatter={(v) => `${Math.round(v / 1000)}k`}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "#020617",
+                          borderRadius: 8,
+                          border: "1px solid rgba(148,163,184,0.4)",
+                        }}
+                        labelStyle={{ fontSize: 12, color: "#e2e8f0" }}
+                        itemStyle={{ fontSize: 12, color: "#e2e8f0" }}
+                      />
+                      <defs>
+                        <linearGradient
+                          id="mrrGradient"
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1"
+                        >
+                          <stop
+                            offset="5%"
+                            stopColor="#38bdf8"
+                            stopOpacity={0.4}
+                          />
+                          <stop
+                            offset="95%"
+                            stopColor="#38bdf8"
+                            stopOpacity={0}
+                          />
+                        </linearGradient>
+                      </defs>
+                      <Area
+                        type="monotone"
+                        dataKey="value"
+                        stroke="#38bdf8"
+                        fill="url(#mrrGradient)"
+                        strokeWidth={2}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
                 </div>
+                <p className="text-[11px] text-slate-500">
+                  MRR is shown as a simple demo trend. In production, MCP Agent will pull
+                  exact monthly figures from integrated systems.
+                </p>
               </div>
-            </Card>
-          </>
-        )}
+
+              {/* Burn chart */}
+              <div className="space-y-2">
+                <p className="text-xs text-slate-400">Burn last 9 months</p>
+                <div className="h-48 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={burnChartData}>
+                      <XAxis
+                        dataKey="month"
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 10, fill: "#94a3b8" }}
+                      />
+                      <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 10, fill: "#94a3b8" }}
+                        tickFormatter={(v) => `${Math.round(v / 1000)}k`}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "#020617",
+                          borderRadius: 8,
+                          border: "1px solid rgba(148,163,184,0.4)",
+                        }}
+                        labelStyle={{ fontSize: 12, color: "#e2e8f0" }}
+                        itemStyle={{ fontSize: 12, color: "#e2e8f0" }}
+                      />
+                      <defs>
+                        <linearGradient
+                          id="burnGradient"
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1"
+                        >
+                          <stop
+                            offset="5%"
+                            stopColor="#ef4444"
+                            stopOpacity={0.4}
+                          />
+                          <stop
+                            offset="95%"
+                            stopColor="#ef4444"
+                            stopOpacity={0}
+                          />
+                        </linearGradient>
+                      </defs>
+                      <Area
+                        type="monotone"
+                        dataKey="value"
+                        stroke="#f97373"
+                        fill="url(#burnGradient)"
+                        strokeWidth={2}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Burn shows an illustrative trend only. Runway is derived from
+                  cash / net burn in the full MCP integration.
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          {/* AI Insights (ny komponent) */}
+          <AiInsightsCard companyId={company.id} />
+        </div>
       </main>
     </div>
   );

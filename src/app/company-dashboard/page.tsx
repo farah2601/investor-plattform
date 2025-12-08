@@ -163,7 +163,7 @@ export default function CompanyDashboard() {
   const [company, setCompany] = useState<CompanyKpi | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // 🔐 ny state: har vi sjekket auth?
+  // 🔐 har vi sjekket auth?
   const [authChecked, setAuthChecked] = useState(false);
 
   // KPI-modal-state
@@ -185,13 +185,11 @@ export default function CompanyDashboard() {
         data: { session },
       } = await supabase.auth.getSession();
 
-      // Ikke logget inn → send til login
       if (!session) {
         router.replace("/login");
         return;
       }
 
-      // Logget inn → last data
       setAuthChecked(true);
       await loadData();
     }
@@ -285,12 +283,11 @@ export default function CompanyDashboard() {
       ? window.location.origin
       : "http://localhost:3000";
 
-  // 🔁 NYTT: bruk /investor/{token} i stedet for ?token=
+  // ✅ Bruk path-baserte lenker: /investor/<token>
   const investorUrl = latestLink
     ? `${baseUrl}/investor/${latestLink.access_token}`
     : null;
 
-  // ikke vis "rejected"
   const visibleRequests = requests.filter((r) => r.status !== "rejected");
 
   async function copyLink() {
@@ -366,7 +363,6 @@ export default function CompanyDashboard() {
     alert("Tall oppdatert ✅");
   }
 
-  // 🔄 Viser "sjekker tilgang" mens vi ikke vet om bruker er logget inn
   if (!authChecked) {
     return (
       <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center">
@@ -474,13 +470,14 @@ export default function CompanyDashboard() {
                   Delbar investor-lenke
                 </h2>
                 <span className="rounded-full bg-slate-900 px-3 py-1 text-xs text-slate-400">
-                  Bare for godkjente forespørsler
+                  KPI + Profil (read-only)
                 </span>
               </div>
 
               <p className="text-xs text-slate-500">
                 Godkjenn en forespørsel under, så genererer systemet en privat
-                investor-lenke som du kan dele med investorer.
+                investor-lenke som gir tilgang til både KPI-view og profilvisning
+                (samme token).
               </p>
 
               {investorUrl ? (
