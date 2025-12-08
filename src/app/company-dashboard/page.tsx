@@ -285,8 +285,9 @@ export default function CompanyDashboard() {
       ? window.location.origin
       : "http://localhost:3000";
 
+  // 🔁 NYTT: bruk /investor/{token} i stedet for ?token=
   const investorUrl = latestLink
-    ? `${baseUrl}/investor?token=${latestLink.access_token}`
+    ? `${baseUrl}/investor/${latestLink.access_token}`
     : null;
 
   // ikke vis "rejected"
@@ -389,26 +390,26 @@ export default function CompanyDashboard() {
         <div className="max-w-5xl mx-auto px-4 py-10 space-y-8">
           {/* HEADER */}
           <header className="flex items-start justify-between gap-4">
-  <div className="space-y-2">
-    <p className="text-xs tracking-[0.2em] text-slate-500 uppercase">
-      Selskap
-    </p>
-    <h1 className="text-3xl font-bold">Selskapets dashboard</h1>
-    <p className="text-sm text-slate-400">
-      Kontrollpanel for KPI-er, integrasjoner og investortilgang.
-    </p>
-  </div>
+            <div className="space-y-2">
+              <p className="text-xs tracking-[0.2em] text-slate-500 uppercase">
+                Selskap
+              </p>
+              <h1 className="text-3xl font-bold">Selskapets dashboard</h1>
+              <p className="text-sm text-slate-400">
+                Kontrollpanel for KPI-er, integrasjoner og investortilgang.
+              </p>
+            </div>
 
-  <Link href="/logout">
-    <Button
-      variant="outline"
-      size="sm"
-      className="border-slate-600 text-slate-100 bg-transparent hover:bg-slate-800/60"
-    >
-      Logg ut
-    </Button>
-  </Link>
-</header>
+            <Link href="/logout">
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-slate-600 text-slate-100 bg-transparent hover:bg-slate-800/60"
+              >
+                Logg ut
+              </Button>
+            </Link>
+          </header>
 
           {/* KPI */}
           {company && (
@@ -611,7 +612,7 @@ export default function CompanyDashboard() {
                   {req.link && (
                     <p className="mt-2 text-xs text-emerald-400 break-all">
                       Tilgangslenke:{" "}
-                      {`${baseUrl}/investor?token=${req.link.access_token}`}
+                      {`${baseUrl}/investor/${req.link.access_token}`}
                       <br />
                       (Utgår:{" "}
                       {new Date(
