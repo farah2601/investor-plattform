@@ -64,6 +64,7 @@ const tabs = [
 export default function CompanyProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [aiGenerating, setAiGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [company, setCompany] = useState<CompanyProfile | null>(null);
@@ -224,6 +225,54 @@ export default function CompanyProfilePage() {
     }
   };
 
+  const handleGenerateProfile = async () => {
+    if (!form) return;
+    setAiGenerating(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/generate-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name,
+          industry: form.industry,
+          website_url: form.website_url,
+          linkedin_urls: form.linkedin_urls,
+        }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || "Failed to generate profile");
+      }
+
+      const data = await res.json();
+
+      setForm((prev) =>
+        prev
+          ? {
+              ...prev,
+              problem: data.problem ?? prev.problem,
+              solution: data.solution ?? prev.solution,
+              why_now: data.why_now ?? prev.why_now,
+              market: data.market ?? prev.market,
+              product_details: data.product_details ?? prev.product_details,
+            }
+          : prev
+      );
+    } catch (err: any) {
+      console.error("generate-profile error:", err);
+      setError(
+        typeof err?.message === "string"
+          ? err.message
+          : "Could not generate profile with AI."
+      );
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
   // ---------- RENDER ----------
 
   if (loading) {
@@ -245,6 +294,7 @@ export default function CompanyProfilePage() {
   }
 
   const initial = company.name?.charAt(0)?.toUpperCase() || "C";
+  const linkedinsCount = form.linkedin_urls.filter((x) => x.trim() !== "").length;
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-slate-950 text-slate-50">
@@ -310,12 +360,11 @@ export default function CompanyProfilePage() {
               <Button
                 variant="outline"
                 size="sm"
-                disabled={saving}
-                onClick={() => {
-                  console.log("Generate profile with AI – TODO");
-                }}
+                disabled={saving || aiGenerating}
+                onClick={handleGenerateProfile}
+                className="border-sky-500 text-sky-100"
               >
-                Generate profile with AI
+                {aiGenerating ? "Generating…" : "Generate profile with AI"}
               </Button>
               <Button size="sm" disabled={saving} onClick={handlePublish}>
                 {company.profile_published ? "Published" : "Approve & publish"}
@@ -444,6 +493,43 @@ export default function CompanyProfilePage() {
               <p className="mt-1 text-sm text-slate-400">
                 Problem, solution and why now — the story investors read first.
               </p>
+            </div>
+
+            {/* AI PROFILE GENERATOR CARD */}
+            <div className="rounded-2xl border border-sky-500/40 bg-sky-500/10 px-4 py-4 sm:px-6 sm:py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold tracking-[0.18em] text-sky-300 uppercase">
+                  AI PROFILE GENERATOR
+                </p>
+                <p className="text-xs text-slate-200">
+                  MCP-agenten bruker website + LinkedIn-lenker for å skrive
+                  Problem, Solution, Why now, Market, Product og Team.
+                </p>
+                <p className="text-xs text-slate-300 mt-2">
+                  <span className="font-medium text-slate-100">Website:</span>{" "}
+                  {form.website_url
+                    ? form.website_url.replace(/^https?:\/\//, "")
+                    : "ikke satt ennå"}
+                </p>
+                <p className="text-xs text-slate-300">
+                  <span className="font-medium text-slate-100">
+                    LinkedIn-profiler:
+                  </span>{" "}
+                  {linkedinsCount}
+                </p>
+                <p className="text-[11px] text-slate-300 mt-1">
+                  Oppdater først website og LinkedIn under Links, og klikk
+                  deretter for å la AI foreslå en komplett narrativ profil. Du
+                  kan redigere alt etterpå.
+                </p>
+              </div>
+              <Button
+                className="shrink-0 bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold"
+                disabled={saving || aiGenerating}
+                onClick={handleGenerateProfile}
+              >
+                {aiGenerating ? "Generating…" : "Generate profile with AI"}
+              </Button>
             </div>
 
             <div className="space-y-4">

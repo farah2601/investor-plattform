@@ -69,6 +69,7 @@ function RequestActions({
 
   async function updateStatus(status: string) {
     startTransition(async () => {
+      // 1) Oppdater status på forespørselen
       const { error: updateError } = await supabase
         .from("access_requests")
         .update({ status })
@@ -80,6 +81,7 @@ function RequestActions({
         return;
       }
 
+      // 2) Hvis godkjent → sjekk / opprett investor_link
       if (status === "approved") {
         const { data: existing, error: existingError } = await supabase
           .from("investor_links")
@@ -107,6 +109,7 @@ function RequestActions({
               {
                 access_token: token,
                 request_id: req.id,
+                company_id: req.company_id,
                 expires_at: expiresAt.toISOString(),
               },
             ]);
@@ -121,6 +124,7 @@ function RequestActions({
         }
       }
 
+      // 3) Oppdater UI i dashboardet
       await onUpdated();
     });
   }
@@ -163,10 +167,10 @@ export default function CompanyDashboard() {
   const [company, setCompany] = useState<CompanyKpi | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // 🔐 har vi sjekket auth?
+  // auth-sjekk
   const [authChecked, setAuthChecked] = useState(false);
 
-  // KPI-modal-state
+  // KPI-modal
   const [kpiDialogOpen, setKpiDialogOpen] = useState(false);
   const [savingKpi, setSavingKpi] = useState(false);
   const [kpiForm, setKpiForm] = useState({
@@ -178,7 +182,6 @@ export default function CompanyDashboard() {
     growth_percent: "",
   });
 
-  // 🔐 AUTH-SJEKK
   useEffect(() => {
     async function checkAuthAndLoad() {
       const {
@@ -200,7 +203,7 @@ export default function CompanyDashboard() {
   async function loadData() {
     setError(null);
 
-    // 1) Forespørsler + selskap-navn
+    // 1) access_requests + company-navn
     const { data: reqs, error: reqError } = await supabase
       .from("access_requests")
       .select("*, companies(name)")
@@ -212,7 +215,7 @@ export default function CompanyDashboard() {
       return;
     }
 
-    // 2) Investor-links
+    // 2) investor_links
     const { data: links, error: linkError } = await supabase
       .from("investor_links")
       .select("*");
@@ -231,7 +234,7 @@ export default function CompanyDashboard() {
 
     setRequests(withLinks);
 
-    // 3) Første company (MVP)
+    // 3) første company (MVP)
     const { data: companiesData, error: companyError } = await supabase
       .from("companies")
       .select(
@@ -283,10 +286,10 @@ export default function CompanyDashboard() {
       ? window.location.origin
       : "http://localhost:3000";
 
-  // ✅ Bruk path-baserte lenker: /investor/<token>
-  const investorUrl = latestLink
-    ? `${baseUrl}/investor/${latestLink.access_token}`
-    : null;
+  // fortsatt query-versjon, siden det funker hos deg
+ const investorUrl = latestLink
+  ? `${baseUrl}/investor/${latestLink.access_token}`
+  : null;
 
   const visibleRequests = requests.filter((r) => r.status !== "rejected");
 
@@ -470,14 +473,13 @@ export default function CompanyDashboard() {
                   Delbar investor-lenke
                 </h2>
                 <span className="rounded-full bg-slate-900 px-3 py-1 text-xs text-slate-400">
-                  KPI + Profil (read-only)
+                  Bare for godkjente forespørsler
                 </span>
               </div>
 
               <p className="text-xs text-slate-500">
                 Godkjenn en forespørsel under, så genererer systemet en privat
-                investor-lenke som gir tilgang til både KPI-view og profilvisning
-                (samme token).
+                investor-lenke som du kan dele med investorer.
               </p>
 
               {investorUrl ? (
@@ -607,17 +609,15 @@ export default function CompanyDashboard() {
                   </p>
 
                   {req.link && (
-                    <p className="mt-2 text-xs text-emerald-400 break-all">
-                      Tilgangslenke:{" "}
-                      {`${baseUrl}/investor/${req.link.access_token}`}
-                      <br />
-                      (Utgår:{" "}
-                      {new Date(
-                        req.link.expires_at
-                      ).toLocaleDateString("nb-NO")}
-                      )
-                    </p>
-                  )}
+  <p className="mt-2 text-xs text-emerald-400 break-all">
+    Tilgangslenke:{" "}
+    {`${baseUrl}/investor/${req.link.access_token}`}
+    <br />
+    (Utgår:{" "}
+    {new Date(req.link.expires_at).toLocaleDateString("nb-NO")}
+    )
+  </p>
+)}
 
                   <RequestActions req={req} onUpdated={loadData} />
                 </div>

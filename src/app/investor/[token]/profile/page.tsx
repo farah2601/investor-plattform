@@ -1,15 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
+import Link from "next/link";
 import { supabase } from "../../../lib/supabaseClient";
 import { cn } from "@/lib/utils";
 
 import { Card } from "../../../../components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import Link from "next/link";
 
 type TeamMember = {
   name: string;
@@ -36,11 +35,26 @@ type CompanyProfile = {
   updated_at?: string | null;
 };
 
+type InvestorLinkMeta = {
+  expires_at?: string | null;
+};
+
+type InvestorLinkRow = {
+  id: string;
+  access_token: string;
+  request_id: string;
+  expires_at: string | null;
+};
+
+type AccessRequestRow = {
+  company_id: string;
+};
+
 function formatDateLabel(dateString?: string | null): string {
   if (!dateString) return "Unknown";
   const d = new Date(dateString);
   if (Number.isNaN(d.getTime())) return "Unknown";
-  return d.toLocaleString(undefined, {
+  return d.toLocaleString("no-NO", {
     year: "numeric",
     month: "short",
     day: "2-digit",
@@ -51,36 +65,34 @@ function formatDateLabel(dateString?: string | null): string {
 
 export default function InvestorProfilePage() {
   const params = useParams<{ token: string }>();
-  const router = useRouter();
   const token = params?.token;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [company, setCompany] = useState<CompanyProfile | null>(null);
-  const [expiresAt, setExpiresAt] = useState<string | null>(null);
-
-  // screenshot-modal state
-  const [screenshotDialogOpen, setScreenshotDialogOpen] = useState(false);
-  const [activeScreenshot, setActiveScreenshot] = useState<number | null>(null);
+  const [linkMeta, setLinkMeta] = useState<InvestorLinkMeta | null>(null);
 
   useEffect(() => {
-    if (!token) {
-      setError("Missing investor token in URL.");
-      setLoading(false);
-      return;
-    }
+    if (!token) return;
 
     const loadData = async () => {
       try {
         setLoading(true);
         setError(null);
 
+        console.log("🔑 Investor token from URL (profile):", token);
+
         // 1) investor_links → finn raden for dette tokenet
         const { data: linkRow, error: linkError } = await supabase
           .from("investor_links")
           .select("id, access_token, request_id, expires_at")
           .eq("access_token", token)
-          .maybeSingle();
+          .maybeSingle<InvestorLinkRow>();
+
+        console.log("📄 investor_links result (profile):", {
+          linkRow,
+          linkError,
+        });
 
         if (linkError) {
           console.error("Supabase investor_links error:", linkError);
@@ -95,14 +107,21 @@ export default function InvestorProfilePage() {
           return;
         }
 
-        setExpiresAt(linkRow.expires_at ?? null);
+        setLinkMeta({
+          expires_at: linkRow.expires_at ?? null,
+        });
 
         // 2) access_requests → finn company_id
         const { data: requestRow, error: requestError } = await supabase
           .from("access_requests")
           .select("company_id")
           .eq("id", linkRow.request_id)
-          .maybeSingle();
+          .maybeSingle<AccessRequestRow>();
+
+        console.log("📄 access_requests result (profile):", {
+          requestRow,
+          requestError,
+        });
 
         if (requestError) {
           console.error("Supabase access_requests error:", requestError);
@@ -117,14 +136,19 @@ export default function InvestorProfilePage() {
           return;
         }
 
-        const companyId = requestRow.company_id as string;
+        const companyId = requestRow.company_id;
 
         // 3) companies → hent selskap
         const { data: companyRow, error: companyError } = await supabase
           .from("companies")
           .select("*")
           .eq("id", companyId)
-          .maybeSingle();
+          .maybeSingle<CompanyProfile>();
+
+        console.log("🏢 companies result (profile):", {
+          companyRow,
+          companyError,
+        });
 
         if (companyError) {
           console.error("Supabase companies error:", companyError);
@@ -139,7 +163,7 @@ export default function InvestorProfilePage() {
           return;
         }
 
-        setCompany(companyRow as CompanyProfile);
+        setCompany(companyRow);
         setLoading(false);
       } catch (err: any) {
         console.error("Unexpected investor profile error:", err);
@@ -166,18 +190,9 @@ export default function InvestorProfilePage() {
   if (error || !company) {
     return (
       <div className="min-h-screen w-full bg-slate-950 text-slate-50 flex items-center justify-center px-4">
-        <div className="max-w-md text-center space-y-3">
-          <p className="text-sm text-red-400">
-            {error || "Could not load investor profile for this link."}
-          </p>
-          <button
-            type="button"
-            onClick={() => router.push("/")}
-            className="text-xs text-sky-400 hover:underline"
-          >
-            Go back to homepage
-          </button>
-        </div>
+        <p className="max-w-md text-center text-sm text-red-400">
+          {error || "Could not load investor profile for this link."}
+        </p>
       </div>
     );
   }
@@ -185,17 +200,15 @@ export default function InvestorProfilePage() {
   const initial = company.name?.charAt(0)?.toUpperCase() || "C";
   const lastUpdated = company.updated_at || null;
   const aiUpdated = company.updated_at || null;
-
+  const expiresAt = linkMeta?.expires_at ?? null;
   const isExpired =
     expiresAt && new Date(expiresAt).getTime() < Date.now();
 
-  const handleScreenshotClick = (index: number) => {
-    setActiveScreenshot(index);
-    setScreenshotDialogOpen(true);
-  };
+  const websiteLabel = company.website_url || "Not provided.";
+  const linkedins = company.linkedin_urls ?? [];
 
   return (
-    <div className="min-h-screen w-full bg-slate-950 text-slate-50">
+    <div className="min-h-screen w-full overflow-x-hidden bg-slate-950 text-slate-50">
       <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
         {/* TOP AREA WITH GRADIENT BACKGROUND */}
         <div className="rounded-3xl bg-gradient-to-br from-sky-500/15 via-slate-900/80 to-slate-950 p-[1px]">
@@ -244,7 +257,11 @@ export default function InvestorProfilePage() {
 
                   {company.website_url && (
                     <a
-                      href={company.website_url}
+                      href={
+                        company.website_url.startsWith("http")
+                          ? company.website_url
+                          : `https://${company.website_url}`
+                      }
                       target="_blank"
                       rel="noreferrer"
                       className="text-xs text-sky-400 hover:underline"
@@ -312,23 +329,26 @@ export default function InvestorProfilePage() {
                 </div>
               </div>
 
-              {/* Tabs (KPI | Profile) */}
+              {/* Tabs – Profile aktiv, KPIs er link */}
               <div className="border-t border-white/10 pt-4">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar snap-x">
+                    {/* KPIs – link tilbake */}
                     <Link
                       href={`/investor/${token}`}
                       className={cn(
-                        "whitespace-nowrap rounded-full px-3 py-1.5 text-xs sm:text-sm transition snap-start",
-                        "bg-slate-900/70 text-slate-300 hover:bg-slate-800 border border-white/10"
+                        "whitespace-nowrap rounded-full px-3 py-1.5 text-xs sm:text-sm transition snap-start border",
+                        "bg-slate-900/70 text-slate-300 hover:bg-slate-800 border-white/10"
                       )}
                     >
                       KPIs
                     </Link>
+
+                    {/* Profile – aktiv */}
                     <span
                       className={cn(
                         "whitespace-nowrap rounded-full px-3 py-1.5 text-xs sm:text-sm transition snap-start",
-                        "bg-white text-slate-950 font-medium shadow-sm"
+                        "bg-white text-slate-950 font-medium shadow-sm border border-white"
                       )}
                     >
                       Profile
@@ -344,424 +364,345 @@ export default function InvestorProfilePage() {
           </Card>
         </div>
 
-        {/* PAGE CONTENT */}
-        <div className="space-y-10 pb-10">
-          {/* SECTION 1 — OVERVIEW */}
-          <section className="space-y-4">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <h2 className="text-lg sm:text-xl font-semibold text-white">
-                  Overview
-                </h2>
-                <p className="text-xs text-slate-400">
-                  High-level summary of company, product and timing.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-3">
-              {/* Industry */}
-              <Card className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-                <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                  Industry
-                </p>
-                <p className="mt-1 text-sm text-slate-100">
-                  {company.industry || "—"}
-                </p>
-              </Card>
-
-              {/* Stage */}
-              <Card className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-                <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                  Stage
-                </p>
-                <p className="mt-1 text-sm text-slate-100">
-                  {company.stage || "—"}
-                </p>
-              </Card>
-
-              {/* Website */}
-              <Card className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-                <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                  Website
-                </p>
-                {company.website_url ? (
-                  <a
-                    href={company.website_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-1 text-sm text-sky-400 hover:underline break-all"
-                  >
-                    {company.website_url.replace(/^https?:\/\//, "")}
-                  </a>
-                ) : (
-                  <p className="mt-1 text-sm text-slate-100">—</p>
-                )}
-              </Card>
-            </div>
-
-            {/* Problem / Solution / Why now */}
-            <div className="grid gap-4 md:grid-cols-3">
-              <Card className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 flex flex-col gap-2">
-                <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sky-500/15 text-sky-300 text-sm">
-                  ❓
-                </div>
-                <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                  Problem
-                </p>
-                <p className="text-sm text-slate-100 whitespace-pre-line">
-                  {company.problem || "Not provided."}
-                </p>
-              </Card>
-
-              <Card className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 flex flex-col gap-2">
-                <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300 text-sm">
-                  💡
-                </div>
-                <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                  Solution
-                </p>
-                <p className="text-sm text-slate-100 whitespace-pre-line">
-                  {company.solution || "Not provided."}
-                </p>
-              </Card>
-
-              <Card className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 flex flex-col gap-2">
-                <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-amber-500/15 text-amber-300 text-sm">
-                  ⏱
-                </div>
-                <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                  Why now
-                </p>
-                <p className="text-sm text-slate-100 whitespace-pre-line">
-                  {company.why_now || "Not provided."}
-                </p>
-              </Card>
-            </div>
-          </section>
-
-          {/* SECTION 2 — PRODUCT */}
-          <section className="space-y-4">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <h2 className="text-lg sm:text-xl font-semibold text-white">
-                  Product
-                </h2>
-                <p className="text-xs text-slate-400">
-                  What they&apos;re building and how it works in practice.
-                </p>
-              </div>
-            </div>
-
-            <Card className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 space-y-3">
-              <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                Product overview
-              </p>
-              <p className="text-sm text-slate-100 whitespace-pre-line">
-                {company.product_details || "Not provided."}
-              </p>
-            </Card>
-
-            {/* Screenshots */}
-            <div className="space-y-3">
-              <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                Screenshots
-              </p>
-
-              {/* Desktop grid */}
-              <div className="hidden sm:grid gap-4 sm:grid-cols-3">
-                {[1, 2, 3].map((i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => handleScreenshotClick(i)}
-                    className="group flex h-32 items-center justify-center rounded-2xl border border-dashed border-slate-700 bg-slate-950/60 text-xs text-slate-500 hover:border-sky-500/60 hover:bg-slate-900/80 transition"
-                  >
-                    <span className="text-center">
-                      Screenshot placeholder {i}
-                      <br />
-                      <span className="text-[10px] text-slate-500 group-hover:text-sky-300">
-                        Click to enlarge
-                      </span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-
-              {/* Mobile horizontal scroll */}
-              <div className="flex sm:hidden gap-3 overflow-x-auto no-scrollbar snap-x">
-                {[1, 2, 3].map((i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => handleScreenshotClick(i)}
-                    className="snap-start min-w-[70%] flex h-32 items-center justify-center rounded-2xl border border-dashed border-slate-700 bg-slate-950/60 text-xs text-slate-500"
-                  >
-                    <span className="text-center">
-                      Screenshot {i}
-                      <br />
-                      <span className="text-[10px] text-slate-500">
-                        Tap to enlarge
-                      </span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* SECTION 3 — MARKET & TRACTION */}
-          <section className="space-y-4">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <h2 className="text-lg sm:text-xl font-semibold text-white">
-                  Market & traction
-                </h2>
-                <p className="text-xs text-slate-400">
-                  How big the opportunity is and what has been proven so far.
-                </p>
-              </div>
-            </div>
-
-            <Card className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 space-y-2">
-              <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                Market summary
-              </p>
-              <p className="text-sm text-slate-100 whitespace-pre-line">
-                {company.market || "Not provided."}
-              </p>
-              <p className="text-xs text-slate-400 mt-2">
-                Market opportunity estimate and competitive landscape will be refined by the MCP Agent.
-              </p>
-            </Card>
-
-            <div className="grid gap-4 md:grid-cols-3">
-              {[
-                { label: "TAM", caption: "Total addressable market" },
-                { label: "SAM", caption: "Serviceable available market" },
-                { label: "SOM", caption: "Serviceable obtainable market" },
-              ].map((item) => (
-                <Card
-                  key={item.label}
-                  className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 flex flex-col gap-2"
-                >
-                  <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-slate-200 text-xs">
-                    {item.label}
-                  </div>
-                  <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                    {item.caption}
-                  </p>
-                  <p className="text-sm text-slate-100">—</p>
-                  <p className="text-xs text-slate-500">
-                    Market opportunity estimated at $1.2B according to AI-agent summary (placeholder).
-                  </p>
-                </Card>
-              ))}
-            </div>
-          </section>
-
-          {/* SECTION 4 — TEAM */}
-          <section className="space-y-4">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <h2 className="text-lg sm:text-xl font-semibold text-white">
-                  Team
-                </h2>
-                <p className="text-xs text-slate-400">
-                  Key people responsible for execution.
-                </p>
-              </div>
-            </div>
-
-            {company.team && company.team.length > 0 ? (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {company.team.map((member, idx) => {
-                  const initialMember =
-                    member.name?.charAt(0)?.toUpperCase() || "T";
-                  return (
-                    <Card
-                      key={`${member.name}-${idx}`}
-                      className="group rounded-2xl border border-slate-800 bg-slate-900/70 p-4 hover:border-sky-500/60 hover:bg-slate-900/90 transition"
-                    >
-                      <div className="flex gap-3">
-                        <Avatar className="h-10 w-10 rounded-xl bg-slate-900">
-                          <AvatarFallback>{initialMember}</AvatarFallback>
-                        </Avatar>
-                        <div className="space-y-1 text-sm">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-slate-100">
-                              {member.name || "Unnamed"}
-                            </p>
-                            {member.linkedin_url && (
-                              <a
-                                href={member.linkedin_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-[11px] text-sky-400 hover:underline"
-                              >
-                                LinkedIn
-                              </a>
-                            )}
-                          </div>
-                          {member.role && (
-                            <p className="text-xs text-slate-400">
-                              {member.role}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      {member.experience && (
-                        <p className="mt-3 text-xs text-slate-300 whitespace-pre-line">
-                          {member.experience}
-                        </p>
-                      )}
-                    </Card>
-                  );
-                })}
-              </div>
-            ) : (
-              <Card className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-                <p className="text-sm text-slate-400">
-                  Team information has not been added yet.
-                </p>
-              </Card>
-            )}
-          </section>
-
-          {/* SECTION 5 — LINKS & DOCUMENTS */}
-          <section className="space-y-4">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <h2 className="text-lg sm:text-xl font-semibold text-white">
-                  Links & documents
-                </h2>
-                <p className="text-xs text-slate-400">
-                  External resources and upcoming investor materials.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-3">
-              {/* Website */}
-              <Card className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 flex flex-col gap-2">
-                <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sky-500/15 text-sky-300 text-sm">
-                  🌐
-                </div>
-                <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                  Website
-                </p>
-                {company.website_url ? (
-                  <a
-                    href={company.website_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-sm text-sky-400 hover:underline break-all"
-                  >
-                    {company.website_url.replace(/^https?:\/\//, "")}
-                  </a>
-                ) : (
-                  <p className="text-sm text-slate-100">—</p>
-                )}
-              </Card>
-
-              {/* LinkedIn */}
-              <Card className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 flex flex-col gap-2">
-                <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sky-500/15 text-sky-300 text-sm">
-                  in
-                </div>
-                <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                  LinkedIn
-                </p>
-                {company.linkedin_urls && company.linkedin_urls.length > 0 ? (
-                  <ul className="mt-1 space-y-1 text-sm text-slate-100">
-                    {company.linkedin_urls.map((url, idx) => (
-                      <li key={idx}>
-                        <a
-                          href={url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-sky-400 hover:underline break-all text-xs"
-                        >
-                          {url}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-slate-100">—</p>
-                )}
-              </Card>
-
-              {/* Pitchdeck placeholder */}
-              <Card className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 p-4 flex flex-col justify-between gap-2">
-                <div className="space-y-2">
-                  <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-slate-300 text-sm">
-                    📑
-                  </div>
-                  <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                    Pitch deck
-                  </p>
-                  <p className="text-sm text-slate-300">
-                    Deck upload & data room will be attached here by founders.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  disabled
-                  className="mt-2 inline-flex cursor-not-allowed items-center justify-center rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1.5 text-[11px] text-slate-500"
-                >
-                  Upload coming soon
-                </button>
-              </Card>
-            </div>
-          </section>
-
-          {/* SECTION 6 — AI INSIGHTS / AI COMMENTARY */}
-          <section className="space-y-3">
-            <Card className="rounded-2xl border border-sky-500/40 bg-slate-950/80 p-6 sm:p-7 shadow-[0_0_40px_rgba(56,189,248,0.15)]">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-500/20 text-sky-300">
-                    ✦
-                  </div>
-                  <div>
-                    <h2 className="text-base sm:text-lg font-semibold text-white">
-                      AI commentary
-                    </h2>
-                    <p className="text-[11px] text-slate-400">
-                      Generated by MCP Agent based on latest KPIs & profile (placeholder).
-                    </p>
-                  </div>
-                </div>
-                <span className="hidden sm:inline-flex rounded-full bg-slate-900/80 px-3 py-1 text-[10px] text-slate-400 border border-slate-700">
-                  Refreshed at {formatDateLabel(aiUpdated)}
-                </span>
-              </div>
-
-              <div className="mt-4 space-y-1.5 text-sm text-slate-100">
-                <p>• MRR grew ~8% last month — above typical industry benchmark for this stage.</p>
-                <p>• Burn is decreasing steadily; projected runway ~14 months at current spend.</p>
-                <p>• Customer retention improving, with churn trending downward over the last quarter.</p>
-                <p>• Profile and KPIs are kept in sync by the MCP Agent in the full product.</p>
-              </div>
-            </Card>
-          </section>
-        </div>
+        {/* PROFILE CONTENT */}
+        <ProfileView
+          company={company}
+          websiteLabel={websiteLabel}
+          linkedins={linkedins}
+        />
       </main>
+    </div>
+  );
+}
 
-      {/* Screenshot modal */}
-      <Dialog open={screenshotDialogOpen} onOpenChange={setScreenshotDialogOpen}>
-        <DialogContent className="bg-slate-950 border-slate-800 text-slate-50 max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-sm">
-              Product screenshot placeholder {activeScreenshot ?? ""}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="mt-3 flex h-48 items-center justify-center rounded-2xl border border-dashed border-slate-700 bg-slate-900/80 text-xs text-slate-400">
-            UI screenshots and live product views will be rendered here in a later version.
+/* ----------------------- PROFILE VIEW ------------------------ */
+
+function ProfileView({
+  company,
+  websiteLabel,
+  linkedins,
+}: {
+  company: CompanyProfile;
+  websiteLabel: string;
+  linkedins: string[];
+}) {
+  const problem = company.problem || "Not provided.";
+  const solution = company.solution || "Not provided.";
+  const whyNow = company.why_now || "Not provided.";
+  const product = company.product_details || "Not provided.";
+  const market = company.market || "Not provided.";
+
+  return (
+    <div className="space-y-6 pb-10">
+      {/* OVERVIEW */}
+      <Card className="bg-slate-900/60 border border-white/5 rounded-xl p-6 lg:p-8 space-y-6 shadow-[0_0_40px_rgba(15,23,42,0.6)]">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">🪐</span>
+          <div>
+            <div className="text-sm font-semibold">Overview</div>
+            <div className="text-xs text-slate-400">
+              High-level summary of company, product and timing.
+            </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-4">
+          <ProfileField label="Industry" value={company.industry} />
+          <ProfileField label="Stage" value={company.stage} />
+          <ProfileField label="Website" value={websiteLabel} isLink />
+          <ProfileField
+            label="Profile visibility"
+            value={
+              company.profile_published ? "Published to investors" : "Draft only"
+            }
+          />
+        </div>
+      </Card>
+
+      {/* PROBLEM / SOLUTION / WHY NOW */}
+      <Card className="bg-slate-900/60 border border-white/5 rounded-xl p-6 lg:p-8 space-y-6">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">🧠</span>
+          <div>
+            <div className="text-sm font-semibold">
+              Problem, solution &amp; timing
+            </div>
+            <div className="text-xs text-slate-400">
+              Narrative investors read first: why this matters now.
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-3">
+          <ProfileBlock icon="❓" label="Problem" text={problem} />
+          <ProfileBlock icon="💡" label="Solution" text={solution} />
+          <ProfileBlock icon="⏱" label="Why now" text={whyNow} />
+        </div>
+      </Card>
+
+      {/* PRODUCT */}
+      <Card className="bg-slate-900/60 border border-white/5 rounded-xl p-6 lg:p-8 space-y-6">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">🧩</span>
+          <div>
+            <div className="text-sm font-semibold">Product</div>
+            <div className="text-xs text-slate-400">
+              What they&apos;re building and how it works in practice.
+            </div>
+          </div>
+        </div>
+
+        <p className="text-sm leading-relaxed text-slate-200 whitespace-pre-line">
+          {product}
+        </p>
+      </Card>
+
+      {/* MARKET & TRACTION */}
+      <Card className="bg-slate-900/60 border border-white/5 rounded-xl p-6 lg:p-8 space-y-6">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">🌍</span>
+          <div>
+            <div className="text-sm font-semibold">Market &amp; traction</div>
+            <div className="text-xs text-slate-400">
+              Early signal on market fit and momentum.
+            </div>
+          </div>
+        </div>
+
+        <p className="text-sm leading-relaxed text-slate-200 whitespace-pre-line">
+          {market}
+        </p>
+
+        <div className="grid gap-4 md:grid-cols-3 text-sm text-slate-300">
+          <MiniMetric label="TAM" value="Not provided." />
+          <MiniMetric label="SAM" value="Not provided." />
+          <MiniMetric label="SOM" value="Not provided." />
+        </div>
+      </Card>
+
+      {/* TEAM */}
+      <Card className="bg-slate-900/60 border border-white/5 rounded-xl p-6 lg:p-8 space-y-4">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">👥</span>
+          <div>
+            <div className="text-sm font-semibold">Team</div>
+            <div className="text-xs text-slate-400">
+              Key people behind the company.
+            </div>
+          </div>
+        </div>
+
+        {company.team && company.team.length > 0 ? (
+          <div className="grid gap-4 md:grid-cols-2">
+            {company.team.map((member, idx) => {
+              const initialsMember =
+                member.name
+                  ?.split(" ")
+                  .map((p) => p[0])
+                  .join("")
+                  .slice(0, 2)
+                  .toUpperCase() ?? "T";
+
+              return (
+                <div
+                  key={`${member.name}-${idx}`}
+                  className="flex gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4"
+                >
+                  <Avatar className="h-10 w-10 rounded-xl bg-slate-800">
+                    <AvatarFallback className="text-xs font-semibold">
+                      {initialsMember}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="space-y-1 text-sm">
+                    <p className="font-medium text-slate-100">
+                      {member.name || "Unnamed"}
+                    </p>
+                    {member.role && (
+                      <p className="text-xs text-slate-400">{member.role}</p>
+                    )}
+                    {member.linkedin_url && (
+                      <a
+                        href={
+                          member.linkedin_url.startsWith("http")
+                            ? member.linkedin_url
+                            : `https://${member.linkedin_url}`
+                        }
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-sky-400 hover:underline"
+                      >
+                        LinkedIn
+                      </a>
+                    )}
+                    {member.experience && (
+                      <p className="text-xs text-slate-400 whitespace-pre-line">
+                        {member.experience}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">
+            Team information has not been added yet.
+          </p>
+        )}
+      </Card>
+
+      {/* LINKS & DOCUMENTS */}
+      <Card className="bg-slate-900/60 border border-white/5 rounded-xl p-6 lg:p-8 space-y-6">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">🔗</span>
+          <div>
+            <div className="text-sm font-semibold">Links &amp; documents</div>
+            <div className="text-xs text-slate-400">
+              External resources investors may want to explore.
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <ProfileField label="Website" value={websiteLabel} isLink />
+          <div className="flex flex-col gap-1 rounded-lg border border-dashed border-white/10 bg-slate-900/40 px-4 py-3">
+            <span className="text-[10px] tracking-[0.2em] uppercase text-slate-500">
+              LinkedIn profiles
+            </span>
+            {linkedins.length === 0 ? (
+              <span className="text-sm text-slate-400">
+                No LinkedIn profiles added.
+              </span>
+            ) : (
+              <ul className="text-sm text-slate-200 list-disc list-inside">
+                {linkedins.map((url) => (
+                  <li key={url} className="truncate">
+                    {url}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="flex flex-col gap-1 rounded-lg border border-dashed border-white/10 bg-slate-900/40 px-4 py-3">
+            <span className="text-[10px] tracking-[0.2em] uppercase text-slate-500">
+              Pitch deck
+            </span>
+            <span className="text-sm text-slate-400">
+              Upload coming soon. Deck sharing will appear here.
+            </span>
+          </div>
+        </div>
+      </Card>
+
+      {/* AI COMMENTARY */}
+      <Card className="bg-slate-900/80 border border-cyan-500/30 rounded-xl p-6 lg:p-8 shadow-[0_0_45px_rgba(56,189,248,0.20)]">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-lg text-cyan-400">✦</span>
+            <div>
+              <div className="text-sm font-semibold">AI commentary</div>
+              <div className="text-xs text-slate-400">
+                Generated by MCP Agent based on latest KPIs &amp; profile
+                (MVP placeholder).
+              </div>
+            </div>
+          </div>
+          <span className="text-[10px] uppercase tracking-[0.16em] text-cyan-300">
+            MCP Agent
+          </span>
+        </div>
+
+        <ul className="space-y-1.5 text-sm text-slate-200">
+          <li>
+            • Profile gives investors a clear narrative around problem, solution
+            and timing.
+          </li>
+          <li>
+            • Market positioning and TAM/SAM/SOM will be auto-filled by MCP
+            Agent in a later phase.
+          </li>
+          <li>
+            • Team section becomes a key signal once founder adds core
+            profiles.
+          </li>
+          <li>
+            • Links & documents will evolve into a full investor package over
+            time.
+          </li>
+        </ul>
+      </Card>
+    </div>
+  );
+}
+
+/* ---------------------------- HELPERS ---------------------------- */
+
+function ProfileField({
+  label,
+  value,
+  isLink,
+}: {
+  label: string;
+  value: string | null | string;
+  isLink?: boolean;
+}) {
+  const display =
+    typeof value === "string" && value.trim().length > 0
+      ? value
+      : "Not provided.";
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[10px] tracking-[0.2em] uppercase text-slate-500">
+        {label}
+      </span>
+      {isLink && typeof value === "string" && value ? (
+        <a
+          href={value.startsWith("http") ? value : `https://${value}`}
+          target="_blank"
+          rel="noreferrer"
+          className="text-sm text-sky-300 hover:underline truncate"
+        >
+          {display}
+        </a>
+      ) : (
+        <span className="text-sm text-slate-200 truncate">{display}</span>
+      )}
+    </div>
+  );
+}
+
+function ProfileBlock({
+  icon,
+  label,
+  text,
+}: {
+  icon: string;
+  label: string;
+  text: string;
+}) {
+  return (
+    <div className="rounded-lg bg-slate-900/60 border border-white/5 p-4 flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <span>{icon}</span>
+        <span className="text-[11px] tracking-[0.18em] uppercase text-slate-400">
+          {label}
+        </span>
+      </div>
+      <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-line">
+        {text}
+      </p>
+    </div>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-slate-900/60 border border-white/5 px-4 py-3 space-y-1">
+      <div className="text-[10px] tracking-[0.2em] uppercase text-slate-500">
+        {label}
+      </div>
+      <div className="text-sm text-slate-200">{value}</div>
     </div>
   );
 }
