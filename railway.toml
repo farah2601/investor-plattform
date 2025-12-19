@@ -1,0 +1,5 @@
+[build]
+root = "mcp-server"
+
+[deploy]
+startCommand = "npm run start"
