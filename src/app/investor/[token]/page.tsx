@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+
 import { supabase } from "../../lib/supabaseClient";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +19,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { AiInsightsCard } from "../../../components/investor/AiInsightsCard";
 
 type TeamMember = {
   name: string;
@@ -41,12 +41,24 @@ type CompanyProfile = {
   website_url: string | null;
   linkedin_urls: string[] | null;
   team: TeamMember[] | null;
-  profile_published: boolean | null;
+
+  // ✅ dette feltet har du brukt før
+  profile_status?: string | null; // "Published" | "Draft" | ...
+
   updated_at?: string | null;
+
+  // Agent metadata (hvis finnes i DB – select("*") tar dem med uansett)
+  last_agent_run_at?: string | null;
+  last_agent_run_by?: string | null;
+
+  latest_insights?: string[] | null;
+  latest_insights_generated_at?: string | null;
+  latest_insights_generated_by?: string | null;
 };
 
 type InvestorLinkMeta = {
   expires_at?: string | null;
+  company_id?: string | null;
 };
 
 const kpiCards = [
@@ -128,7 +140,7 @@ function formatDateLabel(dateString?: string | null): string {
   if (!dateString) return "Unknown";
   const d = new Date(dateString);
   if (Number.isNaN(d.getTime())) return "Unknown";
-  return d.toLocaleString(undefined, {
+  return d.toLocaleString("nb-NO", {
     year: "numeric",
     month: "short",
     day: "2-digit",
@@ -138,36 +150,45 @@ function formatDateLabel(dateString?: string | null): string {
 }
 
 export default function InvestorCompanyPage() {
-  const params = useParams<{ token: string }>();
-  const token = params?.token;
+  const params = useParams();
+
+  const token =
+    typeof (params as any)?.token === "string"
+      ? (params as any).token
+      : Array.isArray((params as any)?.token)
+        ? (params as any).token[0]
+        : null;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
   const [company, setCompany] = useState<CompanyProfile | null>(null);
   const [linkMeta, setLinkMeta] = useState<InvestorLinkMeta | null>(null);
 
   useEffect(() => {
     if (!token) return;
 
+    let cancelled = false;
+
     const loadData = async () => {
       try {
         setLoading(true);
         setError(null);
+        setCompany(null);
+        setLinkMeta(null);
 
-        console.log("🔑 Investor token from URL:", token);
-
-        // 1) investor_links → finn raden for dette tokenet
+        // 1) investor_links → token → company_id
         const { data: linkRow, error: linkError } = await supabase
           .from("investor_links")
-          .select("id, access_token, request_id, expires_at")
+          .select("company_id, expires_at")
           .eq("access_token", token)
           .maybeSingle();
 
-        console.log("📄 investor_links result:", { linkRow, linkError });
+        if (cancelled) return;
 
         if (linkError) {
-          console.error("Supabase investor_links error:", linkError);
-          setError("Invalid or expired investor link.");
+          console.log("investor_links error:", linkError);
+          setError(`Invalid investor link: ${linkError.message}`);
           setLoading(false);
           return;
         }
@@ -178,49 +199,41 @@ export default function InvestorCompanyPage() {
           return;
         }
 
+        const expiresAt = linkRow.expires_at ?? null;
+        const isExpired =
+          !!expiresAt && new Date(expiresAt).getTime() < Date.now();
+
         setLinkMeta({
-          expires_at: linkRow.expires_at ?? null,
+          expires_at: expiresAt,
+          company_id: linkRow.company_id ?? null,
         });
 
-        // 2) access_requests → finn company_id
-        const { data: requestRow, error: requestError } = await supabase
-          .from("access_requests")
-          .select("company_id")
-          .eq("id", linkRow.request_id)
-          .maybeSingle();
-
-        console.log("📄 access_requests result:", {
-          requestRow,
-          requestError,
-        });
-
-        if (requestError) {
-          console.error("Supabase access_requests error:", requestError);
-          setError("Could not resolve company for this investor link.");
+        if (isExpired) {
+          setError("Investor link expired.");
           setLoading(false);
           return;
         }
 
-        if (!requestRow || !requestRow.company_id) {
+        const companyId = (linkRow.company_id as string | null) ?? null;
+
+        if (!companyId) {
           setError("No company attached to this investor link.");
           setLoading(false);
           return;
         }
 
-        const companyId = requestRow.company_id as string;
-
-        // 3) companies → hent selskap
+        // 2) companies → select("*") for å unngå feil på manglende kolonner
         const { data: companyRow, error: companyError } = await supabase
           .from("companies")
           .select("*")
           .eq("id", companyId)
           .maybeSingle();
 
-        console.log("🏢 companies result:", { companyRow, companyError });
+        if (cancelled) return;
 
         if (companyError) {
-          console.error("Supabase companies error:", companyError);
-          setError("Could not load company for this investor link.");
+          console.log("companies error:", companyError);
+          setError(`Could not load company: ${companyError.message}`);
           setLoading(false);
           return;
         }
@@ -231,10 +244,11 @@ export default function InvestorCompanyPage() {
           return;
         }
 
-        setCompany(companyRow as CompanyProfile);
+        setCompany(companyRow as unknown as CompanyProfile);
         setLoading(false);
       } catch (err: any) {
-        console.error("Unexpected investor view error:", err);
+        if (cancelled) return;
+        console.log("Unexpected investor view error:", err);
         setError(
           typeof err?.message === "string"
             ? err.message
@@ -245,6 +259,10 @@ export default function InvestorCompanyPage() {
     };
 
     loadData();
+
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   if (loading) {
@@ -258,19 +276,35 @@ export default function InvestorCompanyPage() {
   if (error || !company) {
     return (
       <div className="min-h-screen w-full bg-slate-950 text-slate-50 flex items-center justify-center px-4">
-        <p className="max-w-md text-center text-sm text-red-400">
-          {error || "Could not load investor view for this link."}
-        </p>
+        <div className="max-w-xl text-center space-y-3">
+          <p className="text-sm text-red-400">
+            {error || "Could not load investor view for this link."}
+          </p>
+          <p className="text-xs text-slate-500">
+            Tip: Hvis dette sier “permission denied”, er det RLS og må løses med en server-route.
+          </p>
+        </div>
       </div>
     );
   }
 
   const initial = company.name?.charAt(0)?.toUpperCase() || "C";
-  const lastUpdated = company.updated_at || null;
-  const aiUpdated = company.updated_at || null;
+
   const expiresAt = linkMeta?.expires_at ?? null;
   const isExpired =
-    expiresAt && new Date(expiresAt).getTime() < Date.now();
+    !!expiresAt && new Date(expiresAt).getTime() < Date.now();
+
+  const isPublished = company.profile_status === "Published";
+
+  const agentUpdated =
+    company.last_agent_run_at ||
+    company.latest_insights_generated_at ||
+    company.updated_at ||
+    null;
+
+  const insights = Array.isArray(company.latest_insights)
+    ? company.latest_insights
+    : [];
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-slate-950 text-slate-50">
@@ -296,6 +330,7 @@ export default function InvestorCompanyPage() {
                     <h1 className="text-xl sm:text-2xl font-semibold text-white">
                       {company.name}
                     </h1>
+
                     {company.industry && (
                       <Badge
                         variant="outline"
@@ -304,6 +339,7 @@ export default function InvestorCompanyPage() {
                         {company.industry}
                       </Badge>
                     )}
+
                     {company.stage && (
                       <Badge
                         variant="secondary"
@@ -338,6 +374,7 @@ export default function InvestorCompanyPage() {
                     <span className="inline-flex items-center rounded-full border border-sky-500/40 bg-sky-500/10 px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-sky-300">
                       Investor view — read only
                     </span>
+
                     {isExpired && (
                       <span className="rounded-full bg-red-500/10 px-3 py-1 text-[10px] font-medium text-red-300 border border-red-500/40">
                         Link expired
@@ -350,28 +387,19 @@ export default function InvestorCompanyPage() {
                     <span
                       className={cn(
                         "font-medium",
-                        company.profile_published
-                          ? "text-emerald-400"
-                          : "text-amber-300"
+                        isPublished ? "text-emerald-400" : "text-amber-300"
                       )}
                     >
-                      {company.profile_published
+                      {isPublished
                         ? "Published by founders"
                         : "Draft – contents may change"}
                     </span>
                   </p>
 
                   <p>
-                    Last KPI update:{" "}
+                    Last updated · Powered by Valyxo Agent ·{" "}
                     <span className="text-slate-100">
-                      {formatDateLabel(lastUpdated)}
-                    </span>
-                  </p>
-
-                  <p>
-                    AI refreshed:{" "}
-                    <span className="text-slate-100">
-                      {formatDateLabel(aiUpdated)}
+                      {formatDateLabel(agentUpdated)}
                     </span>
                   </p>
 
@@ -390,11 +418,10 @@ export default function InvestorCompanyPage() {
                 </div>
               </div>
 
-              {/* Tabs (KPI | Profile) – route-basert */}
+              {/* Tabs (KPI | Profile) */}
               <div className="border-t border-white/10 pt-4">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar snap-x">
-                    {/* KPIs – aktiv */}
                     <span
                       className={cn(
                         "whitespace-nowrap rounded-full px-3 py-1.5 text-xs sm:text-sm transition snap-start",
@@ -404,7 +431,6 @@ export default function InvestorCompanyPage() {
                       KPIs
                     </span>
 
-                    {/* Profile – lenke til /profile */}
                     <Link
                       href={`/investor/${token}/profile`}
                       className={cn(
@@ -417,7 +443,7 @@ export default function InvestorCompanyPage() {
                   </div>
 
                   <span className="hidden sm:inline-flex items-center rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-[10px] uppercase tracking-wide text-slate-400">
-                    MCP Agent package
+                    Powered by Valyxo Agent
                   </span>
                 </div>
               </div>
@@ -435,7 +461,7 @@ export default function InvestorCompanyPage() {
                   Key metrics
                 </h2>
                 <p className="text-xs text-slate-400">
-                  Accounting-grade KPIs maintained by the MCP Agent (MVP placeholder).
+                  Accounting-grade KPIs maintained by the Valyxo Agent (MVP placeholder).
                 </p>
               </div>
               <p className="text-[11px] text-slate-500">
@@ -467,7 +493,7 @@ export default function InvestorCompanyPage() {
                     <span className="text-slate-500">{kpi.helper}</span>
                   </div>
                   <p className="mt-2 text-[11px] text-slate-500">
-                    MCP Agent will keep this metric continuously updated from accounting/CRM systems.
+                    Valyxo Agent will keep this metric continuously updated from accounting/CRM systems.
                   </p>
                 </Card>
               ))}
@@ -479,6 +505,7 @@ export default function InvestorCompanyPage() {
             <h2 className="text-base font-semibold text-white sm:text-lg">
               Trends
             </h2>
+
             <div className="grid gap-6 lg:grid-cols-2">
               {/* MRR chart */}
               <div className="space-y-2">
@@ -508,23 +535,9 @@ export default function InvestorCompanyPage() {
                         itemStyle={{ fontSize: 12, color: "#e2e8f0" }}
                       />
                       <defs>
-                        <linearGradient
-                          id="mrrGradient"
-                          x1="0"
-                          y1="0"
-                          x2="0"
-                          y2="1"
-                        >
-                          <stop
-                            offset="5%"
-                            stopColor="#38bdf8"
-                            stopOpacity={0.4}
-                          />
-                          <stop
-                            offset="95%"
-                            stopColor="#38bdf8"
-                            stopOpacity={0}
-                          />
+                        <linearGradient id="mrrGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.4} />
+                          <stop offset="95%" stopColor="#38bdf8" stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <Area
@@ -537,10 +550,6 @@ export default function InvestorCompanyPage() {
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
-                <p className="text-[11px] text-slate-500">
-                  MRR is shown as a simple demo trend. In production, MCP Agent will pull
-                  exact monthly figures from integrated systems.
-                </p>
               </div>
 
               {/* Burn chart */}
@@ -571,23 +580,9 @@ export default function InvestorCompanyPage() {
                         itemStyle={{ fontSize: 12, color: "#e2e8f0" }}
                       />
                       <defs>
-                        <linearGradient
-                          id="burnGradient"
-                          x1="0"
-                          y1="0"
-                          x2="0"
-                          y2="1"
-                        >
-                          <stop
-                            offset="5%"
-                            stopColor="#ef4444"
-                            stopOpacity={0.4}
-                          />
-                          <stop
-                            offset="95%"
-                            stopColor="#ef4444"
-                            stopOpacity={0}
-                          />
+                        <linearGradient id="burnGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4} />
+                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <Area
@@ -600,16 +595,47 @@ export default function InvestorCompanyPage() {
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
-                <p className="text-[11px] text-slate-500">
-                  Burn shows an illustrative trend only. Runway is derived from
-                  cash / net burn in the full MCP integration.
-                </p>
               </div>
             </div>
           </Card>
 
-          {/* AI Insights (ny komponent) */}
-          <AiInsightsCard companyId={company.id} />
+          {/* LIVE AI INSIGHTS (from DB) */}
+          <Card className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-base font-semibold text-white sm:text-lg">
+                AI Insights
+              </h2>
+              <p className="text-xs text-slate-500">
+                Powered by{" "}
+                <span className="font-medium text-slate-300">Valyxo Agent</span>
+              </p>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              {company.latest_insights_generated_at ? (
+                <>
+                  AI Insights generated automatically ·{" "}
+                  {new Date(company.latest_insights_generated_at).toLocaleString("nb-NO")}
+                </>
+              ) : (
+                <>Not generated yet · Powered by Valyxo Agent</>
+              )}
+            </p>
+
+            {insights.length > 0 ? (
+              <ul className="mt-2 space-y-2">
+                {insights.map((x, i) => (
+                  <li key={i} className="text-sm text-slate-200">
+                    • {x}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-slate-400 italic">
+                Insights oppdateres automatisk av Valyxo Agent når nye KPI snapshots blir lagret.
+              </p>
+            )}
+          </Card>
         </div>
       </main>
     </div>

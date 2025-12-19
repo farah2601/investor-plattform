@@ -46,6 +46,8 @@ type CompanyKpi = {
   churn: number | null;
   growth_percent: number | null;
   lead_velocity: number | null;
+  last_agent_run_at?: string | null;
+  last_agent_run_by?: string | null;
 };
 
 function formatMoney(value: number | null) {
@@ -117,8 +119,7 @@ function RequestActions({
           if (insertError) {
             console.error("Feil ved oppretting av link", insertError);
             alert(
-              "Feil ved oppretting av tilgangslenke: " +
-                insertError.message
+              "Feil ved oppretting av tilgangslenke: " + insertError.message
             );
           }
         }
@@ -153,9 +154,19 @@ function RequestActions({
 }
 
 const INTEGRATIONS = [
-  { id: "tripletex", category: "Regnskap", name: "Tripletex", status: "Not connected" },
+  {
+    id: "tripletex",
+    category: "Regnskap",
+    name: "Tripletex",
+    status: "Not connected",
+  },
   { id: "fiken", category: "Regnskap", name: "Fiken", status: "Not connected" },
-  { id: "pipedrive", category: "CRM", name: "Pipedrive", status: "Not connected" },
+  {
+    id: "pipedrive",
+    category: "CRM",
+    name: "Pipedrive",
+    status: "Not connected",
+  },
   { id: "hubspot", category: "CRM", name: "HubSpot", status: "Not connected" },
   { id: "sheets", category: "Sheets", name: "Google Sheets", status: "Connected" },
 ];
@@ -169,6 +180,10 @@ export default function CompanyDashboard() {
 
   // auth-sjekk
   const [authChecked, setAuthChecked] = useState(false);
+
+  // ✅ AI Insights (NYTT)
+  const [insights, setInsights] = useState<string[]>([]);
+  const [loadingInsights, setLoadingInsights] = useState(false);
 
   // KPI-modal
   const [kpiDialogOpen, setKpiDialogOpen] = useState(false);
@@ -198,7 +213,34 @@ export default function CompanyDashboard() {
     }
 
     checkAuthAndLoad();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
+
+  // ✅ AI Insights loader (NYTT)
+  async function loadInsights(companyId: string) {
+    setLoadingInsights(true);
+
+    try {
+      const res = await fetch("/api/insights", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ companyId }),
+      });
+
+      const data = await res.json();
+
+      if (data?.insights && Array.isArray(data.insights)) {
+        setInsights(data.insights);
+      } else {
+        setInsights([]);
+      }
+    } catch (e) {
+      console.error("Failed to load insights", e);
+      setInsights([]);
+    } finally {
+      setLoadingInsights(false);
+    }
+  }
 
   async function loadData() {
     setError(null);
@@ -248,8 +290,10 @@ export default function CompanyDashboard() {
         runway_months,
         churn,
         growth_percent,
-        lead_velocity
-      `
+        lead_velocity,
+        last_agent_run_at,
+        last_agent_run_by
+        `
       )
       .order("name", { ascending: true })
       .limit(1);
@@ -267,29 +311,26 @@ export default function CompanyDashboard() {
         mrr: first.mrr != null ? String(first.mrr) : "",
         arr: first.arr != null ? String(first.arr) : "",
         burn_rate: first.burn_rate != null ? String(first.burn_rate) : "",
-        runway_months:
-          first.runway_months != null ? String(first.runway_months) : "",
+        runway_months: first.runway_months != null ? String(first.runway_months) : "",
         churn: first.churn != null ? String(first.churn) : "",
-        growth_percent:
-          first.growth_percent != null ? String(first.growth_percent) : "",
+        growth_percent: first.growth_percent != null ? String(first.growth_percent) : "",
       });
+
+      // ✅ Hent AI insights automatisk (NYTT)
+      await loadInsights(first.id);
+    } else {
+      setInsights([]);
     }
   }
 
-  const approvedWithLink = requests.filter(
-    (r) => r.status === "approved" && r.link
-  );
+  const approvedWithLink = requests.filter((r) => r.status === "approved" && r.link);
   const latestLink = approvedWithLink[0]?.link ?? null;
 
   const baseUrl =
-    typeof window !== "undefined"
-      ? window.location.origin
-      : "http://localhost:3000";
+    typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
 
   // fortsatt query-versjon, siden det funker hos deg
- const investorUrl = latestLink
-  ? `${baseUrl}/investor/${latestLink.access_token}`
-  : null;
+  const investorUrl = latestLink ? `${baseUrl}/investor/${latestLink.access_token}` : null;
 
   const visibleRequests = requests.filter((r) => r.status !== "rejected");
 
@@ -313,11 +354,9 @@ export default function CompanyDashboard() {
         mrr: company.mrr != null ? String(company.mrr) : "",
         arr: company.arr != null ? String(company.arr) : "",
         burn_rate: company.burn_rate != null ? String(company.burn_rate) : "",
-        runway_months:
-          company.runway_months != null ? String(company.runway_months) : "",
+        runway_months: company.runway_months != null ? String(company.runway_months) : "",
         churn: company.churn != null ? String(company.churn) : "",
-        growth_percent:
-          company.growth_percent != null ? String(company.growth_percent) : "",
+        growth_percent: company.growth_percent != null ? String(company.growth_percent) : "",
       });
     }
     setKpiDialogOpen(true);
@@ -331,13 +370,9 @@ export default function CompanyDashboard() {
       mrr: kpiForm.mrr ? Number(kpiForm.mrr) : null,
       arr: kpiForm.arr ? Number(kpiForm.arr) : null,
       burn_rate: kpiForm.burn_rate ? Number(kpiForm.burn_rate) : null,
-      runway_months: kpiForm.runway_months
-        ? Number(kpiForm.runway_months)
-        : null,
+      runway_months: kpiForm.runway_months ? Number(kpiForm.runway_months) : null,
       churn: kpiForm.churn ? Number(kpiForm.churn) : null,
-      growth_percent: kpiForm.growth_percent
-        ? Number(kpiForm.growth_percent)
-        : null,
+      growth_percent: kpiForm.growth_percent ? Number(kpiForm.growth_percent) : null,
     };
 
     const { error: updateError } = await supabase
@@ -353,17 +388,12 @@ export default function CompanyDashboard() {
       return;
     }
 
-    setCompany((prev) =>
-      prev
-        ? {
-            ...prev,
-            ...payload,
-          }
-        : prev
-    );
-
+    setCompany((prev) => (prev ? { ...prev, ...payload } : prev));
     setKpiDialogOpen(false);
     alert("Tall oppdatert ✅");
+
+    // ✅ (valgfritt men smart): refresh insights etter KPI-oppdatering
+    await loadInsights(company.id);
   }
 
   if (!authChecked) {
@@ -413,15 +443,21 @@ export default function CompanyDashboard() {
           {/* KPI */}
           {company && (
             <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl space-y-4">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-xl font-semibold">{company.name}</h2>
-                  <p className="text-sm text-slate-400">
-                    {company.industry ?? "Ukjent bransje"}
-                  </p>
-                </div>
+              <div className="text-right">
                 <p className="text-xs text-slate-500">
-                  KPI-er (manuelt satt i MVP)
+                  Powered by{" "}
+                  <span className="font-medium text-slate-300">Valyxo Agent</span>
+                </p>
+
+                <p className="text-xs text-slate-500">
+                  {company.last_agent_run_at ? (
+                    <>
+                      Last updated ·{" "}
+                      {new Date(company.last_agent_run_at).toLocaleString("nb-NO")}
+                    </>
+                  ) : (
+                    <>Not updated yet</>
+                  )}
                 </p>
               </div>
 
@@ -444,9 +480,7 @@ export default function CompanyDashboard() {
                 <KpiCard
                   label="Runway"
                   value={
-                    company.runway_months != null
-                      ? `${company.runway_months} mnd`
-                      : "—"
+                    company.runway_months != null ? `${company.runway_months} mnd` : "—"
                   }
                   sublabel="Estimert levetid med dagens burn"
                 />
@@ -463,6 +497,45 @@ export default function CompanyDashboard() {
               </div>
             </section>
           )}
+
+          {/* ✅ AI INSIGHTS (NYTT – Steg 11) */}
+          <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-medium text-slate-200">AI insights</h2>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500">Powered by Valyxo Agent</span>
+                {company?.id && (
+                  <button
+                    type="button"
+                    onClick={() => loadInsights(company.id)}
+                    className="text-xs px-3 py-1 rounded-md bg-white/10 hover:bg-white/20 text-slate-50"
+                    disabled={loadingInsights}
+                  >
+                    {loadingInsights ? "Laster…" : "Refresh"}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {loadingInsights && (
+              <p className="text-xs text-slate-400">Analyserer data…</p>
+            )}
+
+            {!loadingInsights && insights.length === 0 && (
+              <p className="text-xs text-slate-500">Ingen insights ennå.</p>
+            )}
+
+            <ul className="space-y-2">
+              {insights.map((insight, i) => (
+                <li
+                  key={i}
+                  className="text-sm text-slate-300 bg-black/20 rounded-md px-3 py-2"
+                >
+                  • {insight}
+                </li>
+              ))}
+            </ul>
+          </section>
 
           {/* DELBAR LENKE + OPPDATER KPI */}
           <section className="grid gap-4 md:grid-cols-[2fr,1fr]">
@@ -505,18 +578,12 @@ export default function CompanyDashboard() {
 
             {/* Oppdater KPI-er */}
             <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-3">
-              <h2 className="text-sm font-medium text-slate-200">
-                Oppdater KPI-er
-              </h2>
+              <h2 className="text-sm font-medium text-slate-200">Oppdater KPI-er</h2>
               <p className="text-xs text-slate-400">
                 I MVP-en legger dere inn KPI-er manuelt. Senere kobles dette mot
                 Tripletex, Fiken, Pipedrive osv.
               </p>
-              <Button
-                type="button"
-                className="w-full"
-                onClick={openUpdateKpiModal}
-              >
+              <Button type="button" className="w-full" onClick={openUpdateKpiModal}>
                 Oppdater KPI-er
               </Button>
             </div>
@@ -544,9 +611,7 @@ export default function CompanyDashboard() {
                   className="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3 flex items-center justify-between gap-3"
                 >
                   <div>
-                    <p className="text-sm font-medium text-slate-100">
-                      {int.name}
-                    </p>
+                    <p className="text-sm font-medium text-slate-100">{int.name}</p>
                     <p className="text-xs text-slate-400">{int.category}</p>
                     <p className="mt-1 text-xs text-slate-500">
                       Status:{" "}
@@ -609,15 +674,13 @@ export default function CompanyDashboard() {
                   </p>
 
                   {req.link && (
-  <p className="mt-2 text-xs text-emerald-400 break-all">
-    Tilgangslenke:{" "}
-    {`${baseUrl}/investor/${req.link.access_token}`}
-    <br />
-    (Utgår:{" "}
-    {new Date(req.link.expires_at).toLocaleDateString("nb-NO")}
-    )
-  </p>
-)}
+                    <p className="mt-2 text-xs text-emerald-400 break-all">
+                      Tilgangslenke: {`${baseUrl}/investor/${req.link.access_token}`}
+                      <br />
+                      (Utgår:{" "}
+                      {new Date(req.link.expires_at).toLocaleDateString("nb-NO")})
+                    </p>
+                  )}
 
                   <RequestActions req={req} onUpdated={loadData} />
                 </div>
@@ -633,8 +696,8 @@ export default function CompanyDashboard() {
           <DialogHeader>
             <DialogTitle>Oppdater KPI-er</DialogTitle>
             <DialogDescription className="text-slate-400">
-              Legg inn oppdaterte tall for selskapet. Disse tallene vises både
-              i ditt dashboard og i investorvisningen.
+              Legg inn oppdaterte tall for selskapet. Disse tallene vises både i
+              ditt dashboard og i investorvisningen.
             </DialogDescription>
           </DialogHeader>
 
@@ -643,9 +706,7 @@ export default function CompanyDashboard() {
               <label className="text-xs text-slate-400">MRR (kr)</label>
               <Input
                 value={kpiForm.mrr}
-                onChange={(e) =>
-                  setKpiForm((f) => ({ ...f, mrr: e.target.value }))
-                }
+                onChange={(e) => setKpiForm((f) => ({ ...f, mrr: e.target.value }))}
                 placeholder="f.eks. 200000"
                 className="bg-slate-900 border-slate-700"
               />
@@ -655,18 +716,14 @@ export default function CompanyDashboard() {
               <label className="text-xs text-slate-400">ARR (kr)</label>
               <Input
                 value={kpiForm.arr}
-                onChange={(e) =>
-                  setKpiForm((f) => ({ ...f, arr: e.target.value }))
-                }
+                onChange={(e) => setKpiForm((f) => ({ ...f, arr: e.target.value }))}
                 placeholder="f.eks. 2400000"
                 className="bg-slate-900 border-slate-700"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs text-slate-400">
-                Burn rate (kr / mnd)
-              </label>
+              <label className="text-xs text-slate-400">Burn rate (kr / mnd)</label>
               <Input
                 value={kpiForm.burn_rate}
                 onChange={(e) =>
@@ -678,16 +735,11 @@ export default function CompanyDashboard() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs text-slate-400">
-                Runway (måneder)
-              </label>
+              <label className="text-xs text-slate-400">Runway (måneder)</label>
               <Input
                 value={kpiForm.runway_months}
                 onChange={(e) =>
-                  setKpiForm((f) => ({
-                    ...f,
-                    runway_months: e.target.value,
-                  }))
+                  setKpiForm((f) => ({ ...f, runway_months: e.target.value }))
                 }
                 placeholder="f.eks. 14"
                 className="bg-slate-900 border-slate-700"
@@ -698,9 +750,7 @@ export default function CompanyDashboard() {
               <label className="text-xs text-slate-400">Churn (%)</label>
               <Input
                 value={kpiForm.churn}
-                onChange={(e) =>
-                  setKpiForm((f) => ({ ...f, churn: e.target.value }))
-                }
+                onChange={(e) => setKpiForm((f) => ({ ...f, churn: e.target.value }))}
                 placeholder="f.eks. 3.2"
                 className="bg-slate-900 border-slate-700"
               />
@@ -711,10 +761,7 @@ export default function CompanyDashboard() {
               <Input
                 value={kpiForm.growth_percent}
                 onChange={(e) =>
-                  setKpiForm((f) => ({
-                    ...f,
-                    growth_percent: e.target.value,
-                  }))
+                  setKpiForm((f) => ({ ...f, growth_percent: e.target.value }))
                 }
                 placeholder="f.eks. 12"
                 className="bg-slate-900 border-slate-700"
