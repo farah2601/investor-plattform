@@ -1,5 +1,6 @@
 [build]
-root = "mcp-server"
+builder = "NIXPACKS"
+buildCommand = "cd mcp-server && npm ci && npm run build"
 
 [deploy]
-startCommand = "npm run start"
+startCommand = "cd mcp-server && npm run start"
