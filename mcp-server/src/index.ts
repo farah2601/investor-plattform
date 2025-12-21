@@ -9,14 +9,12 @@ async function start() {
 
   await app.register(toolsRoutes, { prefix: "/tools" });
 
-  const port = Number(process.env.PORT ?? 3001);
+  const port = Number(process.env.PORT) || 3001;
+  const host = "0.0.0.0";
 
-  await app.listen({
-    port,
-    host: "0.0.0.0",
-  });
+  await app.listen({ port, host });
 
-  app.log.info(`🚀 MCP server running on port ${port}`);
+  app.log.info(`🚀 MCP server running on ${host}:${port}`);
 }
 
 start().catch((err) => {
