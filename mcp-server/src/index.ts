@@ -1,12 +1,23 @@
 import Fastify from "fastify";
 import { toolsRoutes } from "./routes/tools";
-import { env } from "./env";
+import "dotenv/config";
 
 async function start() {
   const app = Fastify({ logger: true });
 
+  // ✅ Global error handler (må være før routes)
+ app.setErrorHandler((err: any, req, reply) => {
+  app.log.error(err);
+  reply.status(500).send({
+    ok: false,
+    error: err?.message || "Unknown server error",
+  });
+});
+
+  // ✅ Health check (Railway + debugging)
   app.get("/health", async () => ({ ok: true }));
 
+  // ✅ MCP tools routes
   await app.register(toolsRoutes, { prefix: "/tools" });
 
   const port = Number(process.env.PORT) || 3001;

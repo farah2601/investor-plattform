@@ -1,6 +1,8 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "cd mcp-server && npm ci && npm run build"
+buildCommand = "cd mcp-server && npm install && npm run build"
 
 [deploy]
 startCommand = "cd mcp-server && npm run start"
+healthcheckPath = "/health"
+healthcheckTimeout = 120

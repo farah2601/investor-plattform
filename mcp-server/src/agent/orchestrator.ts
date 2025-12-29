@@ -5,13 +5,15 @@ import { logAgentEvent } from "../logging/logger";
 import { runKpiRefresh } from "./tools/run_kpi_refresh";
 import { runProfileRefresh } from "./tools/run_profile_refresh"; // hvis filen heter run_Profile_Refresh.ts: endre importen
 import { generateInsights } from "./tools/generate_insights";
+import { getAgentLogs } from "./tools/get_agent_logs";
 
 const Uuid = z.string().uuid();
 
 export type AgentTool =
   | "run_kpi_refresh"
   | "run_profile_refresh"
-  | "generate_insights";
+  | "generate_insights"
+  | "get_agent_logs";
 
 export async function runAgent(params: { tool: AgentTool; input: unknown }) {
   const { tool, input } = params;
@@ -45,6 +47,9 @@ export async function runAgent(params: { tool: AgentTool; input: unknown }) {
         result = await runProfileRefresh(input);
         break;
       }
+     case "get_agent_logs": {
+  return await getAgentLogs(input);
+}
 
       case "generate_insights": {
         result = await generateInsights(input);

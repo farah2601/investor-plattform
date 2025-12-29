@@ -1,16 +1,29 @@
-import { FastifyRequest, FastifyReply } from "fastify";
-import { env } from "../env";
+import type { FastifyReply, FastifyRequest } from "fastify";
 
-export async function verifySecret(
-  request: FastifyRequest,
-  reply: FastifyReply
-) {
-  const secret = request.headers["x-valyxo-secret"];
+export async function verifySecret(req: FastifyRequest, reply: FastifyReply) {
+  const header = req.headers["x-mcp-secret"];
+  const received = Array.isArray(header) ? header[0] : header;
 
-  if (secret !== env.MCP_SERVER_SECRET) {
-    reply.status(401).send({
-      error: "Unauthorized",
+  const expected = process.env.MCP_SERVER_SECRET;
+
+  if (!expected) {
+    return reply.status(500).send({
+      ok: false,
+      error: "MCP_SERVER_SECRET missing on server",
     });
-    return;
+  }
+
+  if (!received) {
+    return reply.status(401).send({
+      ok: false,
+      error: "Missing x-mcp-secret header",
+    });
+  }
+
+  if (received.trim() !== expected.trim()) {
+    return reply.status(401).send({
+      ok: false,
+      error: "Unauthorized MCP request",
+    });
   }
 }

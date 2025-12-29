@@ -1,33 +1,32 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import { supabaseAdmin } from "../../lib/supabaseAdmin";
 
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const companyId = body?.companyId;
+export async function POST(req: Request) {
+  const { companyId } = await req.json();
 
-    if (!companyId) {
-      return NextResponse.json({ ok: false, error: "Missing companyId" }, { status: 400 });
-    }
-
-    // Snakk med MCP-serveren
-    const mcpUrl = process.env.MCP_SERVER_URL || "http://localhost:3001";
-
-    const resp = await fetch(`${mcpUrl}/tools/generate_insights`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-valyxo-secret": process.env.VALYXO_SECRET || "",
-      },
-      body: JSON.stringify({ companyId }),
-    });
-
-    const data = await resp.json();
-
-    return NextResponse.json(data, { status: resp.status });
-  } catch (e: any) {
+  if (!companyId) {
     return NextResponse.json(
-      { ok: false, error: e?.message ?? "Unknown error" },
+      { ok: false, error: "Missing companyId" },
+      { status: 400 }
+    );
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("companies")
+    .select("latest_insights, last_agent_run_at")
+    .eq("id", companyId)
+    .single();
+
+  if (error) {
+    return NextResponse.json(
+      { ok: false, error: error.message },
       { status: 500 }
     );
   }
+
+  return NextResponse.json({
+    ok: true,
+    insights: data?.latest_insights ?? [],
+    generatedAt: data?.last_agent_run_at ?? null,
+  });
 }
