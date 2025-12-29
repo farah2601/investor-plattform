@@ -6,6 +6,7 @@ import { runKpiRefresh } from "./tools/run_kpi_refresh";
 import { runProfileRefresh } from "./tools/run_profile_refresh"; // hvis filen heter run_Profile_Refresh.ts: endre importen
 import { generateInsights } from "./tools/generate_insights";
 import { getAgentLogs } from "./tools/get_agent_logs";
+import { runAll } from "./tools/run_all";
 
 const Uuid = z.string().uuid();
 
@@ -13,68 +14,87 @@ export type AgentTool =
   | "run_kpi_refresh"
   | "run_profile_refresh"
   | "generate_insights"
-  | "get_agent_logs";
+  | "get_agent_logs"
+  | "run_all";
+
+type CompanyInput = { companyId: string };
+
+function isObject(x: unknown): x is Record<string, unknown> {
+  return typeof x === "object" && x !== null;
+}
+
+function requireCompanyId(input: unknown): CompanyInput {
+  if (!isObject(input)) throw new Error("Missing companyId");
+  const raw = (input as any).companyId;
+
+  // hvis du bruker zod Uuid, bruk den du allerede har:
+  const parsed = Uuid.safeParse(raw);
+  if (!parsed.success) throw new Error("Missing companyId");
+
+  return { companyId: parsed.data };
+}
 
 export async function runAgent(params: { tool: AgentTool; input: unknown }) {
   const { tool, input } = params;
 
-  // ✅ companyId blir null hvis input mangler companyId eller den ikke er UUID
-  let companyId: string | null = null;
-
-  if (typeof input === "object" && input !== null && "companyId" in input) {
-    const raw = (input as any).companyId;
-    const parsed = Uuid.safeParse(raw);
-    companyId = parsed.success ? parsed.data : null;
-  }
-
-  // ✅ Logging må alltid ha en "company_id" som er string (UUID i DB).
-  // Hvis vi ikke har en UUID, logger vi som "system".
-  const logCompanyId = companyId ?? "system";
+  // ✅ alltid parse til riktig shape for tools
+  const { companyId } = requireCompanyId(input);
 
   try {
-    // ✅ START – kun her
-    await logAgentEvent(logCompanyId, tool, "start", "Agent task started", {});
+    // ✅ START
+    await logAgentEvent(companyId, tool, "start", "Agent task started", {});
 
     let result: any;
 
     switch (tool) {
       case "run_kpi_refresh": {
-        result = await runKpiRefresh(input);
+        result = await runKpiRefresh({ companyId });
+        break;
+      }
+
+      case "generate_insights": {
+        result = await generateInsights({ companyId });
         break;
       }
 
       case "run_profile_refresh": {
-        result = await runProfileRefresh(input);
+        result = await runProfileRefresh({ companyId });
         break;
       }
-     case "get_agent_logs": {
-  return await getAgentLogs(input);
-}
 
-      case "generate_insights": {
-        result = await generateInsights(input);
+      case "get_agent_logs": {
+        result = await getAgentLogs({ companyId });
         break;
       }
+
+    case "run_all": {
+  if (!companyId) throw new Error("Missing companyId");
+  result = await runAll(companyId);
+  break;
+}
 
       default: {
         throw new Error(`Unknown agent tool: ${tool}`);
       }
     }
 
-    // ✅ SUCCESS – kun her
-    await logAgentEvent(logCompanyId, tool, "success", "Agent task completed", {
+    // ✅ SUCCESS
+    await logAgentEvent(companyId, tool, "success", "Agent task completed", {
       result,
     });
 
     return result;
   } catch (error: any) {
-    // ✅ FAIL – kun her
-    await logAgentEvent(logCompanyId, tool, "fail", error?.message ?? "Agent failed", {
-      error: {
-        message: error?.message,
-        name: error?.name,
-      },
-    });
+    // ✅ FAIL
+    await logAgentEvent(
+      companyId,
+      tool,
+      "fail",
+      error?.message ?? "Agent failed",
+      {
+        error: { message: error?.message, name: error?.name },
+      }
+    );
 
     throw error;
   }

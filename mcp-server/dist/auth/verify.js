@@ -1,13 +1,26 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.verifySecret = verifySecret;
-const env_1 = require("../env");
-async function verifySecret(request, reply) {
-    const secret = request.headers["x-valyxo-secret"];
-    if (secret !== env_1.env.MCP_SERVER_SECRET) {
-        reply.status(401).send({
-            error: "Unauthorized",
+async function verifySecret(req, reply) {
+    const header = req.headers["x-mcp-secret"];
+    const received = Array.isArray(header) ? header[0] : header;
+    const expected = process.env.MCP_SERVER_SECRET;
+    if (!expected) {
+        return reply.status(500).send({
+            ok: false,
+            error: "MCP_SERVER_SECRET missing on server",
         });
-        return;
+    }
+    if (!received) {
+        return reply.status(401).send({
+            ok: false,
+            error: "Missing x-mcp-secret header",
+        });
+    }
+    if (received.trim() !== expected.trim()) {
+        return reply.status(401).send({
+            ok: false,
+            error: "Unauthorized MCP request",
+        });
     }
 }
