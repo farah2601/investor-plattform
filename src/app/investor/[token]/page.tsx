@@ -1,6 +1,8 @@
+// app/investor/[token]/page.tsx
+
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 
@@ -10,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { Card } from "../../../components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+
 
 import {
   Area,
@@ -42,12 +45,10 @@ type CompanyProfile = {
   linkedin_urls: string[] | null;
   team: TeamMember[] | null;
 
-  // ✅ dette feltet har du brukt før
-  profile_status?: string | null; // "Published" | "Draft" | ...
+  profile_status?: string | null;
 
   updated_at?: string | null;
 
-  // Agent metadata (hvis finnes i DB – select("*") tar dem med uansett)
   last_agent_run_at?: string | null;
   last_agent_run_by?: string | null;
 
@@ -140,7 +141,7 @@ function formatDateLabel(dateString?: string | null): string {
   if (!dateString) return "Unknown";
   const d = new Date(dateString);
   if (Number.isNaN(d.getTime())) return "Unknown";
-  return d.toLocaleString("nb-NO", {
+  return d.toLocaleString("en-US", {
     year: "numeric",
     month: "short",
     day: "2-digit",
@@ -177,7 +178,6 @@ export default function InvestorCompanyPage() {
         setCompany(null);
         setLinkMeta(null);
 
-        // 1) investor_links → token → company_id
         const { data: linkRow, error: linkError } = await supabase
           .from("investor_links")
           .select("company_id, expires_at")
@@ -187,7 +187,6 @@ export default function InvestorCompanyPage() {
         if (cancelled) return;
 
         if (linkError) {
-          console.log("investor_links error:", linkError);
           setError(`Invalid investor link: ${linkError.message}`);
           setLoading(false);
           return;
@@ -222,7 +221,6 @@ export default function InvestorCompanyPage() {
           return;
         }
 
-        // 2) companies → select("*") for å unngå feil på manglende kolonner
         const { data: companyRow, error: companyError } = await supabase
           .from("companies")
           .select("*")
@@ -232,7 +230,6 @@ export default function InvestorCompanyPage() {
         if (cancelled) return;
 
         if (companyError) {
-          console.log("companies error:", companyError);
           setError(`Could not load company: ${companyError.message}`);
           setLoading(false);
           return;
@@ -248,7 +245,6 @@ export default function InvestorCompanyPage() {
         setLoading(false);
       } catch (err: any) {
         if (cancelled) return;
-        console.log("Unexpected investor view error:", err);
         setError(
           typeof err?.message === "string"
             ? err.message
@@ -264,6 +260,23 @@ export default function InvestorCompanyPage() {
       cancelled = true;
     };
   }, [token]);
+
+  const expiresAt = linkMeta?.expires_at ?? null;
+  const isExpired =
+    !!expiresAt && new Date(expiresAt).getTime() < Date.now();
+
+  const isPublished = company?.profile_status === "Published";
+
+  const agentUpdated =
+    company?.last_agent_run_at ||
+    company?.latest_insights_generated_at ||
+    company?.updated_at ||
+    null;
+
+  const insights = useMemo(
+    () => (Array.isArray(company?.latest_insights) ? company!.latest_insights! : []),
+    [company]
+  );
 
   if (loading) {
     return (
@@ -281,7 +294,7 @@ export default function InvestorCompanyPage() {
             {error || "Could not load investor view for this link."}
           </p>
           <p className="text-xs text-slate-500">
-            Tip: Hvis dette sier “permission denied”, er det RLS og må løses med en server-route.
+            Tip: If this says "permission denied", it's an RLS issue and needs to be resolved with a server route.
           </p>
         </div>
       </div>
@@ -290,22 +303,6 @@ export default function InvestorCompanyPage() {
 
   const initial = company.name?.charAt(0)?.toUpperCase() || "C";
 
-  const expiresAt = linkMeta?.expires_at ?? null;
-  const isExpired =
-    !!expiresAt && new Date(expiresAt).getTime() < Date.now();
-
-  const isPublished = company.profile_status === "Published";
-
-  const agentUpdated =
-    company.last_agent_run_at ||
-    company.latest_insights_generated_at ||
-    company.updated_at ||
-    null;
-
-  const insights = Array.isArray(company.latest_insights)
-    ? company.latest_insights
-    : [];
-
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-slate-950 text-slate-50">
       <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
@@ -313,9 +310,17 @@ export default function InvestorCompanyPage() {
         <div className="rounded-3xl bg-gradient-to-br from-sky-500/15 via-slate-900/80 to-slate-950 p-[1px]">
           <Card className="rounded-3xl bg-slate-950/80 border border-white/10">
             <div className="flex flex-col gap-6 p-6 sm:p-8">
+              {/* Header row (Valyxo logo like Lovable layout) */}
+              <div className="flex items-center justify-between">
+      
+                <span className="text-[11px] text-slate-500">
+                  Secure token access
+                </span>
+              </div>
+
               {/* 3-column layout */}
               <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[auto,minmax(0,1fr),minmax(0,1.2fr)] lg:items-start">
-                {/* Logo */}
+                {/* Company avatar */}
                 <div className="flex items-center gap-3">
                   <Avatar className="h-12 w-12 rounded-2xl bg-slate-900">
                     <AvatarFallback className="text-lg font-semibold">
@@ -615,7 +620,13 @@ export default function InvestorCompanyPage() {
               {company.latest_insights_generated_at ? (
                 <>
                   AI Insights generated automatically ·{" "}
-                  {new Date(company.latest_insights_generated_at).toLocaleString("nb-NO")}
+                  {new Date(company.latest_insights_generated_at).toLocaleString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit"
+                  })}
                 </>
               ) : (
                 <>Not generated yet · Powered by Valyxo Agent</>
@@ -632,11 +643,18 @@ export default function InvestorCompanyPage() {
               </ul>
             ) : (
               <p className="text-sm text-slate-400 italic">
-                Insights oppdateres automatisk av Valyxo Agent når nye KPI snapshots blir lagret.
+                Insights are automatically updated by Valyxo Agent when new KPI snapshots are saved.
               </p>
             )}
           </Card>
         </div>
+        
+        {/* Footer */}
+        <footer className="pt-8 pb-10 border-t border-slate-800">
+          <p className="text-xs text-slate-500 text-center">
+            Updated automatically by Valyxo Agent
+          </p>
+        </footer>
       </main>
     </div>
   );

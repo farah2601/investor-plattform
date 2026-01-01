@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { supabase } from "../lib/supabaseClient";
 
 import { cn } from "@/lib/utils";
@@ -299,94 +300,147 @@ export default function CompanyProfilePage() {
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-slate-950 text-slate-50">
       <main className="mx-auto w-full max-w-5xl px-4 py-8 space-y-8 sm:px-6 lg:px-8">
-        {/* HEADER CARD */}
-        <Card className="flex flex-col gap-6 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8 lg:flex-row lg:items-center lg:justify-between">
-          {/* Left */}
-          <div className="flex items-start gap-4">
-            <Avatar className="h-12 w-12 rounded-xl">
-              <AvatarFallback>{initial}</AvatarFallback>
-            </Avatar>
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-lg font-semibold text-white sm:text-xl">
-                  {form.name || "Company name"}
-                </h1>
-                {form.industry && (
-                  <Badge
-                    variant="outline"
-                    className="border-sky-500/60 bg-sky-500/15 text-[10px] uppercase tracking-wide text-sky-100"
-                  >
-                    {form.industry}
-                  </Badge>
-                )}
-                {form.stage && (
-                  <Badge
-                    variant="secondary"
-                    className="border border-emerald-500/60 bg-emerald-500/15 text-[10px] uppercase tracking-wide text-emerald-100"
-                  >
-                    {form.stage}
-                  </Badge>
-                )}
-              </div>
-              {form.description && (
-                <p className="max-w-xl text-sm text-slate-400">
-                  {form.description}
-                </p>
-              )}
-              {form.website_url && (
-                <a
-                  href={form.website_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs text-sky-400 hover:underline"
-                >
-                  {form.website_url.replace(/^https?:\/\//, "")}
-                </a>
-              )}
-            </div>
-          </div>
+        {/* Navigation back to dashboard */}
+        <div className="flex items-center gap-3">
+          <Link
+            href="/company-dashboard"
+            className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
+          >
+            ← Dashboard
+          </Link>
+        </div>
+        
+        {/* HEADER CARD (UPDATED to match screenshot) */}
+        <Card
+          className={cn(
+            "relative overflow-hidden rounded-3xl border border-white/10",
+            "bg-[radial-gradient(1200px_500px_at_20%_-20%,rgba(43,116,255,0.14),transparent_55%),radial-gradient(900px_400px_at_80%_0%,rgba(43,116,255,0.08),transparent_60%)]",
+            "bg-slate-900/40"
+          )}
+        >
+          <div className="p-6 sm:p-8">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+              {/* Left */}
+              <div className="flex items-start gap-4">
+                <Avatar className="h-12 w-12 rounded-2xl">
+                  <AvatarFallback className="bg-white/10 text-slate-100">
+                    {initial}
+                  </AvatarFallback>
+                </Avatar>
 
-          {/* Right */}
-          <div className="space-y-3 text-right">
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={saving}
-                onClick={handleSave}
-              >
-                {saving ? "Saving…" : "Save changes"}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={saving || aiGenerating}
-                onClick={handleGenerateProfile}
-                className="border-sky-500 text-sky-100"
-              >
-                {aiGenerating ? "Generating…" : "Generate profile with AI"}
-              </Button>
-              <Button size="sm" disabled={saving} onClick={handlePublish}>
-                {company.profile_published ? "Published" : "Approve & publish"}
-              </Button>
-            </div>
-            <div className="space-y-0.5 text-xs text-slate-400">
-              <p>
-                Status:{" "}
-                <span
-                  className={cn(
-                    "font-medium",
-                    company.profile_published
-                      ? "text-emerald-400"
-                      : "text-amber-300"
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="text-lg font-semibold text-white sm:text-xl">
+                      {form.name || "Company name"}
+                    </h1>
+
+                    {form.industry && (
+                      <Badge className="h-5 rounded-full border border-sky-500/40 bg-sky-500/10 px-2 text-[10px] uppercase tracking-wide text-sky-100">
+                        {form.industry}
+                      </Badge>
+                    )}
+                  </div>
+
+                  {form.description && (
+                    <p className="max-w-xl text-sm text-slate-400">
+                      {form.description}
+                    </p>
                   )}
-                >
-                  {company.profile_published
-                    ? "Published to investors"
-                    : "Draft (not visible to investors)"}
+                </div>
+              </div>
+
+              {/* Right */}
+              <div className="flex flex-col items-start gap-3 lg:items-end">
+                <div className="flex flex-wrap gap-2 lg:justify-end">
+                  {/* Save changes (white button) */}
+                  <Button
+                    size="sm"
+                    disabled={saving}
+                    onClick={handleSave}
+                    className="h-9 rounded-xl bg-white text-slate-950 hover:bg-white/90 active:bg-white/85"
+                  >
+                    {saving ? "Saving…" : "Save changes"}
+                  </Button>
+
+                  {/* Generate with AI (light, can be disabled) */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={saving || aiGenerating}
+                    onClick={handleGenerateProfile}
+                    className={cn(
+                      "h-9 rounded-xl border border-white/10 bg-white/5 text-slate-100 hover:bg-white/8",
+                      "disabled:opacity-50"
+                    )}
+                  >
+                    {aiGenerating ? "Generating…" : "Generate with AI"}
+                  </Button>
+
+                  {/* Published pill / Approve & publish */}
+                  <Button
+                    size="sm"
+                    disabled={saving || company.profile_published === true}
+                    onClick={handlePublish}
+                    className={cn(
+                      "h-9 rounded-xl",
+                      company.profile_published
+                        ? "border border-white/10 bg-white/5 text-slate-200"
+                        : "bg-[#2B74FF] text-white hover:bg-[#2B74FF]/90 active:bg-[#2B74FF]/85"
+                    )}
+                    variant={company.profile_published ? "outline" : "default"}
+                  >
+                    {company.profile_published ? "Published" : "Approve & publish"}
+                  </Button>
+                </div>
+
+                <div className="text-xs text-slate-400 lg:text-right space-y-0.5">
+                  <p>
+                    Status:{" "}
+                    <span
+                      className={cn(
+                        "font-medium",
+                        company.profile_published
+                          ? "text-emerald-400"
+                          : "text-amber-300"
+                      )}
+                    >
+                      {company.profile_published
+                        ? "Published to investors"
+                        : "Draft (not visible to investors)"}
+                    </span>
+                  </p>
+                  <p>Powered by Valyxo Agent</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Optional tiny meta row (kept minimal) */}
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              {form.stage ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-1 w-1 rounded-full bg-slate-600" />
+                  <span>{form.stage}</span>
                 </span>
-              </p>
-              <p>Regenerated by MCP agent (placeholder timestamp)</p>
+              ) : null}
+              {form.website_url ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-1 w-1 rounded-full bg-slate-600" />
+                  <a
+                    href={form.website_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sky-400 hover:underline"
+                  >
+                    {form.website_url.replace(/^https?:\/\//, "")}
+                  </a>
+                </span>
+              ) : null}
+              {linkedinsCount > 0 ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-1 w-1 rounded-full bg-slate-600" />
+                  <span>{linkedinsCount} LinkedIn</span>
+                </span>
+              ) : null}
             </div>
           </div>
         </Card>
@@ -502,25 +556,23 @@ export default function CompanyProfilePage() {
                   AI PROFILE GENERATOR
                 </p>
                 <p className="text-xs text-slate-200">
-                  MCP-agenten bruker website + LinkedIn-lenker for å skrive
-                  Problem, Solution, Why now, Market, Product og Team.
+                  Valyxo Agent uses your website and LinkedIn links to generate
+                  Problem, Solution, Why now, Market, Product, and Team sections.
                 </p>
                 <p className="text-xs text-slate-300 mt-2">
                   <span className="font-medium text-slate-100">Website:</span>{" "}
                   {form.website_url
                     ? form.website_url.replace(/^https?:\/\//, "")
-                    : "ikke satt ennå"}
+                    : "not set yet"}
                 </p>
                 <p className="text-xs text-slate-300">
                   <span className="font-medium text-slate-100">
-                    LinkedIn-profiler:
+                    LinkedIn profiles:
                   </span>{" "}
                   {linkedinsCount}
                 </p>
                 <p className="text-[11px] text-slate-300 mt-1">
-                  Oppdater først website og LinkedIn under Links, og klikk
-                  deretter for å la AI foreslå en komplett narrativ profil. Du
-                  kan redigere alt etterpå.
+                  Update website and LinkedIn under Links first, then click to let AI suggest a complete narrative profile. You can edit everything afterward.
                 </p>
               </div>
               <Button
@@ -528,7 +580,7 @@ export default function CompanyProfilePage() {
                 disabled={saving || aiGenerating}
                 onClick={handleGenerateProfile}
               >
-                {aiGenerating ? "Generating…" : "Generate profile with AI"}
+                {aiGenerating ? "Generating…" : "Generate with AI"}
               </Button>
             </div>
 

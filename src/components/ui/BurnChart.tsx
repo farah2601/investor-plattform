@@ -33,7 +33,7 @@ function CustomTooltip({ active, payload, label }: any) {
     <div className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-100 shadow-lg">
       <div className="font-medium mb-1">{label}</div>
       <div className="text-slate-300">
-        Burn rate: {value.toLocaleString("nb-NO")} kr/mnd
+        Burn: ${value >= 1000 ? `${(value / 1000).toFixed(0)}k` : value.toLocaleString("en-US")}/mo
       </div>
     </div>
   );
@@ -43,7 +43,7 @@ export function BurnChart() {
   return (
     <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3">
       <h3 className="text-sm font-medium text-slate-200 mb-2">
-        Burn / kostnader siste 12 måneder
+        Burn vs Runway
       </h3>
       <div className="w-full h-[85%]">
         <ResponsiveContainer width="100%" height="100%">
@@ -67,10 +67,10 @@ export function BurnChart() {
             <Line
               type="monotone"
               dataKey="burn"
-              stroke="#2563EB"
-              strokeWidth={2.5}
+              stroke="#2B74FF"
+              strokeWidth={2}
               dot={false}
-              activeDot={{ r: 5 }}
+              activeDot={{ r: 4 }}
             />
           </LineChart>
         </ResponsiveContainer>

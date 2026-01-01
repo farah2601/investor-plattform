@@ -5,9 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { supabase } from "../lib/supabaseClient";
+import { cn } from "@/lib/utils";
 import { KpiCard } from "../../components/ui/KpiCard";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
+import { ArrChart } from "../../components/ui/ArrChart";
+import { MrrChart } from "../../components/ui/MrrChart";
+import { BurnChart } from "../../components/ui/BurnChart";
 import {
   Dialog,
   DialogContent,
@@ -58,17 +62,23 @@ type AgentLog = {
   status?: string;
   error?: string | null;
   meta?: any;
-  tool_name?: string; // hvis du bruker tool_name i stedet for step
+  tool_name?: string; // if using tool_name instead of step
 };
 
 function formatMoney(value: number | null) {
   if (value == null) return "—";
-  return value.toLocaleString("nb-NO") + " kr";
+  if (value >= 1000000) {
+    return `$${(value / 1000000).toFixed(2)}M`;
+  }
+  if (value >= 1000) {
+    return `$${(value / 1000).toFixed(0)}k`;
+  }
+  return "$" + value.toLocaleString("en-US");
 }
 
 function formatPercent(value: number | null) {
   if (value == null) return "—";
-  return value.toString().replace(".", ",") + " %";
+  return value.toFixed(1) + "%";
 }
 
 function RequestActions({
@@ -89,12 +99,12 @@ function RequestActions({
         .eq("id", req.id);
 
       if (updateError) {
-        console.error("Feil ved oppdatering av status", updateError);
-        alert("Feil ved oppdatering: " + updateError.message);
+        console.error("Error updating status", updateError);
+        alert("Error updating status: " + updateError.message);
         return;
       }
 
-      // 2) Godkjent → opprett investor_link hvis ikke finnes
+      // 2) Approved → create investor_link if it doesn't exist
       if (status === "approved") {
         const { data: existing, error: existingError } = await supabase
           .from("investor_links")
@@ -103,7 +113,7 @@ function RequestActions({
           .maybeSingle();
 
         if (existingError) {
-          console.error("Feil ved henting av eksisterende link", existingError);
+          console.error("Error fetching existing link", existingError);
         }
 
         if (!existing) {
@@ -128,8 +138,8 @@ function RequestActions({
             ]);
 
           if (insertError) {
-            console.error("Feil ved oppretting av link", insertError);
-            alert("Feil ved oppretting av tilgangslenke: " + insertError.message);
+            console.error("Error creating link", insertError);
+            alert("Error creating access link: " + insertError.message);
           }
         }
       }
@@ -140,34 +150,37 @@ function RequestActions({
   }
 
   return (
-    <div className="flex gap-2 mt-3">
+    <div className="flex gap-2">
       <Button
         size="sm"
-        className="bg-emerald-600 hover:bg-emerald-500 text-white"
+        variant="outline"
+        className="border-slate-700 text-slate-200 bg-slate-800/40 hover:bg-slate-700/50 text-xs h-7 px-2.5"
         onClick={() => updateStatus("approved")}
         disabled={isPending}
       >
-        Godkjenn
+        Approve
       </Button>
 
       <Button
         size="sm"
-        variant="destructive"
+        variant="outline"
+        className="border-slate-700 text-slate-300 bg-slate-800/40 hover:bg-slate-700/50 text-xs h-7 px-2.5"
         onClick={() => updateStatus("rejected")}
         disabled={isPending}
       >
-        Avslå
+        Decline
       </Button>
     </div>
   );
 }
 
-const INTEGRATIONS = [
-  { id: "tripletex", category: "Regnskap", name: "Tripletex", status: "Not connected" },
-  { id: "fiken", category: "Regnskap", name: "Fiken", status: "Not connected" },
-  { id: "pipedrive", category: "CRM", name: "Pipedrive", status: "Not connected" },
-  { id: "hubspot", category: "CRM", name: "HubSpot", status: "Not connected" },
-  { id: "sheets", category: "Sheets", name: "Google Sheets", status: "Connected" },
+const DATA_SOURCES = [
+  { id: "stripe", category: "Billing", name: "Stripe", status: "coming_soon" },
+  { id: "hubspot", category: "CRM", name: "HubSpot", status: "coming_soon" },
+  { id: "pipedrive", category: "CRM", name: "Pipedrive", status: "coming_soon" },
+  { id: "fiken", category: "Accounting", name: "Fiken", status: "coming_soon" },
+  { id: "tripletex", category: "Accounting", name: "Tripletex", status: "coming_soon" },
+  { id: "sheets", category: "Manual input", name: "Google Sheets", status: "connected" },
 ];
 
 export default function CompanyDashboard() {
@@ -183,6 +196,7 @@ export default function CompanyDashboard() {
   // AI Insights
   const [insights, setInsights] = useState<string[]>([]);
   const [loadingInsights, setLoadingInsights] = useState(false);
+  const [insightsGeneratedAt, setInsightsGeneratedAt] = useState<string | null>(null);
 
   // Run agent
   const [runningAgent, setRunningAgent] = useState(false);
@@ -233,8 +247,13 @@ export default function CompanyDashboard() {
       });
 
       const data = await res.json().catch(() => ({}));
-      if (data?.insights && Array.isArray(data.insights)) setInsights(data.insights);
-      else setInsights([]);
+      if (data?.insights && Array.isArray(data.insights)) {
+        setInsights(data.insights);
+        setInsightsGeneratedAt(data?.generatedAt ?? null);
+      } else {
+        setInsights([]);
+        setInsightsGeneratedAt(null);
+      }
     } catch (e) {
       console.error("Failed to load insights", e);
       setInsights([]);
@@ -279,15 +298,15 @@ export default function CompanyDashboard() {
         throw new Error(data?.error || "Agent failed");
       }
 
-      // ✅ Refresh ALT (company + insights + logs)
+      // ✅ Refresh ALL (company + insights + logs)
       await loadData();
 
-      alert("Valyxo Agent kjørte ✅");
+      alert("Valyxo Agent completed successfully");
     } catch (e: any) {
       console.error(e);
-      const msg = e?.message || "Ukjent feil";
+      const msg = e?.message || "Unknown error";
       setAgentError(msg);
-      alert("Feil: " + msg);
+      alert("Error: " + msg);
     } finally {
       setRunningAgent(false);
     }
@@ -296,14 +315,14 @@ export default function CompanyDashboard() {
   async function loadData() {
     setError(null);
 
-    // 1) access_requests + company-navn
+    // 1) access_requests + company name
     const { data: reqs, error: reqError } = await supabase
       .from("access_requests")
       .select("*, companies(name)")
       .order("created_at", { ascending: false });
 
     if (reqError) {
-      console.error("Feil ved henting av forespørsler", reqError);
+      console.error("Error fetching requests", reqError);
       setError(reqError.message);
       return;
     }
@@ -314,7 +333,7 @@ export default function CompanyDashboard() {
       .select("*");
 
     if (linkError) {
-      console.error("Feil ved henting av investor_links", linkError);
+      console.error("Error fetching investor_links", linkError);
       setError(linkError.message);
       return;
     }
@@ -327,7 +346,7 @@ export default function CompanyDashboard() {
 
     setRequests(withLinks);
 
-    // 3) første company (MVP)
+    // 3) first company (MVP)
     const { data: companiesData, error: companyError } = await supabase
       .from("companies")
       .select(
@@ -350,7 +369,7 @@ export default function CompanyDashboard() {
       .limit(1);
 
     if (companyError) {
-      console.error("Feil ved henting av company KPI", companyError);
+      console.error("Error fetching company KPI", companyError);
       setError(companyError.message);
       return;
     }
@@ -368,7 +387,7 @@ export default function CompanyDashboard() {
         growth_percent: first.growth_percent != null ? String(first.growth_percent) : "",
       });
 
-      // ✅ last samtidig
+      // ✅ load simultaneously
       await Promise.all([loadInsights(first.id), loadAgentLogs(first.id)]);
     } else {
       setInsights([]);
@@ -390,12 +409,12 @@ export default function CompanyDashboard() {
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(investorUrl);
-        alert("Lenke kopiert ✅");
+        alert("Link copied to clipboard");
       } else {
-        window.prompt("Kopier lenken manuelt:", investorUrl);
+        window.prompt("Copy link manually:", investorUrl);
       }
     } catch {
-      window.prompt("Kopier lenken manuelt:", investorUrl);
+      window.prompt("Copy link manually:", investorUrl);
     }
   }
 
@@ -434,23 +453,23 @@ export default function CompanyDashboard() {
     setSavingKpi(false);
 
     if (updateError) {
-      console.error("Feil ved oppdatering av KPI-er", updateError);
-      alert("Kunne ikke oppdatere KPI-er: " + updateError.message);
+      console.error("Error updating KPIs", updateError);
+      alert("Could not update KPIs: " + updateError.message);
       return;
     }
 
     setCompany((prev) => (prev ? { ...prev, ...payload } : prev));
     setKpiDialogOpen(false);
-    alert("Tall oppdatert ✅");
+    alert("KPIs updated successfully");
 
-    // smart: refresh insights + logs etter KPI-oppdatering
+    // refresh insights + logs after KPI update
     await Promise.all([loadInsights(company.id), loadAgentLogs(company.id)]);
   }
 
   if (!authChecked) {
     return (
       <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center">
-        <p className="text-sm text-slate-400">Sjekker tilgang…</p>
+        <p className="text-sm text-slate-400">Checking access…</p>
       </main>
     );
   }
@@ -458,7 +477,7 @@ export default function CompanyDashboard() {
   if (error) {
     return (
       <main className="min-h-screen bg-slate-950 text-slate-50 p-10">
-        <h1 className="text-2xl font-bold mb-4">Feil</h1>
+        <h1 className="text-2xl font-bold mb-4">Error</h1>
         <pre className="text-red-400">{error}</pre>
       </main>
     );
@@ -467,298 +486,466 @@ export default function CompanyDashboard() {
   return (
     <>
       <main className="min-h-screen bg-slate-950 text-slate-50">
-        <div className="max-w-5xl mx-auto px-4 py-10 space-y-8">
+        <div className="max-w-6xl mx-auto px-4 py-12 space-y-10">
           {/* HEADER */}
-          <header className="flex items-start justify-between gap-4">
-            <div className="space-y-2">
-              <p className="text-xs tracking-[0.2em] text-slate-500 uppercase">Selskap</p>
-              <h1 className="text-3xl font-bold">Selskapets dashboard</h1>
-              <p className="text-sm text-slate-400">
-                Kontrollpanel for KPI-er, integrasjoner og investortilgang.
-              </p>
+          <header className="flex items-start justify-between gap-6 pb-2">
+            <div className="space-y-4 flex-1">
+              <div className="space-y-1">
+                <p className="text-xs tracking-[0.2em] text-slate-500 uppercase">Company</p>
+                <h1 className="text-3xl font-semibold text-slate-50">{company?.name || "Company Dashboard"}</h1>
+                {company?.industry && (
+                  <p className="text-sm text-slate-400 mt-1">{company.industry}</p>
+                )}
+              </div>
+              
+              {company && (
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className={cn(
+                    "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium",
+                    runningAgent 
+                      ? "bg-amber-500/10 text-amber-300 border border-amber-500/20"
+                      : company.last_agent_run_at
+                      ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20"
+                      : "bg-slate-800/60 text-slate-400 border border-slate-700/50"
+                  )}>
+                    {runningAgent ? "Running" : company.last_agent_run_at ? "Up to date" : "Needs attention"}
+                  </span>
+                  {company.last_agent_run_at && (
+                    <p className="text-xs text-slate-500">
+                      Last updated · {new Date(company.last_agent_run_at).toLocaleString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit"
+                      })}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
-            <Link href="/logout">
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-slate-600 text-slate-100 bg-transparent hover:bg-slate-800/60"
-              >
-                Logg ut
-              </Button>
-            </Link>
+            <div className="flex items-center gap-2 shrink-0">
+              {company?.id && (
+                <Button
+                  size="sm"
+                  onClick={() => runAgent(company.id)}
+                  disabled={runningAgent}
+                  className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white disabled:opacity-50"
+                >
+                  {runningAgent ? "Running…" : "Run Agent"}
+                </Button>
+              )}
+              <Link href="/company-profile">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-slate-700/50 text-slate-300 bg-slate-800/30 hover:bg-slate-800/50"
+                >
+                  Profile
+                </Button>
+              </Link>
+              {investorUrl && (
+                <a
+                  href={investorUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-slate-300 hover:text-slate-100 transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-700/50 bg-slate-800/30 hover:bg-slate-800/50"
+                >
+                  Preview investor view
+                  <span className="text-slate-500">→</span>
+                </a>
+              )}
+              <Link href="/logout">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/30"
+                >
+                  Sign out
+                </Button>
+              </Link>
+            </div>
           </header>
 
           {/* KPI */}
           {company && (
-            <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl space-y-4">
-              <div className="text-right">
-                <p className="text-xs text-slate-500">
-                  Powered by <span className="font-medium text-slate-300">Valyxo Agent</span>
-                </p>
-
-                <p className="text-xs text-slate-500">
-                  {company.last_agent_run_at ? (
-                    <>
-                      Last updated · {new Date(company.last_agent_run_at).toLocaleString("nb-NO")}
-                    </>
-                  ) : (
-                    <>Not updated yet</>
-                  )}
-                </p>
+            <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-medium text-slate-200">Key Metrics</h2>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {company.last_agent_run_at ? (
+                      <>
+                        Last updated · {new Date(company.last_agent_run_at).toLocaleString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit"
+                        })}
+                      </>
+                    ) : (
+                      <>Not updated yet</>
+                    )}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-slate-500">
+                    Powered by <span className="font-medium text-slate-300">Valyxo Agent</span>
+                  </p>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <KpiCard label="MRR" value={formatMoney(company.mrr)} sublabel="+12 % siste 3 mnd (placeholder)" />
-                <KpiCard label="ARR" value={formatMoney(company.arr)} sublabel="Årlig gjentakende inntekt (MVP-demo)" />
-                <KpiCard label="Burn rate" value={formatMoney(company.burn_rate)} sublabel="per måned (demo)" />
-                <KpiCard
-                  label="Runway"
-                  value={company.runway_months != null ? `${company.runway_months} mnd` : "—"}
-                  sublabel="Estimert levetid med dagens burn"
-                />
-                <KpiCard label="Churn" value={formatPercent(company.churn)} sublabel="Basert på MRR-churn (demo)" />
+                <KpiCard label="ARR" value={formatMoney(company.arr)} sublabel="Annual recurring revenue" />
+                <KpiCard label="MRR" value={formatMoney(company.mrr)} sublabel="Monthly recurring revenue" />
                 <KpiCard
                   label="Growth"
                   value={formatPercent(company.growth_percent)}
-                  sublabel="MRR-vekst siste 12 mnd (demo)"
+                  sublabel="MRR growth (last 12 months)"
                 />
+                <KpiCard label="Burn rate" value={formatMoney(company.burn_rate)} sublabel="Monthly burn" />
+                <KpiCard
+                  label="Runway"
+                  value={company.runway_months != null ? `${company.runway_months} months` : "—"}
+                  sublabel="Estimated runway at current burn"
+                />
+                <KpiCard label="Churn" value={formatPercent(company.churn)} sublabel="MRR churn rate" />
               </div>
             </section>
           )}
 
-          {/* AI INSIGHTS */}
-          <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-medium text-slate-200">AI insights</h2>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500">Powered by Valyxo Agent</span>
-
-                {company?.id && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => runAgent(company.id)}
-                      className="text-xs px-3 py-1 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-60"
-                      disabled={runningAgent || loadingInsights}
-                    >
-                      {runningAgent ? "Kjører…" : "Run agent"}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => loadInsights(company.id)}
-                      className="text-xs px-3 py-1 rounded-md bg-white/10 hover:bg-white/20 text-slate-50 disabled:opacity-60"
-                      disabled={loadingInsights || runningAgent}
-                    >
-                      {loadingInsights ? "Laster…" : "Refresh"}
-                    </button>
-                  </>
-                )}
+          {/* CHARTS SECTION */}
+          {company && (
+            <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl space-y-6">
+              <div>
+                <h2 className="text-sm font-medium text-slate-200">Trends</h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Revenue and burn metrics over time
+                </p>
               </div>
+
+              <div className="space-y-6">
+                {/* ARR Chart - First */}
+                <ArrChart />
+
+                {/* MRR Chart - Second */}
+                <MrrChart />
+
+                {/* Burn/Runway Chart - Third */}
+                <BurnChart />
+              </div>
+            </section>
+          )}
+
+          {/* AI INSIGHTS - Premium "wow" card */}
+          <section className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/80 to-slate-950/60 p-8 shadow-xl space-y-4">
+            <div className="flex items-start justify-between">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-semibold text-slate-100">AI Insights</h2>
+                  <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide bg-[#2B74FF]/10 text-[#2B74FF] border border-[#2B74FF]/20">
+                    Generated by Valyxo Agent
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Automated analysis of your key metrics and trends
+                </p>
+              </div>
+
+              {company?.id && !runningAgent && !loadingInsights && insights.length === 0 && (
+                <Button
+                  size="sm"
+                  onClick={() => runAgent(company.id)}
+                  className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white"
+                >
+                  Run Valyxo Agent
+                </Button>
+              )}
             </div>
 
             {(loadingInsights || runningAgent) && (
-              <p className="text-xs text-slate-400">
-                {runningAgent ? "Agenten jobber… :)" : "Analyserer data…"}
-              </p>
+              <div className="flex items-center gap-2 py-4">
+                <div className="h-4 w-4 border-2 border-[#2B74FF] border-t-transparent rounded-full animate-spin" />
+                <p className="text-sm text-slate-400">
+                  {runningAgent ? "Agent running…" : "Analyzing data…"}
+                </p>
+              </div>
             )}
 
             {agentError && !runningAgent && (
-              <p className="text-xs text-red-400">Agent-feil: {agentError}</p>
+              <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3">
+                <p className="text-sm text-red-300">Agent error: {agentError}</p>
+              </div>
             )}
 
             {!loadingInsights && !runningAgent && insights.length === 0 && (
-              <p className="text-xs text-slate-500">Ingen insights ennå.</p>
+              <div className="py-8 text-center space-y-3">
+                <p className="text-sm text-slate-400">No insights yet.</p>
+                {company?.id && (
+                  <Button
+                    size="sm"
+                    onClick={() => runAgent(company.id)}
+                    variant="outline"
+                    className="border-slate-700 text-slate-200 bg-slate-800/40 hover:bg-slate-700/50"
+                  >
+                    Run Valyxo Agent
+                  </Button>
+                )}
+              </div>
             )}
 
-            <ul className="space-y-2">
-              {insights.map((insight, i) => (
-                <li key={i} className="text-sm text-slate-300 bg-black/20 rounded-md px-3 py-2">
-                  • {insight}
-                </li>
-              ))}
-            </ul>
+            {insights.length > 0 && (
+              <div className="space-y-3">
+                <ul className="space-y-2.5">
+                  {insights.map((insight, i) => (
+                    <li key={i} className="text-sm text-slate-200 leading-relaxed pl-4 border-l-2 border-[#2B74FF]/30">
+                      {insight}
+                    </li>
+                  ))}
+                </ul>
+                <div className="pt-2 border-t border-slate-800">
+                  <p className="text-xs text-slate-500">
+                    Last updated · Powered by Valyxo Agent ·{" "}
+                    {insightsGeneratedAt ? (
+                      new Date(insightsGeneratedAt).toLocaleString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit"
+                      })
+                    ) : (
+                      "—"
+                    )}
+                  </p>
+                </div>
+              </div>
+            )}
           </section>
 
-          {/* AGENT ACTIVITY / LOGS */}
-          <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 space-y-3">
+          {/* AGENT ACTIVITY / LOGS - System level, moved lower */}
+          <section className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-5 space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-medium text-slate-200">Agent activity</h2>
+              <div>
+                <h2 className="text-xs font-medium text-slate-400 uppercase tracking-wide">Agent Activity</h2>
+                <p className="text-xs text-slate-500 mt-0.5">System logs and execution history</p>
+              </div>
 
               {company?.id && (
                 <button
                   type="button"
                   onClick={() => loadAgentLogs(company.id)}
-                  className="text-xs px-3 py-1 rounded-md bg-white/10 hover:bg-white/20 text-slate-50 disabled:opacity-60"
+                  className="text-xs px-2.5 py-1 rounded-md bg-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-300 disabled:opacity-60"
                   disabled={loadingLogs}
                 >
-                  {loadingLogs ? "Laster…" : "Refresh"}
+                  {loadingLogs ? "Loading…" : "Refresh"}
                 </button>
               )}
             </div>
 
-            {loadingLogs && <p className="text-xs text-slate-400">Henter logs…</p>}
+            {loadingLogs && <p className="text-xs text-slate-500">Loading logs…</p>}
 
             {!loadingLogs && agentLogs.length === 0 && (
-              <p className="text-xs text-slate-500">Ingen logs ennå.</p>
+              <p className="text-xs text-slate-500">No logs yet.</p>
             )}
 
-            <ul className="space-y-2">
-              {agentLogs.slice(0, 12).map((log) => {
-                const step = log.step ?? log.tool_name ?? "unknown_step";
-                const status = log.status ?? "UNKNOWN";
-                const key = log.id ?? `${log.created_at ?? ""}-${step}-${status}`;
-                return (
-                  <li
-                    key={key}
-                    className="text-xs text-slate-300 bg-black/20 rounded-md px-3 py-2"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-medium">
-                        {step} · {status}
-                      </span>
-                      <span className="text-slate-500">
-                        {log.created_at ? new Date(log.created_at).toLocaleString("nb-NO") : ""}
-                      </span>
-                    </div>
+            {agentLogs.length > 0 && (
+              <ul className="space-y-1.5 max-h-48 overflow-y-auto">
+                {agentLogs.slice(0, 8).map((log) => {
+                  const step = log.step ?? log.tool_name ?? "unknown_step";
+                  const status = log.status ?? "UNKNOWN";
+                  const key = log.id ?? `${log.created_at ?? ""}-${step}-${status}`;
+                  return (
+                    <li
+                      key={key}
+                      className="text-xs text-slate-400 bg-black/10 rounded px-2.5 py-1.5 font-mono"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-slate-300">
+                          {step} <span className="text-slate-500">·</span> <span className="text-slate-400">{status}</span>
+                        </span>
+                        <span className="text-slate-600 text-[10px]">
+                          {log.created_at ? new Date(log.created_at).toLocaleString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit"
+                          }) : ""}
+                        </span>
+                      </div>
 
-                    {log.error && (
-                      <p className="mt-1 text-red-300 break-words">Error: {log.error}</p>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+                      {log.error && (
+                        <p className="mt-1 text-red-400/80 break-words text-[10px]">Error: {log.error}</p>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </section>
 
-          {/* DELBAR LENKE + OPPDATER KPI */}
+          {/* Investor Access Link + Update KPIs */}
           <section className="grid gap-4 md:grid-cols-[2fr,1fr]">
-            {/* Delbar investor-lenke */}
-            <div className="rounded-2xl border border-slate-800 bg-[#13171E] p-6 space-y-4">
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="text-sm font-medium text-slate-200">Delbar investor-lenke</h2>
-                <span className="rounded-full bg-slate-900 px-3 py-1 text-xs text-slate-400">
-                  Bare for godkjente forespørsler
-                </span>
+            {/* Shareable investor link */}
+            <div className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-5 space-y-3">
+              <div>
+                <h2 className="text-xs font-medium text-slate-300">Investor Access Link</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Private link to share with approved investors
+                </p>
               </div>
 
-              <p className="text-xs text-slate-500">
-                Godkjenn en forespørsel under, så genererer systemet en privat investor-lenke som du kan dele med investorer.
-              </p>
-
               {investorUrl ? (
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <code className="text-xs sm:text-sm text-slate-300 bg-black/30 px-3 py-2 rounded-md break-all">
-                    {investorUrl}
-                  </code>
-                  <button
-                    type="button"
-                    onClick={copyLink}
-                    className="inline-flex items-center justify-center px-4 py-2 text-xs sm:text-sm rounded-md bg-white/10 hover:bg-white/20 text-slate-50"
-                  >
-                    Kopier lenke
-                  </button>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs text-slate-300 bg-black/30 px-3 py-2 rounded border border-slate-800 font-mono break-all">
+                      {investorUrl}
+                    </code>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={copyLink}
+                      className="border-slate-700 text-slate-200 bg-slate-800/40 hover:bg-slate-700/50 shrink-0"
+                    >
+                      Copy
+                    </Button>
+                  </div>
+                  {latestLink?.expires_at && (
+                    <p className="text-xs text-slate-500">
+                      Link expires {new Date(latestLink.expires_at).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric"
+                      })}
+                    </p>
+                  )}
                 </div>
               ) : (
                 <p className="text-sm text-slate-400">
-                  Ingen investor-lenke ennå. Når du godkjenner en forespørsel nederst på siden, vises lenken her automatisk.
+                  Approve a request below to generate an investor link.
                 </p>
               )}
             </div>
 
-            {/* Oppdater KPI-er */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-3">
-              <h2 className="text-sm font-medium text-slate-200">Oppdater KPI-er</h2>
-              <p className="text-xs text-slate-400">
-                I MVP-en legger dere inn KPI-er manuelt. Senere kobles dette mot Tripletex, Fiken, Pipedrive osv.
-              </p>
-              <Button type="button" className="w-full" onClick={openUpdateKpiModal}>
-                Oppdater KPI-er
+            {/* Update KPIs */}
+            <div className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-5 space-y-3">
+              <div>
+                <h2 className="text-xs font-medium text-slate-300">Update KPIs</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Manual entry (MVP)
+                </p>
+              </div>
+              <Button 
+                type="button" 
+                variant="outline"
+                className="w-full border-slate-700 text-slate-200 bg-slate-800/40 hover:bg-slate-700/50" 
+                onClick={openUpdateKpiModal}
+              >
+                Update KPIs
               </Button>
             </div>
           </section>
 
-          {/* Integrasjoner */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Integrasjoner</h2>
+          {/* Data Sources */}
+          <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 space-y-4">
+            <div>
+              <h2 className="text-sm font-medium text-slate-200">Data Sources</h2>
+              <p className="text-xs text-slate-500 mt-1">
+                Automatically keeps your metrics up to date.
+              </p>
+            </div>
+
+            <div className="space-y-0 divide-y divide-slate-800/50">
+              {DATA_SOURCES.map((source) => (
+                <div
+                  key={source.id}
+                  className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
+                >
+                  <div className="flex items-center gap-4 flex-1">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-100">{source.name}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{source.category}</p>
+                    </div>
+                  </div>
+                  <div className="flex-shrink-0">
+                    {source.status === "connected" ? (
+                      <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-[#2B74FF]/10 text-[#2B74FF] border border-[#2B74FF]/20">
+                        Connected
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-slate-800/60 text-slate-400 border border-slate-700/50">
+                        Coming soon
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-2">
               <Link href="/integration">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="border-slate-600 text-slate-100 bg-transparent hover:bg-slate-800/60"
+                  className="w-full border-slate-700 text-slate-200 bg-slate-800/40 hover:bg-slate-700/50"
                 >
-                  Åpne full integrasjonsside
+                  Manage data sources
                 </Button>
               </Link>
             </div>
-
-            <div className="grid gap-3 md:grid-cols-2">
-              {INTEGRATIONS.map((int) => (
-                <div
-                  key={int.id}
-                  className="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3 flex items-center justify-between gap-3"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-slate-100">{int.name}</p>
-                    <p className="text-xs text-slate-400">{int.category}</p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      Status: <span className="font-medium text-slate-200">{int.status}</span>
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    asChild
-                    className="border-slate-700 text-slate-200 bg-slate-800/40 hover:bg-slate-700/50"
-                  >
-                    <Link href="/integration">Administrer</Link>
-                  </Button>
-                </div>
-              ))}
-            </div>
           </section>
 
-          {/* Forespørsler */}
-          <section className="space-y-4">
-            <h2 className="text-lg font-semibold">Selskapets forespørsler</h2>
+          {/* Investor Access */}
+          <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 space-y-4">
+            <div>
+              <h2 className="text-sm font-medium text-slate-200">Investor Access</h2>
+              <p className="text-xs text-slate-500 mt-1">
+                Approve access requests to generate private investor links.
+              </p>
+            </div>
 
             {visibleRequests.length === 0 && (
-              <p className="text-sm text-slate-500">Ingen forespørsler som venter på behandling.</p>
+              <p className="text-sm text-slate-400">No pending access requests.</p>
             )}
 
-            <div className="space-y-3">
-              {visibleRequests.map((req) => (
-                <div key={req.id} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-                  <h3 className="text-sm font-semibold text-slate-100">{req.investor_name}</h3>
-                  <p className="text-xs text-slate-400">
-                    {req.investor_email} {req.investor_company && `· ${req.investor_company}`}
-                  </p>
-
-                  {req.message && <p className="mt-2 text-sm text-slate-200 italic">“{req.message}”</p>}
-
-                  <p className="mt-2 text-xs text-slate-500">
-                    Forespurt tilgang til{" "}
-                    <span className="font-medium">{req.companies?.name ?? "ukjent selskap"}</span>
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    Status: <span className="font-semibold">{req.status}</span>
-                  </p>
-
-                  {req.link && (
-                    <p className="mt-2 text-xs text-emerald-400 break-all">
-                      Tilgangslenke: {`${baseUrl}/investor/${req.link.access_token}`}
-                      <br />
-                      (Utgår: {new Date(req.link.expires_at).toLocaleDateString("nb-NO")})
-                    </p>
-                  )}
-
-                  <RequestActions req={req} onUpdated={loadData} />
-                </div>
-              ))}
-            </div>
+            {visibleRequests.length > 0 && (
+              <div className="space-y-0 divide-y divide-slate-800/50">
+                {visibleRequests.map((req) => (
+                  <div key={req.id} className="py-3 first:pt-0 last:pb-0">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-100">{req.investor_name}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {req.investor_email}
+                          {req.investor_company && ` · ${req.investor_company}`}
+                        </p>
+                        {req.message && (
+                          <p className="text-xs text-slate-300 mt-1.5 italic">"{req.message}"</p>
+                        )}
+                        {req.status === "approved" && req.link && (
+                          <p className="text-xs text-slate-500 mt-2">
+                            Link expires {new Date(req.link.expires_at).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric"
+                            })}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex-shrink-0 flex items-center gap-2">
+                        {req.status === "approved" ? (
+                          <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                            Approved
+                          </span>
+                        ) : (
+                          <RequestActions req={req} onUpdated={loadData} />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
         </div>
       </main>
@@ -767,49 +954,49 @@ export default function CompanyDashboard() {
       <Dialog open={kpiDialogOpen} onOpenChange={setKpiDialogOpen}>
         <DialogContent className="bg-slate-950 border-slate-800 text-slate-50">
           <DialogHeader>
-            <DialogTitle>Oppdater KPI-er</DialogTitle>
+            <DialogTitle>Update KPIs</DialogTitle>
             <DialogDescription className="text-slate-400">
-              Legg inn oppdaterte tall for selskapet. Disse tallene vises både i ditt dashboard og i investorvisningen.
+              Enter updated numbers for your company. These values appear in both your dashboard and the investor view.
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4">
             <div className="space-y-1">
-              <label className="text-xs text-slate-400">MRR (kr)</label>
+              <label className="text-xs text-slate-400">MRR ($)</label>
               <Input
                 value={kpiForm.mrr}
                 onChange={(e) => setKpiForm((f) => ({ ...f, mrr: e.target.value }))}
-                placeholder="f.eks. 200000"
+                placeholder="e.g. 200000"
                 className="bg-slate-900 border-slate-700"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs text-slate-400">ARR (kr)</label>
+              <label className="text-xs text-slate-400">ARR ($)</label>
               <Input
                 value={kpiForm.arr}
                 onChange={(e) => setKpiForm((f) => ({ ...f, arr: e.target.value }))}
-                placeholder="f.eks. 2400000"
+                placeholder="e.g. 2400000"
                 className="bg-slate-900 border-slate-700"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs text-slate-400">Burn rate (kr / mnd)</label>
+              <label className="text-xs text-slate-400">Burn rate ($ / month)</label>
               <Input
                 value={kpiForm.burn_rate}
                 onChange={(e) => setKpiForm((f) => ({ ...f, burn_rate: e.target.value }))}
-                placeholder="f.eks. 150000"
+                placeholder="e.g. 150000"
                 className="bg-slate-900 border-slate-700"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs text-slate-400">Runway (måneder)</label>
+              <label className="text-xs text-slate-400">Runway (months)</label>
               <Input
                 value={kpiForm.runway_months}
                 onChange={(e) => setKpiForm((f) => ({ ...f, runway_months: e.target.value }))}
-                placeholder="f.eks. 14"
+                placeholder="e.g. 14"
                 className="bg-slate-900 border-slate-700"
               />
             </div>
@@ -819,7 +1006,7 @@ export default function CompanyDashboard() {
               <Input
                 value={kpiForm.churn}
                 onChange={(e) => setKpiForm((f) => ({ ...f, churn: e.target.value }))}
-                placeholder="f.eks. 3.2"
+                placeholder="e.g. 3.2"
                 className="bg-slate-900 border-slate-700"
               />
             </div>
@@ -829,7 +1016,7 @@ export default function CompanyDashboard() {
               <Input
                 value={kpiForm.growth_percent}
                 onChange={(e) => setKpiForm((f) => ({ ...f, growth_percent: e.target.value }))}
-                placeholder="f.eks. 12"
+                placeholder="e.g. 12"
                 className="bg-slate-900 border-slate-700"
               />
             </div>
@@ -842,14 +1029,14 @@ export default function CompanyDashboard() {
               onClick={() => setKpiDialogOpen(false)}
               disabled={savingKpi}
             >
-              Avbryt
+              Cancel
             </Button>
             <Button
               onClick={handleSaveKpi}
               disabled={savingKpi}
               className="bg-emerald-600 hover:bg-emerald-500"
             >
-              {savingKpi ? "Lagrer..." : "Lagre KPI-er"}
+              {savingKpi ? "Saving..." : "Save KPIs"}
             </Button>
           </DialogFooter>
         </DialogContent>

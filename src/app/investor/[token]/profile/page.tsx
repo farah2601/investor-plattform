@@ -70,7 +70,7 @@ function formatDateLabel(dateString?: string | null): string {
   if (!dateString) return "Unknown";
   const d = new Date(dateString);
   if (Number.isNaN(d.getTime())) return "Unknown";
-  return d.toLocaleString("nb-NO", {
+  return d.toLocaleString("en-US", {
     year: "numeric",
     month: "short",
     day: "2-digit",
@@ -508,11 +508,18 @@ export default function InvestorCompanyProfilePage() {
               </ul>
             ) : (
               <p className="text-sm text-slate-400 italic">
-                Insights oppdateres automatisk når agenten skriver `latest_insights` i databasen.
+                Insights are automatically updated when the agent writes `latest_insights` to the database.
               </p>
             )}
           </Card>
         </div>
+        
+        {/* Footer */}
+        <footer className="pt-8 pb-10 border-t border-slate-800">
+          <p className="text-xs text-slate-500 text-center">
+            Updated automatically by Valyxo Agent
+          </p>
+        </footer>
       </main>
     </div>
   );

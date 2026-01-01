@@ -18,11 +18,14 @@ type Company = {
   status?: string | null;
   profile_status?: string | null;
   created_at?: string | null;
+  last_agent_run_at?: string | null;
+  last_agent_run_by?: string | null;
 };
 
 type AccessRequest = {
   id: string;
   investor_name?: string | null;
+  investor_email?: string | null;
   status?: string | null;
   company_id: string | null;
   created_at?: string | null;
