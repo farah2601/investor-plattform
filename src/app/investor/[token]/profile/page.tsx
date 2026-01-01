@@ -23,6 +23,7 @@ type CompanyRow = {
   name: string | null;
 
   industry: string | null;
+  stage: string | null;
   growth_status: string | null;
 
   description: string | null;
@@ -128,6 +129,60 @@ export default function InvestorCompanyProfilePage() {
         setCompany(null);
         setLinkMeta(null);
 
+        // Demo mode - show demo data
+        if (token === "demo") {
+          const demoCompany: CompanyRow = {
+            id: "demo-company",
+            name: "Acme SaaS",
+            industry: "SaaS",
+            stage: "Series A",
+            growth_status: "High Growth",
+            description: "AI-powered workflow automation for enterprise teams.",
+            problem: "Enterprise teams waste 15+ hours per week on manual, repetitive tasks that could be automated.",
+            solution: "Acme SaaS uses AI to identify and automate workflows, reducing manual work by 80% while maintaining quality.",
+            why_now: "Recent advances in LLMs make workflow automation reliable enough for enterprise use. Teams are ready to adopt.",
+            market: "Global enterprise workflow automation market is $8.2B and growing 23% YoY. Target addressable market: $2.1B.",
+            product_details: "Platform connects to 200+ tools (Slack, Jira, Salesforce, etc.) and uses AI to learn team patterns, then suggests and executes automations. Self-service setup in under 10 minutes.",
+            website: "acmesaas.com",
+            website_url: "https://acmesaas.com",
+            linkedin_url: null,
+            linkedin_urls: [],
+            team: [
+              {
+                name: "Sarah Chen",
+                role: "CEO & Co-founder",
+                experience: "Former VP Product at Stripe. Built payment infrastructure for 100K+ merchants.",
+              },
+              {
+                name: "Marcus Johnson",
+                role: "CTO & Co-founder",
+                experience: "Ex-Google AI researcher. Led ML teams building production AI systems.",
+              },
+            ],
+            profile_published: true,
+            created_at: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 year ago
+            profile_generated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
+            profile_generated_by: "Valyxo Agent",
+            last_agent_run_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+            last_agent_rum_by: "Valyxo Agent",
+            latest_insights: [
+              "MRR growth accelerated to 12% MoM in Q4, driven by enterprise expansion deals.",
+              "Burn efficiency improved 15% as the team scaled revenue faster than headcount.",
+              "Runway extended to 18 months following Series A close. Cash position strong.",
+            ],
+            latest_insights_generated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+            latest_insights_generated_by: "Valyxo Agent",
+          };
+
+          setCompany(demoCompany);
+          setLinkMeta({
+            expires_at: null,
+            company_id: "demo-company",
+          });
+          setLoading(false);
+          return;
+        }
+
         // 1) investor_links -> company_id
         const { data: linkRow, error: linkError } = await supabase
           .from("investor_links")
@@ -179,6 +234,7 @@ export default function InvestorCompanyProfilePage() {
               "id",
               "name",
               "industry",
+              "stage",
               "growth_status",
               "description",
               "problem",
