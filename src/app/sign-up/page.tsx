@@ -6,7 +6,7 @@ import { supabase } from "../lib/supabaseClient";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 
-export default function LoginPage() {
+export default function SignUpPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -14,70 +14,57 @@ export default function LoginPage() {
   const [form, setForm] = useState({
     email: "",
     password: "",
+    confirmPassword: "",
   });
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    // Validate passwords match
+    if (form.password !== form.confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+
+    // Validate password length
+    if (form.password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return;
+    }
+
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    // Sign up user
+    const { error: signUpError } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
     });
 
     setLoading(false);
 
-    if (error) {
-      setError(error.message);
+    if (signUpError) {
+      setError(signUpError.message);
       return;
     }
 
-    // After successful login, use same routing logic as post-auth:
-    // - No company → /onboarding
-    // - Company but profile_published = false → /company-profile
-    // - Company and profile_published = true → /company-dashboard
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      router.push("/login");
-      return;
-    }
-
-    const { data: company } = await supabase
-      .from("companies")
-      .select("id, profile_published")
-      .eq("owner_id", user.id)
-      .maybeSingle();
-
-    if (!company?.id) {
-      router.push("/onboarding");
-      return;
-    }
-
-    if (company.profile_published === false) {
-      router.push("/company-profile");
-      return;
-    }
-
-    router.push("/company-dashboard");
+    // After successful sign-up, redirect to onboarding
+    router.push("/onboarding");
   }
 
   return (
     <main className="min-h-screen bg-[#050712] text-slate-50 flex items-center justify-center px-4">
       <div className="w-full max-w-sm bg-[#0B0E17] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
         <header className="space-y-1">
-          <h1 className="text-2xl font-bold">Logg inn</h1>
+          <h1 className="text-2xl font-bold">Sign up</h1>
           <p className="text-sm text-slate-400">
-            Skriv inn e-post og passord for å åpne dashboardet.
+            Create an account to get started with Valyxo.
           </p>
         </header>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <label className="text-xs text-slate-400">E-post</label>
+            <label className="text-xs text-slate-400">Email</label>
             <Input
               type="email"
               required
@@ -90,7 +77,7 @@ export default function LoginPage() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs text-slate-400">Passord</label>
+            <label className="text-xs text-slate-400">Password</label>
             <Input
               type="password"
               required
@@ -98,6 +85,19 @@ export default function LoginPage() {
               value={form.password}
               onChange={(e) =>
                 setForm((f) => ({ ...f, password: e.target.value }))
+              }
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs text-slate-400">Confirm Password</label>
+            <Input
+              type="password"
+              required
+              className="bg-slate-900 border-slate-700"
+              value={form.confirmPassword}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, confirmPassword: e.target.value }))
               }
             />
           </div>
@@ -110,18 +110,21 @@ export default function LoginPage() {
 
           <Button
             type="submit"
-            className="w-full bg-emerald-600 hover:bg-emerald-500"
+            className="w-full bg-[#2B74FF] hover:bg-[#2B74FF]/90"
             disabled={loading}
           >
-            {loading ? "Logger inn..." : "Logg inn"}
+            {loading ? "Creating account..." : "Sign up"}
           </Button>
         </form>
 
-        <p className="text-[11px] text-slate-500">
-          (MVP: Bruker opprettes manuelt i Supabase under{" "}
-          <b>Auth → Users</b>.)
+        <p className="text-xs text-slate-500 text-center">
+          Already have an account?{" "}
+          <a href="/login" className="text-[#2B74FF] hover:underline">
+            Sign in
+          </a>
         </p>
       </div>
     </main>
   );
 }
+

@@ -1,5 +1,6 @@
 // src/app/page.tsx
 import { ValyxoLogo } from "../components/brand/ValyxoLogo";
+import Link from "next/link";
 
 
 export default function LandingPage() {
@@ -24,17 +25,23 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Auth buttons */}
-          <div className="flex items-center gap-4 text-sm">
+          {/* Nav links + Auth buttons */}
+          <div className="flex items-center gap-6 text-sm">
+            <a
+              href="/companies"
+              className="text-slate-200 hover:text-slate-50 transition-colors"
+            >
+              Companies
+            </a>
             <a
               href="/login"
-              className="text-slate-200 hover:text-slate-50"
+              className="text-slate-200 hover:text-slate-50 transition-colors"
             >
               Sign in
             </a>
             <a
-              href="/onboarding"
-              className="inline-flex items-center rounded-lg bg-[#2B74FF] px-4 py-2 text-sm font-medium text-white hover:bg-[#2B74FF]/90"
+              href="/sign-up"
+              className="inline-flex items-center rounded-lg bg-[#2B74FF] px-4 py-2 text-sm font-medium text-white hover:bg-[#2B74FF]/90 transition-colors"
             >
               Get Started
             </a>
@@ -70,7 +77,7 @@ export default function LandingPage() {
             {/* CTAs */}
             <div className="flex flex-col items-center justify-center gap-4 sm:flex-row sm:gap-4">
               <a
-                href="/onboarding"
+                href="/sign-up"
                 className="inline-flex items-center justify-center rounded-lg bg-[#2B74FF] px-6 py-3 text-sm font-medium text-white hover:bg-[#2B74FF]/90 transition-colors"
               >
                 Get Started

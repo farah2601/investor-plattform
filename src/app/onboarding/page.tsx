@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { supabase } from "../../app/lib/supabaseClient";
@@ -13,7 +13,17 @@ import { X, ArrowLeft } from "lucide-react";
 
 type Step = 1 | 2 | 3;
 
-const industries = ["SaaS", "Fintech", "Healthtech", "E-commerce", "Marketplace", "AI/ML", "Climate", "Other"] as const;
+const industries = [
+  "SaaS",
+  "Fintech",
+  "Healthtech",
+  "E-commerce",
+  "Marketplace",
+  "AI/ML",
+  "Climate",
+  "Other",
+] as const;
+
 const stages = ["Pre-seed", "Seed", "Series A", "Series B+"] as const;
 
 type FormState = {
@@ -30,7 +40,6 @@ type FormState = {
   growth: string;
 };
 
-
 const primaryCta =
   "h-12 w-full rounded-xl bg-[#2B74FF] text-white font-medium shadow-[0_1px_0_rgba(255,255,255,0.08)_inset] hover:bg-[#2B74FF]/90 active:bg-[#2B74FF]/85 disabled:opacity-50 disabled:pointer-events-none";
 const secondaryCta =
@@ -42,6 +51,10 @@ export default function OnboardingPage() {
   const [step, setStep] = useState<Step>(1);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [checkingAccess, setCheckingAccess] = useState(true);
+
+  // ✅ vi lagrer companyId når vi har opprettet company i steg 1
+  const [companyId, setCompanyId] = useState<string | null>(null);
 
   const [form, setForm] = useState<FormState>({
     companyName: "",
@@ -61,9 +74,40 @@ export default function OnboardingPage() {
     return Boolean(form.companyName.trim() && form.industry && form.stage && form.country.trim());
   }, [form.companyName, form.industry, form.stage, form.country]);
 
-  function next() {
-    if (step < 3) setStep((s) => (s + 1) as Step);
-  }
+  // ✅ Guard: Check if user already has a company on mount
+  // If they do, redirect them away from onboarding
+  useEffect(() => {
+    const checkCompany = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      const { data: company } = await supabase
+        .from("companies")
+        .select("id, profile_published")
+        .eq("owner_id", user.id)
+        .maybeSingle();
+
+      // User already has a company → redirect based on publication status
+      if (company?.id) {
+        if (company.profile_published === false) {
+          router.push("/company-profile");
+        } else {
+          router.push("/company-dashboard");
+        }
+        return;
+      }
+
+      setCheckingAccess(false);
+    };
+
+    checkCompany();
+  }, [router]);
 
   function back() {
     if (step > 1) setStep((s) => (s - 1) as Step);
@@ -73,7 +117,10 @@ export default function OnboardingPage() {
     router.push("/");
   }
 
-  async function handleFinish() {
+  // ✅ Steg 1: Opprett company i DB når de trykker "Continue"
+  async function handleContinueStep1() {
+    if (!isStep1Valid) return;
+
     setError(null);
     setIsLoading(true);
 
@@ -88,21 +135,36 @@ export default function OnboardingPage() {
       return;
     }
 
+    // Hvis company allerede er opprettet i denne sessionen, bare gå videre
+    if (companyId) {
+      setIsLoading(false);
+      setStep(2);
+      return;
+    }
+
     const payload = {
       name: form.companyName.trim(),
       industry: form.industry.trim() || null,
       website_url: form.website.trim() || null,
 
+      // NB: disse feltene kan være tomme (Step 1 skjema har ikke KPI-feltene)
       mrr: form.mrr ? Number(form.mrr.replace(/\s/g, "")) : null,
       burn_rate: form.burnRate ? Number(form.burnRate.replace(/\s/g, "")) : null,
       runway_months: form.runwayMonths ? Number(form.runwayMonths.replace(/\s/g, "")) : null,
       churn: form.churn ? Number(form.churn.replace(",", ".")) : null,
       growth_percent: form.growth ? Number(form.growth.replace(",", ".")) : null,
 
-      owner_id: user.id,
+      owner_id: user.id, // ✅ riktig
+      // (valgfritt) stage/country – hvis du har kolonner for det i DB, legg dem inn:
+      // stage: form.stage,
+      // country: form.country,
     };
 
-    const { data, error: insertError } = await supabase.from("companies").insert([payload]).select().single();
+    const { data, error: insertError } = await supabase
+      .from("companies")
+      .insert([payload])
+      .select("id")
+      .single();
 
     if (insertError) {
       console.error(insertError);
@@ -111,8 +173,24 @@ export default function OnboardingPage() {
       return;
     }
 
+    setCompanyId(data?.id ?? null);
     setIsLoading(false);
-    if (data) router.push("/company");
+    setStep(2);
+  }
+
+  // ✅ Steg 3: ferdig → gå til company-profile (edit mode)
+  // User must complete profile before accessing dashboard
+  function handleGoToDashboard() {
+    router.push("/company-profile");
+  }
+
+  // Show loading while checking if user should be here
+  if (checkingAccess) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center">
+        <p className="text-sm text-slate-400">Loading…</p>
+      </div>
+    );
   }
 
   return (
@@ -222,15 +300,16 @@ export default function OnboardingPage() {
               {error && <p className="mt-4 text-xs text-rose-400">{error}</p>}
 
               <div className="mt-8 space-y-3">
-                <Button type="button" onClick={next} disabled={!isStep1Valid} className={primaryCta}>
-                  Continue
-                </Button>
                 <Button
                   type="button"
-                  variant="outline"
-                  onClick={handleExit}
-                  className={secondaryCta}
+                  onClick={handleContinueStep1}
+                  disabled={!isStep1Valid || isLoading}
+                  className={primaryCta}
                 >
+                  {isLoading ? "Creating..." : "Continue"}
+                </Button>
+
+                <Button type="button" variant="outline" onClick={handleExit} className={secondaryCta}>
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Exit
                 </Button>
@@ -300,7 +379,7 @@ export default function OnboardingPage() {
               </div>
 
               <div className="mt-8 space-y-3">
-                <Button type="button" className={primaryCta} onClick={next}>
+                <Button type="button" className={primaryCta} onClick={() => setStep(3)}>
                   Continue with Manual KPI
                 </Button>
 
@@ -314,37 +393,29 @@ export default function OnboardingPage() {
 
           {step === 3 && (
             <div className="rounded-2xl border border-slate-800 bg-slate-950/30 shadow-[0_0_0_1px_rgba(30,41,59,0.35)_inset] p-6 text-center">
-              {isLoading ? (
-                <div className="space-y-6">
-                  <div className="w-16 h-16 mx-auto rounded-2xl bg-[#2B74FF]/10 flex items-center justify-center border border-[#2B74FF]/20">
-                    <div className="w-8 h-8 border-2 border-[#2B74FF] border-t-transparent rounded-full animate-spin" />
-                  </div>
-
-                  <div className="space-y-2">
-                    <h1 className="text-2xl font-semibold text-slate-50">Preparing your view</h1>
-                    <p className="text-slate-400">Setting up your investor dashboard...</p>
-                  </div>
+              <div className="space-y-6">
+                <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
+                  <svg className="w-8 h-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
                 </div>
-              ) : (
-                <div className="space-y-6">
-                  <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
-                    <svg className="w-8 h-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
 
-                  <div className="space-y-2">
-                    <h1 className="text-2xl font-semibold text-slate-50">You're all set</h1>
-                    <p className="text-slate-400">Your investor view is ready</p>
-                  </div>
-
-                  {error && <p className="text-xs text-rose-400">{error}</p>}
-
-                  <Button type="button" className={primaryCta} onClick={handleFinish} disabled={isLoading}>
-                    Go to Dashboard
-                  </Button>
+                <div className="space-y-2">
+                  <h1 className="text-2xl font-semibold text-slate-50">You're all set</h1>
+                  <p className="text-slate-400">Your investor view is ready</p>
                 </div>
-              )}
+
+                {error && <p className="text-xs text-rose-400">{error}</p>}
+
+                <Button type="button" className={primaryCta} onClick={handleGoToDashboard}>
+                  Go to Dashboard
+                </Button>
+
+                <Button type="button" variant="outline" className={secondaryCta} onClick={back}>
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back
+                </Button>
+              </div>
             </div>
           )}
         </div>
