@@ -28,7 +28,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Investor link expired" }, { status: 401 });
   }
 
-  // 3) companyId: bruk company_id hvis den finnes, ellers fallback via access_requests
+  // 3) companyId: use company_id if it exists, otherwise fallback via access_requests
   let companyId = linkRow.company_id as string | null;
 
   if (!companyId && linkRow.request_id) {
@@ -52,7 +52,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "No company attached to this investor link" }, { status: 500 });
   }
 
-  // 4) Hent company (inkl agent metadata)
+  // 4) Fetch company (including agent metadata)
   const { data: companyRow, error: companyError } = await supabaseAdmin
     .from("companies")
     .select(`

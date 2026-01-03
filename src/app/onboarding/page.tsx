@@ -53,7 +53,7 @@ export default function OnboardingPage() {
   const [error, setError] = useState<string | null>(null);
   const [checkingAccess, setCheckingAccess] = useState(true);
 
-  // ✅ vi lagrer companyId når vi har opprettet company i steg 1
+  // ✅ we save companyId when we have created company in step 1
   const [companyId, setCompanyId] = useState<string | null>(null);
 
   const [form, setForm] = useState<FormState>({
@@ -135,7 +135,7 @@ export default function OnboardingPage() {
       return;
     }
 
-    // Hvis company allerede er opprettet i denne sessionen, bare gå videre
+    // If company already created in this session, just continue
     if (companyId) {
       setIsLoading(false);
       setStep(2);
@@ -155,7 +155,7 @@ export default function OnboardingPage() {
       growth_percent: form.growth ? Number(form.growth.replace(",", ".")) : null,
 
       owner_id: user.id, // ✅ riktig
-      // (valgfritt) stage/country – hvis du har kolonner for det i DB, legg dem inn:
+      // (optional) stage/country – if you have columns for this in DB, add them:
       // stage: form.stage,
       // country: form.country,
     };
@@ -178,10 +178,9 @@ export default function OnboardingPage() {
     setStep(2);
   }
 
-  // ✅ Steg 3: ferdig → gå til company-profile (edit mode)
-  // User must complete profile before accessing dashboard
+  // ✅ Step 3: done → go to company-dashboard
   function handleGoToDashboard() {
-    router.push("/company-profile");
+    router.push("/company-dashboard");
   }
 
   // Show loading while checking if user should be here
@@ -198,9 +197,9 @@ export default function OnboardingPage() {
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(1200px_600px_at_20%_0%,rgba(43,116,255,0.10),transparent_55%),radial-gradient(900px_500px_at_80%_20%,rgba(43,116,255,0.06),transparent_60%)]" />
 
       <header className="relative border-b border-slate-900/70 bg-slate-950/70 backdrop-blur">
-        <div className="mx-auto max-w-5xl px-6 py-4 flex items-center justify-between">
-          <ValyxoLogo size={32} priority />
-          <div className="flex items-center gap-4">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
+          <ValyxoLogo size={32} priority className="shrink-0" />
+          <div className="flex items-center gap-3 sm:gap-4">
             <div className="flex items-center gap-2">
               {[1, 2, 3].map((s) => (
                 <div
@@ -216,7 +215,7 @@ export default function OnboardingPage() {
               variant="ghost"
               size="sm"
               onClick={handleExit}
-              className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+              className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 h-10 sm:h-9 px-3 sm:px-4"
             >
               <X className="h-4 w-4" />
             </Button>
@@ -224,16 +223,16 @@ export default function OnboardingPage() {
         </div>
       </header>
 
-      <main className="relative flex items-center justify-center px-6 py-12">
+      <main className="relative flex items-center justify-center px-4 sm:px-6 py-8 sm:py-12">
         <div className="w-full max-w-md">
           {step === 1 && (
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/30 shadow-[0_0_0_1px_rgba(30,41,59,0.35)_inset] p-6">
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/30 shadow-[0_0_0_1px_rgba(30,41,59,0.35)_inset] p-4 sm:p-6">
               <div className="space-y-2">
-                <h1 className="text-2xl font-semibold text-slate-50">Company basics</h1>
-                <p className="text-slate-400">Tell us about your company</p>
+                <h1 className="text-xl sm:text-2xl font-semibold text-slate-50">Company basics</h1>
+                <p className="text-sm text-slate-400">Tell us about your company</p>
               </div>
 
-              <div className="mt-7 space-y-5">
+              <div className="mt-6 sm:mt-7 space-y-4 sm:space-y-5">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-400">Company name</label>
                   <Input
@@ -246,6 +245,7 @@ export default function OnboardingPage() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-400">Industry</label>
+                  {/* mobile: 2 cols, tablet+: 2 cols */}
                   <div className="grid grid-cols-2 gap-2">
                     {industries.map((ind) => (
                       <button
@@ -267,6 +267,7 @@ export default function OnboardingPage() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-400">Stage</label>
+                  {/* mobile: 2 cols, tablet+: 2 cols */}
                   <div className="grid grid-cols-2 gap-2">
                     {stages.map((st) => (
                       <button
@@ -318,13 +319,13 @@ export default function OnboardingPage() {
           )}
 
           {step === 2 && (
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/30 shadow-[0_0_0_1px_rgba(30,41,59,0.35)_inset] p-6">
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/30 shadow-[0_0_0_1px_rgba(30,41,59,0.35)_inset] p-4 sm:p-6">
               <div className="space-y-2">
-                <h1 className="text-2xl font-semibold text-slate-50">Connect data</h1>
-                <p className="text-slate-400">Link your data sources</p>
+                <h1 className="text-xl sm:text-2xl font-semibold text-slate-50">Connect data</h1>
+                <p className="text-sm text-slate-400">Link your data sources</p>
               </div>
 
-              <div className="mt-7 space-y-3">
+              <div className="mt-6 sm:mt-7 space-y-3">
                 <div className="flex items-center justify-between p-4 bg-slate-950/40 rounded-xl border border-slate-800">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-slate-900/60 rounded-lg flex items-center justify-center border border-slate-800">
@@ -392,17 +393,17 @@ export default function OnboardingPage() {
           )}
 
           {step === 3 && (
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/30 shadow-[0_0_0_1px_rgba(30,41,59,0.35)_inset] p-6 text-center">
-              <div className="space-y-6">
-                <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
-                  <svg className="w-8 h-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/30 shadow-[0_0_0_1px_rgba(30,41,59,0.35)_inset] p-4 sm:p-6 text-center">
+              <div className="space-y-4 sm:space-y-6">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 mx-auto rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
+                  <svg className="w-7 h-7 sm:w-8 sm:h-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
 
                 <div className="space-y-2">
-                  <h1 className="text-2xl font-semibold text-slate-50">You're all set</h1>
-                  <p className="text-slate-400">Your investor view is ready</p>
+                  <h1 className="text-xl sm:text-2xl font-semibold text-slate-50">You're all set</h1>
+                  <p className="text-sm text-slate-400">Your investor view is ready</p>
                 </div>
 
                 {error && <p className="text-xs text-rose-400">{error}</p>}

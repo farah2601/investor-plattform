@@ -361,10 +361,37 @@ export default function InvestorCompanyPage() {
             <div className="flex flex-col gap-6 p-6 sm:p-8">
               {/* Header row (Valyxo logo like Lovable layout) */}
               <div className="flex items-center justify-between">
-      
-                <span className="text-[11px] text-slate-500">
-                  Secure token access
-                </span>
+                {token === "demo" && (
+                  <Link
+                    href="/"
+                    className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200 transition-colors"
+                  >
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                      />
+                    </svg>
+                    Back to home
+                  </Link>
+                )}
+                {token !== "demo" && (
+                  <span className="text-[11px] text-slate-500">
+                    Secure token access
+                  </span>
+                )}
+                {token === "demo" && (
+                  <span className="text-[11px] text-slate-500">
+                    Demo view
+                  </span>
+                )}
               </div>
 
               {/* 3-column layout */}
@@ -415,7 +442,7 @@ export default function InvestorCompanyPage() {
                       href={company.website_url}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-xs text-sky-400 hover:underline"
+                      className="text-xs text-sky-400 hover:underline break-all"
                     >
                       {company.website_url.replace(/^https?:\/\//, "")}
                     </a>
@@ -515,7 +542,7 @@ export default function InvestorCompanyPage() {
                   Key metrics
                 </h2>
                 <p className="text-xs text-slate-400">
-                  Accounting-grade KPIs maintained by the Valyxo Agent (MVP placeholder).
+                  Accounting-grade KPIs maintained by the Valyxo Agent.
                 </p>
               </div>
               <p className="text-[11px] text-slate-500">

@@ -93,7 +93,7 @@ export default function AdminPage() {
             companiesError?.message ||
             requestsError?.message ||
             linksError?.message ||
-            "Kunne ikke laste admin-data fra Supabase.";
+            "Could not load admin data from Supabase.";
 
           setError(firstError);
           setState("idle");
@@ -110,7 +110,7 @@ export default function AdminPage() {
         setError(
           typeof err?.message === "string"
             ? err.message
-            : "Kunne ikke laste admin-data.",
+            : "Could not load admin data.",
         );
         setState("idle");
       }
@@ -275,11 +275,11 @@ export default function AdminPage() {
                     key={req.id}
                     className="flex items-center justify-between gap-3 px-4 py-3 text-sm hover:bg-white/5"
                   >
-                    <div className="space-y-0.5">
-                      <p className="font-medium text-slate-50">
+                    <div className="space-y-0.5 min-w-0 flex-1">
+                      <p className="font-medium text-slate-50 break-words">
                         {req.investor_name ?? "Unknown investor"}
                       </p>
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-slate-400 break-words">
                         →{" "}
                         {companyNameById.get(req.company_id ?? "") ??
                           "Unknown company"}
@@ -325,24 +325,24 @@ export default function AdminPage() {
                   key={link.id}
                   className="flex items-center justify-between gap-3 px-4 py-3 text-sm hover:bg-white/5"
                 >
-                  <div className="space-y-0.5">
-                    <div className="inline-flex items-center gap-2">
-                      <span className="rounded-md bg-slate-900 px-2 py-0.5 text-[11px] font-mono text-sky-300">
+                  <div className="space-y-0.5 min-w-0 flex-1">
+                    <div className="inline-flex items-center gap-2 flex-wrap">
+                      <span className="rounded-md bg-slate-900 px-2 py-0.5 text-[11px] font-mono text-sky-300 break-all">
                         {link.access_token.slice(0, 8)}…
                       </span>
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-slate-500 break-words">
                         {companyNameById.get(link.company_id ?? "") ??
                           "Unknown company"}
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-500">
+                    <p className="text-[11px] text-slate-500 break-words">
                       Expires:{" "}
                       {link.expires_at
-                        ? new Date(link.expires_at).toLocaleDateString("no-NO")
+                        ? new Date(link.expires_at).toLocaleDateString("en-US")
                         : "Unknown"}
                     </p>
                   </div>
-                  <span className="text-[11px] text-slate-500">12 views</span>
+                  <span className="text-[11px] text-slate-500 shrink-0">12 views</span>
                 </div>
               ))
             )}

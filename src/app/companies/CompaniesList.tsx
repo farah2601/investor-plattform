@@ -30,7 +30,7 @@ type CompaniesListProps = {
 };
 
 function growthText(status: string | null) {
-  // midlertidig mapping (bytt til ekte tall når du har growth i DB)
+  // temporary mapping (replace with real numbers when you have growth in DB)
   if (status === "up") return "+20%";
   if (status === "warning") return "+5%";
   if (status === "down") return "-5%";
@@ -44,7 +44,7 @@ function statusDotClass(status: string | null) {
 }
 
 function updatedText(status: string | null) {
-  // placeholder (erstatt med updated_at senere)
+  // placeholder (replace with updated_at later)
   if (status === "up") return "6 hours ago";
   if (status === "warning") return "3 days ago";
   if (status === "down") return "1 day ago";
@@ -142,8 +142,8 @@ export function CompaniesList({ initialCompanies }: CompaniesListProps) {
         {/* Search */}
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
-          <Input
-            type="text"
+        <Input
+          type="text"
             placeholder="Search company or industry…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -156,17 +156,17 @@ export function CompaniesList({ initialCompanies }: CompaniesListProps) {
           <Select value={selectedIndustry} onValueChange={setSelectedIndustry}>
             <SelectTrigger className="h-10 px-4 bg-white/[0.04] border border-white/[0.10] rounded-lg text-sm min-w-[160px] justify-between text-white [&[data-placeholder]]:text-white/60 [&[data-placeholder]]:opacity-100 [&_*[data-slot=select-value]]:text-white">
               <SelectValue placeholder="All industries" />
-            </SelectTrigger>
+          </SelectTrigger>
             <SelectContent className="bg-slate-950 border border-white/[0.10]">
               <SelectItem value="all" className="text-white focus:text-white focus:bg-white/10">All industries</SelectItem>
-              {industries.map((ind) => (
+            {industries.map((ind) => (
                 <SelectItem key={ind} value={ind} className="text-white focus:text-white focus:bg-white/10">
-                  {ind}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+                {ind}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
         {/* Sort */}
         <div className="relative">
@@ -184,8 +184,97 @@ export function CompaniesList({ initialCompanies }: CompaniesListProps) {
         </div>
       </div>
 
-      {/* Table (grid-cols-12 EXACT like Lovable) */}
-      <div className="border border-white/[0.10] rounded-xl overflow-hidden bg-white/[0.03]">
+      {/* Mobile: Cards Layout */}
+      <div className="md:hidden space-y-3">
+        {filteredCompanies.map((company) => {
+          const runway = company.runway_months == null ? "—" : `${company.runway_months} mo`;
+          const growth = growthText(company.growth_status);
+          const hasAccess = false; // TODO: connect to real access later
+
+          return (
+            <div
+              key={company.id}
+              className="border border-white/[0.10] rounded-xl bg-white/[0.03] p-4 space-y-3"
+            >
+              {/* Top: Avatar + Company name + Industry */}
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-[var(--valyxo)]/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <span className="text-[var(--valyxo)] font-semibold text-sm">
+                    {company.name?.[0]?.toUpperCase() ?? "C"}
+                  </span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-white truncate">{company.name}</p>
+                  <p className="text-xs text-white/40 truncate">{company.industry ?? "—"}</p>
+                </div>
+              </div>
+
+              {/* Middle: 3 KPI chips */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Runway chip */}
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/[0.05] border border-white/[0.10]">
+                  <span className="text-xs text-white/60">Runway</span>
+                  <span className="text-xs font-mono text-white">{runway}</span>
+                </div>
+
+                {/* Growth chip */}
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/[0.05] border border-white/[0.10]">
+                  <span className="text-xs text-white/60">Growth</span>
+                  <span
+                    className={cn(
+                      "text-xs font-mono",
+                      growth.startsWith("+") ? "text-emerald-400" : "text-white"
+                    )}
+                  >
+                    {growth}
+                  </span>
+                </div>
+
+                {/* Status chip */}
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/[0.05] border border-white/[0.10]">
+                  <span className={cn("w-1.5 h-1.5 rounded-full", statusDotClass(company.growth_status))} />
+                  <span className="text-xs text-white/60">Status</span>
+                </div>
+              </div>
+
+              {/* Bottom: Request access button */}
+              <div className="pt-1">
+                {hasAccess ? (
+                  <Link href="/investor" className="block">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-[var(--valyxo)] hover:text-[var(--valyxo)] hover:bg-[var(--valyxo)]/10"
+                    >
+                      Open
+                    </Button>
+                  </Link>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-white/60 border-white/[0.14] bg-transparent hover:bg-slate-950 hover:border-slate-950 hover:text-white"
+                    onClick={() => openModal(company)}
+                  >
+                    Request access
+                  </Button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Empty State Mobile */}
+        {filteredCompanies.length === 0 && (
+          <div className="px-4 py-12 text-center border border-white/[0.10] rounded-xl bg-white/[0.03]">
+            <p className="text-white/60">No companies found</p>
+            <p className="text-sm text-white/40 mt-1">Try adjusting your search or filters</p>
+          </div>
+        )}
+      </div>
+
+      {/* Desktop: Table Layout */}
+      <div className="hidden md:block border border-white/[0.10] rounded-xl overflow-hidden bg-white/[0.03]">
         {/* Table Header */}
         <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-white/[0.03] border-b border-white/[0.10] text-xs font-medium text-white/50 uppercase tracking-wider">
           <div className="col-span-4">Company</div>
@@ -200,7 +289,7 @@ export function CompaniesList({ initialCompanies }: CompaniesListProps) {
           {filteredCompanies.map((company) => {
             const runway = company.runway_months == null ? "—" : `${company.runway_months} mo`;
             const growth = growthText(company.growth_status);
-            const hasAccess = false; // TODO: koble til ekte access senere
+            const hasAccess = false; // TODO: connect to real access later
 
             return (
               <div
@@ -223,11 +312,11 @@ export function CompaniesList({ initialCompanies }: CompaniesListProps) {
                 {/* Runway */}
                 <div className="col-span-2 text-right">
                   <span className="text-sm font-mono text-white">{runway}</span>
-                </div>
+            </div>
 
                 {/* Growth */}
                 <div className="col-span-2 text-right">
-                  <span
+                <span
                     className={cn(
                       "text-sm font-mono",
                       growth.startsWith("+") ? "text-emerald-400" : "text-white"
@@ -242,8 +331,8 @@ export function CompaniesList({ initialCompanies }: CompaniesListProps) {
                   <span className={cn("w-2 h-2 rounded-full", statusDotClass(company.growth_status))} />
                   <span className="text-xs text-white/40 hidden lg:inline">
                     {updatedText(company.growth_status)}
-                  </span>
-                </div>
+                </span>
+              </div>
 
                 {/* Action */}
                 <div className="col-span-2 flex justify-end">
@@ -271,9 +360,9 @@ export function CompaniesList({ initialCompanies }: CompaniesListProps) {
               </div>
             );
           })}
-        </div>
+            </div>
 
-        {/* Empty State */}
+        {/* Empty State Desktop */}
         {filteredCompanies.length === 0 && (
           <div className="px-6 py-12 text-center">
             <p className="text-white/60">No companies found</p>

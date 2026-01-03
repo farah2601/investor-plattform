@@ -39,7 +39,7 @@ type CompanyRow = {
   // du har (minst) linkedin_url i DB
   linkedin_url: string | null;
 
-  // hvis du også har linkedin_urls (array/jsonb) i noen miljøer, håndterer vi det
+  // if you also have linkedin_urls (array/jsonb) in some environments, we handle it
   linkedin_urls?: any;
 
   team: any;
@@ -337,6 +337,33 @@ export default function InvestorCompanyProfilePage() {
         <div className="rounded-3xl bg-gradient-to-br from-sky-500/15 via-slate-900/80 to-slate-950 p-[1px]">
           <Card className="rounded-3xl bg-slate-950/80 border border-white/10">
             <div className="flex flex-col gap-6 p-6 sm:p-8">
+              {/* Header row with back button for demo */}
+              {token === "demo" && (
+                <div className="flex items-center justify-between">
+                  <Link
+                    href="/"
+                    className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200 transition-colors"
+                  >
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                      />
+                    </svg>
+                    Back to home
+                  </Link>
+                  <span className="text-[11px] text-slate-500">
+                    Demo view
+                  </span>
+                </div>
+              )}
               <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[auto,minmax(0,1fr),minmax(0,1.2fr)] lg:items-start">
                 <div className="flex items-center gap-3">
                   <Avatar className="h-12 w-12 rounded-2xl bg-slate-900">
@@ -383,7 +410,7 @@ export default function InvestorCompanyProfilePage() {
                         href={websiteUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-xs text-sky-400 hover:underline"
+                        className="text-xs text-sky-400 hover:underline break-all"
                       >
                         {websiteUrl.replace(/^https?:\/\//, "")}
                       </a>
@@ -394,7 +421,7 @@ export default function InvestorCompanyProfilePage() {
                         href={linkedin}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-xs text-sky-400 hover:underline"
+                        className="text-xs text-sky-400 hover:underline break-all"
                       >
                         LinkedIn
                       </a>
@@ -526,7 +553,7 @@ export default function InvestorCompanyProfilePage() {
                         href={m.linkedin_url}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-xs text-sky-400 hover:underline"
+                        className="text-xs text-sky-400 hover:underline break-all"
                       >
                         LinkedIn
                       </a>

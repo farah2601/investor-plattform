@@ -10,38 +10,38 @@ type Integration = {
 const integrations: Integration[] = [
   {
     title: "Tripletex",
-    category: "Regnskap",
-    description: "Hent regnskap, inntekter og kostnader automatisk.",
+    category: "Accounting",
+    description: "Fetch accounting, revenue and costs automatically.",
     status: "Not connected",
   },
   {
     title: "Fiken",
-    category: "Regnskap",
-    description: "Synk fakturaer, resultat og balanse.",
+    category: "Accounting",
+    description: "Sync invoices, results and balance.",
     status: "Not connected",
   },
   {
     title: "Pipedrive",
     category: "CRM",
-    description: "Hent pipeline, deals og salgsdata.",
+    description: "Fetch pipeline, deals and sales data.",
     status: "Not connected",
   },
   {
     title: "HubSpot",
     category: "CRM",
-    description: "Synk kunder, salg og pipeline automatisk.",
+    description: "Sync customers, sales and pipeline automatically.",
     status: "Not connected",
   },
   {
     title: "Google Sheets",
     category: "Sheets",
-    description: "Importer KPI-er direkte fra regneark.",
+    description: "Import KPIs directly from spreadsheets.",
     status: "Connected",
   },
   {
     category: "Marketing",
     title: "Excel",
-    description: "Importer KPI-er fra Excel-regneark.",
+    description: "Import KPIs from Excel spreadsheets.",
     status: "Coming soon",
   },
 ];
@@ -49,9 +49,9 @@ const integrations: Integration[] = [
 export default function IntegrationsPage() {
   function handleClick(integration: Integration) {
     if (integration.status === "Coming soon") {
-      alert("Denne integrasjonen kommer i neste versjon.");
+      alert("This integration will be available in the next version.");
     } else {
-      alert("Integrasjoner kobles til i neste versjon av plattformen.");
+      alert("Integrations will be connected in the next version of the platform.");
     }
   }
 
@@ -60,22 +60,21 @@ export default function IntegrationsPage() {
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <header className="space-y-3">
-          <h1 className="text-3xl font-bold tracking-tight">Integrasjoner</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Integrations</h1>
 
           <p className="text-slate-400 max-w-3xl text-sm">
-            Koble til regnskap, CRM og andre systemer. I denne MVP-en er alt
-            kun en forhåndsvisning – integrasjoner kobles på i neste versjon.
+            Connect accounting, CRM and other systems. Integrations will be available in the next version.
           </p>
 
           <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-            Tilgjengelige integrasjoner
+            Available integrations
           </p>
 
           {/* subtil linje + ekstra luft ned til kortene */}
           <div className="mt-6 h-px w-full bg-slate-800/80" />
         </header>
 
-        {/* Grid med integrasjoner */}
+        {/* Integrations grid */}
         <section className="mt-10 grid grid-cols-1 sm:grid-cols-2 gap-6">
           {integrations.map((item) => (
             <div
@@ -117,7 +116,7 @@ export default function IntegrationsPage() {
                   "
                 >
                   {item.status === "Connected"
-                    ? "Åpne"
+                    ? "Open"
                     : item.status === "Coming soon"
                     ? "Soon"
                     : "Connect"}

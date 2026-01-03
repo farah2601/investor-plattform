@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "nodejs"; // viktig: vi skal bruke fetch mot localhost (mcp-server)
+export const runtime = "nodejs"; // important: we need to use fetch against localhost (mcp-server)
 
 export async function POST(req: NextRequest) {
   try {

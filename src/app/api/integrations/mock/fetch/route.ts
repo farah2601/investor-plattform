@@ -3,8 +3,8 @@
 import { NextResponse } from "next/server";
 
 /**
- * Mock-integrasjon for selskapsdata.
- * Senere erstattes dette av Stripe / regnskap / CRM / etc.
+ * Mock integration for company data.
+ * Later this will be replaced by Stripe / accounting / CRM / etc.
  */
 export async function POST(req: Request) {
   const body = await req.json();
@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     );
   }
 
-  // Simuler litt variasjon per selskap
+  // Simulate some variation per company
   const seed = companyId.length;
 
   const mockData = {

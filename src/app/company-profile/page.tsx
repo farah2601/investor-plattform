@@ -299,7 +299,7 @@ export default function CompanyProfilePage() {
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-slate-950 text-slate-50">
-      <main className="mx-auto w-full max-w-5xl px-4 py-8 space-y-8 sm:px-6 lg:px-8">
+      <main className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8">
         {/* Navigation back to dashboard */}
         <div className="flex items-center gap-3">
           <Link
@@ -318,19 +318,20 @@ export default function CompanyProfilePage() {
             "bg-slate-900/40"
           )}
         >
-          <div className="p-6 sm:p-8">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="p-4 sm:p-6 lg:p-8">
+            {/* mobile: stack, desktop: side-by-side */}
+            <div className="flex flex-col gap-4 sm:gap-6 lg:flex-row lg:items-start lg:justify-between">
               {/* Left */}
-              <div className="flex items-start gap-4">
-                <Avatar className="h-12 w-12 rounded-2xl">
+              <div className="flex items-start gap-3 sm:gap-4 min-w-0">
+                <Avatar className="h-10 w-10 sm:h-12 sm:w-12 rounded-2xl shrink-0">
                   <AvatarFallback className="bg-white/10 text-slate-100">
                     {initial}
                   </AvatarFallback>
                 </Avatar>
 
-                <div className="space-y-2">
+                <div className="space-y-2 min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="text-lg font-semibold text-white sm:text-xl">
+                    <h1 className="text-lg sm:text-xl font-semibold text-white break-words">
                       {form.name || "Company name"}
                     </h1>
 
@@ -349,15 +350,16 @@ export default function CompanyProfilePage() {
                 </div>
               </div>
 
-              {/* Right */}
-              <div className="flex flex-col items-start gap-3 lg:items-end">
-                <div className="flex flex-wrap gap-2 lg:justify-end">
+              {/* Right - mobile: full width buttons, desktop: shrink */}
+              <div className="flex flex-col items-stretch sm:items-start gap-3 lg:items-end w-full sm:w-auto">
+                {/* mobile: stack buttons, desktop: row */}
+                <div className="flex flex-col sm:flex-row flex-wrap gap-2 lg:justify-end w-full sm:w-auto">
                   {/* Save changes (white button) */}
                   <Button
                     size="sm"
                     disabled={saving}
                     onClick={handleSave}
-                    className="h-9 rounded-xl bg-white text-slate-950 hover:bg-white/90 active:bg-white/85"
+                    className="h-10 sm:h-9 rounded-xl bg-white text-slate-950 hover:bg-white/90 active:bg-white/85 w-full sm:w-auto px-4"
                   >
                     {saving ? "Saving…" : "Save changes"}
                   </Button>
@@ -369,8 +371,8 @@ export default function CompanyProfilePage() {
                     disabled={saving || aiGenerating}
                     onClick={handleGenerateProfile}
                     className={cn(
-                      "h-9 rounded-xl border border-white/10 bg-white/5 text-slate-100 hover:bg-white/8",
-                      "disabled:opacity-50"
+                      "h-10 sm:h-9 rounded-xl border border-white/10 bg-white/5 text-slate-100 hover:bg-white/8",
+                      "disabled:opacity-50 w-full sm:w-auto px-4"
                     )}
                   >
                     {aiGenerating ? "Generating…" : "Generate with AI"}
@@ -382,7 +384,7 @@ export default function CompanyProfilePage() {
                     disabled={saving || company.profile_published === true}
                     onClick={handlePublish}
                     className={cn(
-                      "h-9 rounded-xl",
+                      "h-10 sm:h-9 rounded-xl w-full sm:w-auto px-4",
                       company.profile_published
                         ? "border border-white/10 bg-white/5 text-slate-200"
                         : "bg-[#2B74FF] text-white hover:bg-[#2B74FF]/90 active:bg-[#2B74FF]/85"
@@ -468,7 +470,7 @@ export default function CompanyProfilePage() {
 
         {/* ACTIVE SECTION */}
         {activeTab === "Company basics" && (
-          <Card className="mt-4 space-y-5 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
+          <Card className="mt-4 space-y-4 sm:space-y-5 rounded-2xl border border-white/10 bg-slate-900/60 p-4 sm:p-6 lg:p-8">
             <div>
               <h2 className="text-base font-semibold text-white sm:text-lg">
                 Company basics
@@ -526,7 +528,7 @@ export default function CompanyProfilePage() {
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-300">Website URL</Label>
                 <Input
-                  className="border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500"
+                  className="border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500 break-all"
                   placeholder="https://example.com"
                   value={form.website_url}
                   onChange={(e) =>
@@ -539,7 +541,7 @@ export default function CompanyProfilePage() {
         )}
 
         {activeTab === "Pitch & narrative" && (
-          <Card className="mt-4 space-y-5 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
+          <Card className="mt-4 space-y-4 sm:space-y-5 rounded-2xl border border-white/10 bg-slate-900/60 p-4 sm:p-6 lg:p-8">
             <div>
               <h2 className="text-base font-semibold text-white sm:text-lg">
                 Company narrative
@@ -576,7 +578,7 @@ export default function CompanyProfilePage() {
                 </p>
               </div>
               <Button
-                className="shrink-0 bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold"
+                className="shrink-0 bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold h-10 sm:h-11 px-4 w-full sm:w-auto"
                 disabled={saving || aiGenerating}
                 onClick={handleGenerateProfile}
               >
@@ -622,7 +624,7 @@ export default function CompanyProfilePage() {
         )}
 
         {activeTab === "Product" && (
-          <Card className="mt-4 space-y-5 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
+          <Card className="mt-4 space-y-4 sm:space-y-5 rounded-2xl border border-white/10 bg-slate-900/60 p-4 sm:p-6 lg:p-8">
             <div>
               <h2 className="text-base font-semibold text-white sm:text-lg">
                 Product
@@ -666,7 +668,7 @@ export default function CompanyProfilePage() {
         )}
 
         {activeTab === "Market & traction" && (
-          <Card className="mt-4 space-y-5 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
+          <Card className="mt-4 space-y-4 sm:space-y-5 rounded-2xl border border-white/10 bg-slate-900/60 p-4 sm:p-6 lg:p-8">
             <div>
               <h2 className="text-base font-semibold text-white sm:text-lg">
                 Market & traction
@@ -714,7 +716,7 @@ export default function CompanyProfilePage() {
         )}
 
         {activeTab === "Team" && (
-          <Card className="mt-4 space-y-5 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
+          <Card className="mt-4 space-y-4 sm:space-y-5 rounded-2xl border border-white/10 bg-slate-900/60 p-4 sm:p-6 lg:p-8">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-base font-semibold text-white sm:text-lg">
@@ -736,12 +738,14 @@ export default function CompanyProfilePage() {
                   };
                   handleFieldChange("team", [...form.team, next]);
                 }}
+                className="h-10 sm:h-9 px-4 w-full sm:w-auto"
               >
                 Add team member
               </Button>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            {/* mobile: 1 col, tablet+: 2 cols */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {form.team.map((member, idx) => (
                 <div
                   key={idx}
@@ -815,7 +819,7 @@ export default function CompanyProfilePage() {
         )}
 
         {activeTab === "Links" && (
-          <Card className="mt-4 space-y-5 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
+          <Card className="mt-4 space-y-4 sm:space-y-5 rounded-2xl border border-white/10 bg-slate-900/60 p-4 sm:p-6 lg:p-8">
             <div>
               <h2 className="text-base font-semibold text-white sm:text-lg">
                 Links
@@ -829,7 +833,7 @@ export default function CompanyProfilePage() {
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-300">Website URL</Label>
                 <Input
-                  className="border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500"
+                  className="border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500 break-all"
                   value={form.website_url}
                   onChange={(e) =>
                     handleFieldChange("website_url", e.target.value)
@@ -845,7 +849,7 @@ export default function CompanyProfilePage() {
                   {form.linkedin_urls.map((url, idx) => (
                     <Input
                       key={idx}
-                      className="border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500"
+                      className="border-slate-700 bg-slate-950/60 text-sm text-slate-50 placeholder:text-slate-500 break-all"
                       value={url}
                       onChange={(e) => {
                         const next = [...form.linkedin_urls];

@@ -346,7 +346,7 @@ export default function CompanyDashboard() {
 
     setRequests(withLinks);
 
-    // 3) first company (MVP)
+    // 3) first company
     const { data: companiesData, error: companyError } = await supabase
       .from("companies")
       .select(
@@ -486,20 +486,20 @@ export default function CompanyDashboard() {
   return (
     <>
       <main className="min-h-screen bg-slate-950 text-slate-50">
-        <div className="max-w-6xl mx-auto px-4 py-12 space-y-10">
-          {/* HEADER */}
-          <header className="flex items-start justify-between gap-6 pb-2">
-            <div className="space-y-4 flex-1">
+        <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-6 sm:space-y-8">
+          {/* HEADER - mobile: stack, desktop: side-by-side */}
+          <header className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 sm:gap-6 pb-2">
+            <div className="space-y-3 sm:space-y-4 flex-1 min-w-0">
               <div className="space-y-1">
                 <p className="text-xs tracking-[0.2em] text-slate-500 uppercase">Company</p>
-                <h1 className="text-3xl font-semibold text-slate-50">{company?.name || "Company Dashboard"}</h1>
+                <h1 className="text-2xl sm:text-3xl font-semibold text-slate-50">{company?.name || "Company Dashboard"}</h1>
                 {company?.industry && (
                   <p className="text-sm text-slate-400 mt-1">{company.industry}</p>
                 )}
               </div>
               
               {company && (
-                <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                   <span className={cn(
                     "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium",
                     runningAgent 
@@ -524,34 +524,36 @@ export default function CompanyDashboard() {
               )}
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            {/* mobile: stack buttons, desktop: row */}
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               {company?.id && (
                 <Button
                   size="sm"
                   onClick={() => runAgent(company.id)}
                   disabled={runningAgent}
-                  className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white disabled:opacity-50"
+                  className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white disabled:opacity-50 h-10 sm:h-9 px-4"
                 >
                   {runningAgent ? "Running…" : "Run Agent"}
                 </Button>
               )}
               <Link href="/company-profile">
-              <Button
-                variant="outline"
-                size="sm"
-                  className="border-slate-700/50 text-slate-300 bg-slate-800/30 hover:bg-slate-800/50"
-              >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-slate-700/50 text-slate-300 bg-slate-800/30 hover:bg-slate-800/50 h-10 sm:h-9 px-4"
+                >
                   Profile
-              </Button>
-            </Link>
+                </Button>
+              </Link>
               {investorUrl && (
                 <a
                   href={investorUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-sm text-slate-300 hover:text-slate-100 transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-700/50 bg-slate-800/30 hover:bg-slate-800/50"
+                  className="text-sm text-slate-300 hover:text-slate-100 transition-colors flex items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-md border border-slate-700/50 bg-slate-800/30 hover:bg-slate-800/50 h-10 sm:h-9"
                 >
-                  Preview investor view
+                  <span className="hidden sm:inline">Preview investor view</span>
+                  <span className="sm:hidden">Preview</span>
                   <span className="text-slate-500">→</span>
                 </a>
               )}
@@ -559,7 +561,7 @@ export default function CompanyDashboard() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/30"
+                  className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/30 h-10 sm:h-9 px-4"
                 >
                   Sign out
                 </Button>
@@ -567,12 +569,12 @@ export default function CompanyDashboard() {
             </div>
           </header>
 
-          {/* KPI */}
+          {/* KPI - mobile: 2 cols, tablet: 3 cols, desktop: 5 cols */}
           {company && (
-            <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl space-y-6">
-              <div className="flex items-center justify-between">
+            <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 shadow-xl space-y-4 sm:space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div>
-                  <h2 className="text-sm font-medium text-slate-200">Key Metrics</h2>
+                  <h2 className="text-sm sm:text-base font-medium text-slate-200">Key Metrics</h2>
                   <p className="text-xs text-slate-500 mt-1">
                   {company.last_agent_run_at ? (
                     <>
@@ -589,14 +591,15 @@ export default function CompanyDashboard() {
                   )}
                 </p>
                 </div>
-                <div className="text-right">
+                <div className="text-left sm:text-right">
                   <p className="text-xs text-slate-500">
                     Powered by <span className="font-medium text-slate-300">Valyxo Agent</span>
                   </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* mobile: 2 cols, tablet: 3 cols, desktop: 5 cols */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
                 <KpiCard label="ARR" value={formatMoney(company.arr)} sublabel="Annual recurring revenue" />
                 <KpiCard label="MRR" value={formatMoney(company.mrr)} sublabel="Monthly recurring revenue" />
                 <KpiCard
@@ -615,31 +618,38 @@ export default function CompanyDashboard() {
             </section>
           )}
 
-          {/* CHARTS SECTION */}
+          {/* CHARTS SECTION - mobile: stack, desktop: 2 columns */}
           {company && (
-            <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl space-y-6">
+            <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 shadow-xl space-y-4 sm:space-y-6">
               <div>
-                <h2 className="text-sm font-medium text-slate-200">Trends</h2>
+                <h2 className="text-sm sm:text-base font-medium text-slate-200">Trends</h2>
                 <p className="text-xs text-slate-500 mt-1">
                   Revenue and burn metrics over time
                 </p>
               </div>
 
-              <div className="space-y-6">
-                {/* ARR Chart - First */}
-                <ArrChart />
+              {/* mobile: stack, desktop: 2 columns */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                {/* ARR Chart */}
+                <div>
+                  <ArrChart />
+                </div>
 
-                {/* MRR Chart - Second */}
-                <MrrChart />
+                {/* MRR Chart */}
+                <div>
+                  <MrrChart />
+                </div>
 
-                {/* Burn/Runway Chart - Third */}
-                <BurnChart />
+                {/* Burn/Runway Chart - full width on desktop */}
+                <div className="lg:col-span-2">
+                  <BurnChart />
+                </div>
               </div>
             </section>
           )}
 
           {/* AI INSIGHTS - Premium "wow" card */}
-          <section className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/80 to-slate-950/60 p-8 shadow-xl space-y-4">
+          <section className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/80 to-slate-950/60 p-4 sm:p-6 lg:p-8 shadow-xl space-y-4">
             <div className="flex items-start justify-between">
               <div className="space-y-1">
               <div className="flex items-center gap-2">
@@ -784,12 +794,12 @@ export default function CompanyDashboard() {
             )}
           </section>
 
-          {/* Investor Access Link + Update KPIs */}
-          <section className="grid gap-4 md:grid-cols-[2fr,1fr]">
+          {/* Investor Access Link + Update KPIs - mobile: stack, desktop: side-by-side */}
+          <section className="grid grid-cols-1 lg:grid-cols-[2fr,1fr] gap-4 sm:gap-6">
             {/* Shareable investor link */}
-            <div className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-5 space-y-3">
+            <div className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-4 sm:p-5 space-y-3">
               <div>
-                <h2 className="text-xs font-medium text-slate-300">Investor Access Link</h2>
+                <h2 className="text-xs sm:text-sm font-medium text-slate-300">Investor Access Link</h2>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Private link to share with approved investors
                 </p>
@@ -797,15 +807,16 @@ export default function CompanyDashboard() {
 
               {investorUrl ? (
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 text-xs text-slate-300 bg-black/30 px-3 py-2 rounded border border-slate-800 font-mono break-all">
+                  {/* mobile: stack, desktop: row */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <code className="flex-1 text-xs text-slate-300 bg-black/30 px-3 py-2 rounded border border-slate-800 font-mono break-all min-w-0">
                     {investorUrl}
                   </code>
                     <Button
                       size="sm"
                       variant="outline"
                     onClick={copyLink}
-                      className="border-slate-700 text-slate-200 bg-slate-800/40 hover:bg-slate-700/50 shrink-0"
+                      className="border-slate-700 text-slate-200 bg-slate-800/40 hover:bg-slate-700/50 shrink-0 h-10 sm:h-9 px-4"
                     >
                       Copy
                     </Button>
@@ -828,17 +839,17 @@ export default function CompanyDashboard() {
             </div>
 
             {/* Update KPIs */}
-            <div className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-5 space-y-3">
+            <div className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-4 sm:p-5 space-y-3">
               <div>
-                <h2 className="text-xs font-medium text-slate-300">Update KPIs</h2>
+                <h2 className="text-xs sm:text-sm font-medium text-slate-300">Update KPIs</h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Manual entry (MVP)
+                  Manual entry
                 </p>
             </div>
                 <Button
                 type="button" 
                   variant="outline"
-                className="w-full border-slate-700 text-slate-200 bg-slate-800/40 hover:bg-slate-700/50" 
+                className="w-full border-slate-700 text-slate-200 bg-slate-800/40 hover:bg-slate-700/50 h-10 sm:h-11 px-4" 
                 onClick={openUpdateKpiModal}
                 >
                 Update KPIs
@@ -847,9 +858,9 @@ export default function CompanyDashboard() {
           </section>
 
           {/* Data Sources */}
-          <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 space-y-4">
+          <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 space-y-4">
                   <div>
-              <h2 className="text-sm font-medium text-slate-200">Data Sources</h2>
+              <h2 className="text-sm sm:text-base font-medium text-slate-200">Data Sources</h2>
               <p className="text-xs text-slate-500 mt-1">
                 Automatically keeps your metrics up to date.
                     </p>
@@ -887,7 +898,7 @@ export default function CompanyDashboard() {
                   <Button
                     variant="outline"
                     size="sm"
-                  className="w-full border-slate-700 text-slate-200 bg-slate-800/40 hover:bg-slate-700/50"
+                  className="w-full border-slate-700 text-slate-200 bg-slate-800/40 hover:bg-slate-700/50 h-10 sm:h-11 px-4"
                   >
                   Manage data sources
                   </Button>
@@ -896,9 +907,9 @@ export default function CompanyDashboard() {
           </section>
 
           {/* Investor Access */}
-          <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 space-y-4">
+          <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 space-y-4">
             <div>
-              <h2 className="text-sm font-medium text-slate-200">Investor Access</h2>
+              <h2 className="text-sm sm:text-base font-medium text-slate-200">Investor Access</h2>
               <p className="text-xs text-slate-500 mt-1">
                 Approve access requests to generate private investor links.
               </p>
@@ -912,15 +923,16 @@ export default function CompanyDashboard() {
               <div className="space-y-0 divide-y divide-slate-800/50">
               {visibleRequests.map((req) => (
                   <div key={req.id} className="py-3 first:pt-0 last:pb-0">
-                    <div className="flex items-start justify-between gap-4">
+                    {/* mobile: stack, desktop: side-by-side */}
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-100">{req.investor_name}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">
+                        <p className="text-sm font-medium text-slate-100 break-words">{req.investor_name}</p>
+                        <p className="text-xs text-slate-400 mt-0.5 break-all">
                           {req.investor_email}
                           {req.investor_company && ` · ${req.investor_company}`}
                   </p>
                         {req.message && (
-                          <p className="text-xs text-slate-300 mt-1.5 italic">"{req.message}"</p>
+                          <p className="text-xs text-slate-300 mt-1.5 italic break-words">"{req.message}"</p>
                         )}
                         {req.status === "approved" && req.link && (
                           <p className="text-xs text-slate-500 mt-2">
@@ -932,7 +944,8 @@ export default function CompanyDashboard() {
                     </p>
                   )}
                       </div>
-                      <div className="flex-shrink-0 flex items-center gap-2">
+                      {/* mobile: full width buttons, desktop: shrink */}
+                      <div className="flex-shrink-0 flex items-center gap-2 sm:flex-col sm:items-end">
                         {req.status === "approved" ? (
                           <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
                             Approved
@@ -950,16 +963,17 @@ export default function CompanyDashboard() {
         </div>
       </main>
 
-      {/* KPI-MODAL */}
+      {/* KPI-MODAL - mobile: full width, desktop: max-w-lg */}
       <Dialog open={kpiDialogOpen} onOpenChange={setKpiDialogOpen}>
-        <DialogContent className="bg-slate-950 border-slate-800 text-slate-50">
+        <DialogContent className="bg-slate-950 border-slate-800 text-slate-50 w-[calc(100vw-2rem)] sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Update KPIs</DialogTitle>
-            <DialogDescription className="text-slate-400">
+            <DialogTitle className="text-lg sm:text-xl">Update KPIs</DialogTitle>
+            <DialogDescription className="text-sm text-slate-400">
               Enter updated numbers for your company. These values appear in both your dashboard and the investor view.
             </DialogDescription>
           </DialogHeader>
 
+          {/* mobile: 1 col, tablet+: 2 cols */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4">
             <div className="space-y-1">
               <label className="text-xs text-slate-400">MRR ($)</label>
@@ -1022,10 +1036,10 @@ export default function CompanyDashboard() {
             </div>
           </div>
 
-          <DialogFooter className="mt-2">
+          <DialogFooter className="mt-2 flex-col sm:flex-row gap-2">
             <Button
               variant="outline"
-              className="border-slate-700 text-slate-200"
+              className="border-slate-700 text-slate-200 w-full sm:w-auto h-10 sm:h-9 px-4"
               onClick={() => setKpiDialogOpen(false)}
               disabled={savingKpi}
             >
@@ -1034,7 +1048,7 @@ export default function CompanyDashboard() {
             <Button
               onClick={handleSaveKpi}
               disabled={savingKpi}
-              className="bg-emerald-600 hover:bg-emerald-500"
+              className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 w-full sm:w-auto h-10 sm:h-9 px-4"
             >
               {savingKpi ? "Saving..." : "Save KPIs"}
             </Button>

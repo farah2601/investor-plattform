@@ -9,9 +9,9 @@ export default function LogoutPage() {
 
   useEffect(() => {
     async function doLogout() {
-      // 1) Logg ut i Supabase
+      // Sign out from Supabase
       await supabase.auth.signOut();
-      // 2) Send bruker til login
+      // Redirect to login
       router.replace("/login");
     }
 
@@ -21,7 +21,7 @@ export default function LogoutPage() {
   return (
     <main className="min-h-screen bg-[#050712] text-slate-50 flex items-center justify-center px-4">
       <div className="text-sm text-slate-400">
-        Logger deg ut…
+        Signing out…
       </div>
     </main>
   );
