@@ -174,6 +174,65 @@ function RequestActions({
   );
 }
 
+function RemoveAccessButton({
+  req,
+  onUpdated,
+}: {
+  req: RequestItem;
+  onUpdated: () => void;
+}) {
+  const [isPending, startTransition] = useTransition();
+
+  async function removeAccess() {
+    if (!confirm(`Remove access for ${req.investor_name}? This will revoke their investor link.`)) {
+      return;
+    }
+
+    startTransition(async () => {
+      // 1) Delete investor_link if it exists
+      if (req.link) {
+        const { error: linkError } = await supabase
+          .from("investor_links")
+          .delete()
+          .eq("id", req.link.id);
+
+        if (linkError) {
+          console.error("Error deleting investor link", linkError);
+          alert("Error removing access: " + linkError.message);
+          return;
+        }
+      }
+
+      // 2) Update status to rejected
+      const { error: updateError } = await supabase
+        .from("access_requests")
+        .update({ status: "rejected" })
+        .eq("id", req.id);
+
+      if (updateError) {
+        console.error("Error updating status", updateError);
+        alert("Error removing access: " + updateError.message);
+        return;
+      }
+
+      // 3) Refresh UI
+      await onUpdated();
+    });
+  }
+
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      className="border-red-500/30 text-red-400 bg-red-500/10 hover:bg-red-500/20 hover:border-red-500/50 text-xs h-7 px-2.5"
+      onClick={removeAccess}
+      disabled={isPending}
+    >
+      {isPending ? "Removing..." : "Remove"}
+    </Button>
+  );
+}
+
 const DATA_SOURCES = [
   { id: "stripe", category: "Billing", name: "Stripe", status: "coming_soon" },
   { id: "hubspot", category: "CRM", name: "HubSpot", status: "coming_soon" },
@@ -598,8 +657,8 @@ export default function CompanyDashboard() {
                 </div>
               </div>
 
-              {/* mobile: 2 cols, tablet: 3 cols, desktop: 5 cols */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+              {/* mobile: 2 cols, tablet: 3 cols, desktop: 6 cols */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
                 <KpiCard label="ARR" value={formatMoney(company.arr)} sublabel="Annual recurring revenue" />
                 <KpiCard label="MRR" value={formatMoney(company.mrr)} sublabel="Monthly recurring revenue" />
                 <KpiCard
@@ -947,9 +1006,12 @@ export default function CompanyDashboard() {
                       {/* mobile: full width buttons, desktop: shrink */}
                       <div className="flex-shrink-0 flex items-center gap-2 sm:flex-col sm:items-end">
                         {req.status === "approved" ? (
-                          <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
-                            Approved
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                              Approved
+                            </span>
+                            <RemoveAccessButton req={req} onUpdated={loadData} />
+                          </div>
                         ) : (
                   <RequestActions req={req} onUpdated={loadData} />
                         )}
@@ -1039,7 +1101,7 @@ export default function CompanyDashboard() {
           <DialogFooter className="mt-2 flex-col sm:flex-row gap-2">
             <Button
               variant="outline"
-              className="border-slate-700 text-slate-200 w-full sm:w-auto h-10 sm:h-9 px-4"
+              className="border-white/[0.12] text-slate-950 hover:text-slate-950 bg-white hover:bg-white/90 w-full sm:w-auto h-10 sm:h-9 px-4"
               onClick={() => setKpiDialogOpen(false)}
               disabled={savingKpi}
             >
@@ -1048,7 +1110,7 @@ export default function CompanyDashboard() {
             <Button
               onClick={handleSaveKpi}
               disabled={savingKpi}
-              className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 w-full sm:w-auto h-10 sm:h-9 px-4"
+              className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white w-full sm:w-auto h-10 sm:h-9 px-4"
             >
               {savingKpi ? "Saving..." : "Save KPIs"}
             </Button>

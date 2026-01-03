@@ -2,8 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
@@ -61,16 +59,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#050712] text-slate-50 flex items-center justify-center px-4 relative">
-      {/* Back button */}
-      <Link
-        href="/"
-        className="absolute top-4 left-4 sm:top-6 sm:left-6 p-2 text-slate-400 hover:text-slate-200 transition-colors z-10"
-        aria-label="Back to home"
-      >
-        <X className="h-5 w-5" />
-      </Link>
-
+    <main className="min-h-screen bg-[#050712] text-slate-50 flex items-center justify-center px-4">
       <div className="w-full max-w-sm bg-[#0B0E17] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
         <header className="space-y-1">
           <h1 className="text-2xl font-bold">Sign in</h1>
