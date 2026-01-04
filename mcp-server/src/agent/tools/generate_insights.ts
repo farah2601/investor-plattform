@@ -9,7 +9,6 @@ export async function generateInsights(input: any) {
     return { ok: false, error: "Missing companyId" };
   }
 
-  // 1) Hent KPIs vi bruker i prompten (minimalt, ingen nye tabeller)
   const { data: company, error: companyError } = await supabase
     .from("companies")
     .select("mrr, churn, growth_percent, burn_rate, runway_months, arr")
@@ -19,7 +18,6 @@ export async function generateInsights(input: any) {
   if (companyError) throw companyError;
   if (!company) throw new Error("Company not found");
 
-  // 2) Bygg prompt (kort, 3 setninger)
   const prompt = `
 You are a startup analyst writing concise investor insights.
 
@@ -37,13 +35,11 @@ Each insight must be one sentence.
 
 IMPORTANT:
 Each insight MUST start with the prefix "VALYXO:".
-If an insight does not start with "VALYXO:", the response is invalid.
 
 Return ONLY the 3 insights as separate lines.
 No bullets, no numbering.
 `.trim();
 
-  // 3) Kjør LLM
   const completion = await openai.chat.completions.create({
     model: "gpt-4.1-mini",
     messages: [{ role: "user", content: prompt }],
@@ -52,28 +48,31 @@ No bullets, no numbering.
 
   const raw = completion.choices?.[0]?.message?.content ?? "";
 
-  // 4) Parse til 3 linjer
-  const insights = raw
+  const parsed = raw
     .split("\n")
     .map((l) => l.trim())
     .filter(Boolean)
     .slice(0, 3);
 
-  // fallback hvis modellen returnerer noe rart
-  const finalInsights =
-    insights.length === 3
-      ? insights
-      : [
-          "Revenue is trending up compared to last period.",
-          "Churn looks stable, keep monitoring.",
-          "Consider improving conversion to increase MRR.",
-        ];
+  const isValid =
+    parsed.length === 3 && parsed.every((l) => l.startsWith("VALYXO:"));
 
-  // 5) Skriv til DB (samme felter som før)
+  const fallback = [
+    "VALYXO: Revenue is trending up compared to last period.",
+    "VALYXO: Churn looks stable, keep monitoring.",
+    "VALYXO: Consider improving conversion to increase MRR.",
+  ];
+
+  const finalInsights = isValid ? parsed : fallback;
+
+  const signed = finalInsights.map((line) =>
+    line.startsWith("VALYXO:") ? line : `VALYXO: ${line}`
+  );
+
   const { error } = await supabase
     .from("companies")
     .update({
-      latest_insights: finalInsights, // jsonb
+      latest_insights: signed,
       last_agent_run_at: new Date().toISOString(),
       last_agent_run_by: "valyxo-agent",
     })
@@ -81,11 +80,10 @@ No bullets, no numbering.
 
   if (error) throw error;
 
-  // 6) Returner respons (samme shape)
   return {
     ok: true,
     companyId,
-    insights: finalInsights,
+    insights: signed,
     savedToDb: true,
   };
 }
