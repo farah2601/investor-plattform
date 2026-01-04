@@ -216,15 +216,32 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* FOOTER */}
-        <footer className="border-t border-slate-800/50 bg-[#020617]">
-          <div className="mx-auto w-full max-w-7xl flex flex-col gap-4 px-4 sm:px-6 lg:px-8 py-6 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-            <p>
-              © 2024 Valyxo. All rights reserved.
-            </p>
-            <p className="text-slate-400">
-              Trusted by leading startups.
-            </p>
+        {/* FOOTER - Only on homepage */}
+        <footer className="mt-16 sm:mt-20 border-t border-slate-800/50 bg-[#020617]">
+          <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+            <div className="flex flex-col items-center gap-3 sm:gap-4 text-center">
+              {/* Copyright */}
+              <p className="text-xs text-slate-500">
+                © Valyxo
+              </p>
+              
+              {/* Links */}
+              <div className="flex items-center gap-4 text-xs text-slate-500">
+                <Link
+                  href="/privacy"
+                  className="hover:text-slate-300 transition-colors"
+                >
+                  Privacy Policy
+                </Link>
+                <span className="text-slate-600">•</span>
+                <Link
+                  href="/terms"
+                  className="hover:text-slate-300 transition-colors"
+                >
+                  Terms of Service
+                </Link>
+              </div>
+            </div>
           </div>
         </footer>
       </div>

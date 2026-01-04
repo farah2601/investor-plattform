@@ -1,40 +1,184 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { supabase } from "../lib/supabaseClient";
+import { useState, useEffect, useRef } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import Link from "next/link";
+import { supabase, isSupabaseConfigured } from "../lib/supabaseClient";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [timeoutMessage, setTimeoutMessage] = useState<string | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const oauthStartTimeRef = useRef<number | null>(null);
 
   const [form, setForm] = useState({
     email: "",
     password: "",
   });
 
+  // Check for error query params from callback redirect
+  useEffect(() => {
+    const errorParam = searchParams.get("error");
+    const details = searchParams.get("details");
+    
+    if (errorParam) {
+      let errorMessage = "Authentication failed. Please try again.";
+      
+      if (errorParam === "oauth_failed") {
+        errorMessage = details 
+          ? `Google sign-in failed: ${decodeURIComponent(details)}`
+          : "Google sign-in failed. Please try again.";
+      } else if (errorParam === "session_error") {
+        errorMessage = "Session error. Please sign in again.";
+      } else if (errorParam === "config_missing") {
+        errorMessage = "Configuration error. Please contact support.";
+      }
+      
+      setError(errorMessage);
+      // Reset OAuth loading if we get an error
+      setOauthLoading(false);
+    }
+  }, [searchParams]);
+
+  // Reset OAuth loading when pathname changes away from login
+  useEffect(() => {
+    if (pathname !== "/login" && oauthLoading) {
+      console.log("[Login] Pathname changed away from /login, resetting OAuth loading");
+      setOauthLoading(false);
+      oauthStartTimeRef.current = null;
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    }
+  }, [pathname, oauthLoading]);
+
+  // Reset OAuth loading when user comes back (focus, visibility, popstate)
+  useEffect(() => {
+    const resetOAuthLoading = () => {
+      // Only reset if we're still on login page and OAuth is loading
+      // and we don't have a code in URL (which means we're in callback)
+      if (pathname === "/login" && oauthLoading) {
+        const code = searchParams.get("code");
+        if (!code) {
+          console.log("[Login] User returned, resetting OAuth loading");
+          setOauthLoading(false);
+          oauthStartTimeRef.current = null;
+          if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+          }
+        }
+      }
+    };
+
+    // Window focus (user switches back to tab)
+    const handleFocus = () => {
+      resetOAuthLoading();
+    };
+
+    // Visibility change (user switches tabs/windows)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        resetOAuthLoading();
+      }
+    };
+
+    // Popstate (user presses back button)
+    const handlePopState = () => {
+      resetOAuthLoading();
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [pathname, oauthLoading, searchParams]);
+
+  // Timeout safety: reset loading after 12 seconds
+  useEffect(() => {
+    if (oauthLoading) {
+      // Start timeout
+      oauthStartTimeRef.current = Date.now();
+      timeoutRef.current = setTimeout(() => {
+        console.log("[Login] OAuth timeout (12s), resetting loading");
+        setOauthLoading(false);
+        setTimeoutMessage("Login cancelled. Try again.");
+        oauthStartTimeRef.current = null;
+        // Clear timeout message after 5 seconds
+        setTimeout(() => {
+          setTimeoutMessage(null);
+        }, 5000);
+      }, 12000);
+    } else {
+      // Clear timeout if loading stops
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      oauthStartTimeRef.current = null;
+    }
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+  }, [oauthLoading]);
+
   async function handleGoogleOAuth() {
+    // Check if Supabase is configured
+    if (!isSupabaseConfigured()) {
+      setError("Authentication is not configured. Please contact support.");
+      return;
+    }
+
     setError(null);
     setOauthLoading(true);
 
-    const origin = window.location.origin;
-    const { error: oauthError } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${origin}/auth/callback`,
-      },
-    });
+    try {
+      // Always use window.location.origin for redirectTo (never hardcode localhost)
+      const origin = window.location.origin;
+      const redirectTo = `${origin}/auth/callback`;
 
-    if (oauthError) {
-      setError(oauthError.message);
+      console.log("[Login] Initiating Google OAuth, redirectTo:", redirectTo);
+
+      const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+        },
+      });
+
+      if (oauthError) {
+        console.error("[Login] OAuth error:", oauthError);
+        setError(oauthError.message || "Failed to connect to Google. Please try again.");
+        setOauthLoading(false);
+        return;
+      }
+
+      // If successful, user will be redirected to OAuth provider,
+      // then back to /auth/callback, so we don't need to handle success here
+      // The loading state will persist until redirect happens
+      console.log("[Login] OAuth initiated successfully, redirecting to:", data?.url);
+    } catch (err) {
+      console.error("[Login] Unexpected error during OAuth:", err);
+      setError(err instanceof Error ? err.message : "An unexpected error occurred. Please try again.");
       setOauthLoading(false);
     }
-    // Note: If successful, user will be redirected to OAuth provider,
-    // then back to /auth/callback, so we don't need to handle success here
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -61,6 +205,14 @@ export default function LoginPage() {
   return (
     <main className="min-h-screen bg-[#050712] text-slate-50 flex items-center justify-center px-4">
       <div className="w-full max-w-sm bg-[#0B0E17] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
+        {/* Back to home link */}
+        <Link
+          href="/"
+          className="inline-flex items-center text-xs text-slate-400 hover:text-slate-200 transition-colors mb-2"
+        >
+          ← Back to home
+        </Link>
+
         <header className="space-y-1">
           <h1 className="text-2xl font-bold">Sign in</h1>
           <p className="text-sm text-slate-400">
@@ -72,11 +224,17 @@ export default function LoginPage() {
         <Button
           type="button"
           onClick={handleGoogleOAuth}
-          disabled={loading || oauthLoading}
-          className="w-full bg-white hover:bg-white/90 text-slate-900 font-medium flex items-center justify-center gap-3"
+          disabled={loading || oauthLoading || !isSupabaseConfigured()}
+          className="w-full bg-white hover:bg-white/90 text-slate-900 font-medium flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {oauthLoading ? (
-            "Connecting..."
+            <>
+              <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              Connecting...
+            </>
           ) : (
             <>
               <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -142,6 +300,12 @@ export default function LoginPage() {
           {error && (
             <p className="text-xs text-rose-400">
               {error}
+            </p>
+          )}
+
+          {timeoutMessage && (
+            <p className="text-xs text-amber-400">
+              {timeoutMessage}
             </p>
           )}
 
