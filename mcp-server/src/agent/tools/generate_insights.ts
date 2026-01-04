@@ -34,7 +34,13 @@ Company KPIs:
 Task:
 Generate exactly 3 short, clear insights.
 Each insight must be one sentence.
-Return ONLY the 3 insights as separate lines. No bullets, no numbering.
+
+IMPORTANT:
+Each insight MUST start with the prefix "VALYXO:".
+If an insight does not start with "VALYXO:", the response is invalid.
+
+Return ONLY the 3 insights as separate lines.
+No bullets, no numbering.
 `.trim();
 
   // 3) Kjør LLM
