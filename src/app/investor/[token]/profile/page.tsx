@@ -48,8 +48,8 @@ type CompanyRow = {
 
   // du har created_at (og evt profile_generated_at)
   created_at: string | null;
-  profile_generated_at?: string | null;
-  profile_generated_by?: string | null;
+  profile_generated_at: string | null;
+  profile_generated_by: string | null;
 
   last_agent_run_at: string | null;
 
@@ -108,6 +108,18 @@ function safeTeam(v: any): TeamMember[] {
   return [];
 }
 
+function hasNarrativeContent(company: CompanyRow | null): boolean {
+  if (!company) return false;
+  const fields = [
+    company.problem,
+    company.solution,
+    company.why_now,
+    company.market,
+    company.product_details,
+  ];
+  return fields.some((field) => field && field.trim().length > 0);
+}
+
 export default function InvestorCompanyProfilePage() {
   const { token } = useParams<{ token: string }>();
 
@@ -162,7 +174,7 @@ export default function InvestorCompanyProfilePage() {
             profile_published: true,
             created_at: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 year ago
             profile_generated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
-            profile_generated_by: "Valyxo Agent",
+            profile_generated_by: "openai",
             last_agent_run_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
             last_agent_rum_by: "Valyxo Agent",
             latest_insights: [
@@ -293,8 +305,41 @@ export default function InvestorCompanyProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen w-full bg-slate-950 text-slate-50 flex items-center justify-center">
-        <p className="text-sm text-slate-400">Loading profile…</p>
+      <div className="min-h-screen w-full overflow-x-hidden bg-slate-950 text-slate-50">
+        <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
+          {/* Skeleton Header */}
+          <div className="rounded-3xl bg-gradient-to-br from-sky-500/15 via-slate-900/80 to-slate-950 p-[1px]">
+            <Card className="rounded-3xl bg-slate-950/80 border border-white/10">
+              <div className="flex flex-col gap-6 p-6 sm:p-8">
+                <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[auto,minmax(0,1fr),minmax(0,1.2fr)] lg:items-start">
+                  <div className="h-12 w-12 rounded-2xl bg-slate-800 animate-pulse" />
+                  <div className="space-y-3">
+                    <div className="h-7 w-48 bg-slate-800 rounded animate-pulse" />
+                    <div className="h-4 w-96 bg-slate-800 rounded animate-pulse" />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-6 w-32 bg-slate-800 rounded animate-pulse ml-auto" />
+                    <div className="h-4 w-40 bg-slate-800 rounded animate-pulse ml-auto" />
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          {/* Skeleton Content */}
+          <div className="space-y-6 pb-10">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <Card key={i} className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
+                <div className="space-y-3">
+                  <div className="h-6 w-32 bg-slate-800 rounded animate-pulse" />
+                  <div className="h-4 w-full bg-slate-800 rounded animate-pulse" />
+                  <div className="h-4 w-5/6 bg-slate-800 rounded animate-pulse" />
+                  <div className="h-4 w-4/6 bg-slate-800 rounded animate-pulse" />
+                </div>
+              </Card>
+            ))}
+          </div>
+        </main>
       </div>
     );
   }
@@ -330,10 +375,12 @@ export default function InvestorCompanyProfilePage() {
   const linkedin =
   safeStringArray(company.linkedin_urls).at(0) ?? null;
 
+  const hasNarrative = hasNarrativeContent(company);
+
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-slate-950 text-slate-50">
       <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
-        {/* TOP */}
+        {/* TOP / OVERVIEW */}
         <div className="rounded-3xl bg-gradient-to-br from-sky-500/15 via-slate-900/80 to-slate-950 p-[1px]">
           <Card className="rounded-3xl bg-slate-950/80 border border-white/10">
             <div className="flex flex-col gap-6 p-6 sm:p-8">
@@ -506,33 +553,76 @@ export default function InvestorCompanyProfilePage() {
 
         {/* PROFILE BODY */}
         <div className="space-y-6 pb-10">
-          <div className="grid gap-6 lg:grid-cols-3">
-            <Card className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 space-y-2">
-              <h2 className="text-sm font-semibold text-white">Problem</h2>
-              <p className="text-sm text-slate-300">{company.problem || "Not provided yet."}</p>
+          {/* Narrative Sections */}
+          {hasNarrative ? (
+            <Card className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8 space-y-6">
+              {company.problem && (
+                <section className="space-y-3">
+                  <h2 className="text-lg font-semibold text-slate-50">Problem</h2>
+                  <p className="text-sm text-slate-300 leading-relaxed">{company.problem}</p>
+                </section>
+              )}
+
+              {company.solution && (
+                <section className="space-y-3">
+                  <h2 className="text-lg font-semibold text-slate-50">Solution</h2>
+                  <p className="text-sm text-slate-300 leading-relaxed">{company.solution}</p>
+                </section>
+              )}
+
+              {company.why_now && (
+                <section className="space-y-3">
+                  <h2 className="text-lg font-semibold text-slate-50">Why now</h2>
+                  <p className="text-sm text-slate-300 leading-relaxed">{company.why_now}</p>
+                </section>
+              )}
+
+              {company.market && (
+                <section className="space-y-3">
+                  <h2 className="text-lg font-semibold text-slate-50">Market</h2>
+                  <p className="text-sm text-slate-300 leading-relaxed">{company.market}</p>
+                </section>
+              )}
+
+              {company.product_details && (
+                <section className="space-y-3">
+                  <h2 className="text-lg font-semibold text-slate-50">Product</h2>
+                  <p className="text-sm text-slate-300 leading-relaxed">{company.product_details}</p>
+                </section>
+              )}
+
+              {/* Profile Provenance */}
+              {(company.profile_generated_at || company.profile_generated_by) && (
+                <div className="pt-4 border-t border-white/10">
+                  <p className="text-xs text-slate-500">
+                    Profile generated by{" "}
+                    <span className="text-slate-400">
+                      {company.profile_generated_by || "unknown"}
+                    </span>
+                    {company.profile_generated_at && (
+                      <>
+                        {" · "}
+                        <span className="text-slate-400">
+                          {formatDateLabel(company.profile_generated_at)}
+                        </span>
+                      </>
+                    )}
+                  </p>
+                </div>
+              )}
             </Card>
-
-            <Card className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 space-y-2">
-              <h2 className="text-sm font-semibold text-white">Solution</h2>
-              <p className="text-sm text-slate-300">{company.solution || "Not provided yet."}</p>
+          ) : (
+            <Card className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
+              <div className="text-center space-y-2 py-8">
+                <h2 className="text-lg font-semibold text-slate-50">Profile not generated yet</h2>
+                <p className="text-sm text-slate-400 max-w-md mx-auto">
+                  This narrative is generated automatically by Valyxo Agent when a profile refresh runs.
+                </p>
+              </div>
             </Card>
+          )}
 
-            <Card className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 space-y-2">
-              <h2 className="text-sm font-semibold text-white">Why now</h2>
-              <p className="text-sm text-slate-300">{company.why_now || "Not provided yet."}</p>
-            </Card>
-          </div>
-
-          <Card className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8 space-y-3">
-            <h2 className="text-base font-semibold text-white">Product</h2>
-            <p className="text-sm text-slate-300">{company.product_details || "Not provided yet."}</p>
-          </Card>
-
-          <Card className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8 space-y-3">
-            <h2 className="text-base font-semibold text-white">Market</h2>
-            <p className="text-sm text-slate-300">{company.market || "Not provided yet."}</p>
-          </Card>
-
+          {/* Team Section */}
           <Card className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8 space-y-4">
             <h2 className="text-base font-semibold text-white">Team</h2>
 
