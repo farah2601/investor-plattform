@@ -1,20 +1,16 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateInsights = generateInsights;
-// mcp-server/src/agent/tools/generate_insights.ts
+/// mcp-server/src/agent/tools/generate_insights.ts
 const supabase_1 = require("../../db/supabase");
 const openai_1 = require("../../llm/openai");
 const env_1 = require("../../env");
-// Demo fallback (kun hvis LLM_PROVIDER ikke er "openai")
+// Demo fallback (kun hvis LLM_PROVIDER ikke er "openai" eller ved feil)
 const DEMO_INSIGHTS = [
     "VALYXO: Revenue is trending up compared to last period.",
     "VALYXO: Churn looks stable, keep monitoring.",
     "VALYXO: Consider improving conversion to increase MRR.",
 ];
-console.log("[generateInsights] DEPLOY_SIGNATURE=LLM_V1_2026-01-05");
-console.log("[generateInsights] LLM_PROVIDER env =", env_1.env.LLM_PROVIDER);
-console.log("[generateInsights] process.env.LLM_PROVIDER =", process.env.LLM_PROVIDER);
-console.log("[generateInsights] hasOpenAIKey =", Boolean(process.env.OPENAI_API_KEY));
 async function generateInsights(input) {
     const companyId = input?.companyId;
     if (!companyId) {
@@ -30,14 +26,17 @@ async function generateInsights(input) {
         throw companyError;
     if (!company)
         throw new Error("Company not found");
-    let finalInsights;
+    const nowIso = new Date().toISOString();
+    let finalInsights = [];
+    let generatedBy = "valyxo-agent"; // default
     // 2) Sjekk LLM_PROVIDER - hvis ikke "openai", bruk demo
     if (env_1.env.LLM_PROVIDER !== "openai") {
         console.log("[generateInsights] LLM_PROVIDER is not 'openai', using demo insights");
         finalInsights = DEMO_INSIGHTS;
+        generatedBy = "demo";
     }
     else {
-        // 3) Kjør OpenAI
+        generatedBy = "openai";
         const prompt = `
 You are a startup analyst writing concise investor insights.
 
@@ -61,24 +60,25 @@ Return ONLY the 3 insights as separate lines.
 No bullets, no numbering.
 `.trim();
         try {
-            const openai = (0, openai_1.getOpenAI)();
-            const completion = await openai.chat.completions.create({
-                model: "gpt-4o-mini", // Fixed: was "gpt-4.1-mini" (doesn't exist)
+            const completion = await openai_1.openai.chat.completions.create({
+                model: "gpt-4o-mini",
                 messages: [{ role: "user", content: prompt }],
                 temperature: 0.4,
             });
             const raw = completion.choices?.[0]?.message?.content ?? "";
-            // 4) Parse og verifiser: kun linjer som starter med VALYXO:
+            // 3) Parse ROBUST: splitt på "VALYXO:" og bygg tilbake
+            // (fanger både linjer, bullets, nummerering osv.)
             const signedInsights = raw
-                .split("\n")
-                .map((l) => l.trim())
+                .split("VALYXO:")
+                .map((s) => s.trim())
                 .filter(Boolean)
-                .filter((l) => l.startsWith("VALYXO:"))
+                .map((s) => `VALYXO: ${s.replace(/^[:\-\s]+/, "")}`) // fjerner ": -  " i starten
                 .slice(0, 3);
-            // Hvis LLM ikke følger format → fallback til demo
+            // Hvis ikke eksakt 3 → fallback
             if (signedInsights.length !== 3) {
-                console.warn(`[generateInsights] LLM output invalid. Expected 3 lines starting with "VALYXO:", got ${signedInsights.length}. Raw:\n${raw}`);
+                console.warn(`[generateInsights] Invalid LLM output. Expected 3 VALYXO insights. Got ${signedInsights.length}. Raw:\n${raw}`);
                 finalInsights = DEMO_INSIGHTS;
+                generatedBy = "demo_fallback_invalid_format";
             }
             else {
                 finalInsights = signedInsights;
@@ -86,26 +86,37 @@ No bullets, no numbering.
         }
         catch (err) {
             console.error("[generateInsights] OpenAI error:", err);
-            // Fallback til demo ved feil
             finalInsights = DEMO_INSIGHTS;
+            generatedBy = "demo_fallback_openai_error";
         }
     }
-    // 5) Skriv til DB (bruk samme finalInsights for både DB og retur)
-    const { error } = await supabase_1.supabase
+    console.log("[generateInsights] writing generated_by/at", {
+        companyId,
+        generatedBy,
+        generatedAt: nowIso,
+    });
+    // 4) Skriv til DB (HER er fiksen)
+    const { error: updateError } = await supabase_1.supabase
         .from("companies")
         .update({
-        latest_insights: finalInsights, // jsonb - samme liste som returneres
-        last_agent_run_at: new Date().toISOString(),
+        latest_insights: finalInsights,
+        latest_insights_generated_at: nowIso,
+        latest_insights_generated_by: generatedBy,
+        last_agent_run_at: nowIso,
         last_agent_run_by: "valyxo-agent",
     })
         .eq("id", companyId);
-    if (error)
-        throw error;
-    // 6) Returner respons (samme liste som ble lagret)
+    if (updateError) {
+        console.error("[generateInsights] DB update error:", updateError);
+        throw updateError;
+    }
+    // 5) Returner respons
     return {
         ok: true,
         companyId,
-        insights: finalInsights, // Samme som ble lagret i DB
+        insights: finalInsights,
+        generatedAt: nowIso,
+        generatedBy,
         savedToDb: true,
     };
 }

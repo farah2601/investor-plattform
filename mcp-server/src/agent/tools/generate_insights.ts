@@ -1,30 +1,23 @@
-// mcp-server/src/agent/tools/generate_insights.ts
+/// mcp-server/src/agent/tools/generate_insights.ts
 import { supabase } from "../../db/supabase";
 import { openai } from "../../llm/openai";
 import { env } from "../../env";
 
-const DEPLOY_SIGNATURE = "LLM_V1_2026-01-05";
-
-// Demo fallback (ALLTID signert)
+// Demo fallback (kun hvis LLM_PROVIDER ikke er "openai" eller ved feil)
 const DEMO_INSIGHTS = [
   "VALYXO: Revenue is trending up compared to last period.",
   "VALYXO: Churn looks stable, keep monitoring.",
   "VALYXO: Consider improving conversion to increase MRR.",
 ];
 
-function ensureSigned(lines: string[]) {
-  return lines.map((l) => (l.startsWith("VALYXO:") ? l : `VALYXO: ${l}`));
-}
-
 export async function generateInsights(input: any) {
   const companyId = input?.companyId as string | undefined;
-  if (!companyId) return { ok: false, error: "Missing companyId" };
 
-  console.log("[generateInsights] DEPLOY_SIGNATURE=", DEPLOY_SIGNATURE);
-  console.log("[generateInsights] LLM_PROVIDER env =", env.LLM_PROVIDER);
-  console.log("[generateInsights] process.env.LLM_PROVIDER =", process.env.LLM_PROVIDER);
-  console.log("[generateInsights] hasOpenAIKey =", Boolean(process.env.OPENAI_API_KEY));
+  if (!companyId) {
+    return { ok: false, error: "Missing companyId" };
+  }
 
+  // 1) Hent KPI-er til prompten
   const { data: company, error: companyError } = await supabase
     .from("companies")
     .select("mrr, churn, growth_percent, burn_rate, runway_months, arr")
@@ -34,9 +27,19 @@ export async function generateInsights(input: any) {
   if (companyError) throw companyError;
   if (!company) throw new Error("Company not found");
 
-  let finalInsights: string[] = DEMO_INSIGHTS;
+  const nowIso = new Date().toISOString();
 
-  if (env.LLM_PROVIDER === "openai") {
+  let finalInsights: string[] = [];
+  let generatedBy: string = "valyxo-agent"; // default
+
+  // 2) Sjekk LLM_PROVIDER - hvis ikke "openai", bruk demo
+  if (env.LLM_PROVIDER !== "openai") {
+    console.log("[generateInsights] LLM_PROVIDER is not 'openai', using demo insights");
+    finalInsights = DEMO_INSIGHTS;
+    generatedBy = "demo";
+  } else {
+    generatedBy = "openai";
+
     const prompt = `
 You are a startup analyst writing concise investor insights.
 
@@ -54,6 +57,8 @@ Each insight must be one sentence.
 
 IMPORTANT:
 Each insight MUST start with the prefix "VALYXO:".
+If an insight does not start with "VALYXO:", the response is invalid.
+
 Return ONLY the 3 insights as separate lines.
 No bullets, no numbering.
 `.trim();
@@ -66,52 +71,64 @@ No bullets, no numbering.
       });
 
       const raw = completion.choices?.[0]?.message?.content ?? "";
-      console.log("[generateInsights] raw from OpenAI:\n", raw);
 
-      // Ta alle linjer, trim, fjern tomme, ta 3 første
-      const lines = raw
-        .split("\n")
-        .map((l) => l.trim())
+      // 3) Parse ROBUST: splitt på "VALYXO:" og bygg tilbake
+      // (fanger både linjer, bullets, nummerering osv.)
+      const signedInsights = raw
+        .split("VALYXO:")
+        .map((s) => s.trim())
         .filter(Boolean)
+        .map((s) => `VALYXO: ${s.replace(/^[:\-\s]+/, "")}`) // fjerner ": -  " i starten
         .slice(0, 3);
 
-      // Sørg for at alt blir signert uansett
-      const signed = ensureSigned(lines);
-
-      if (signed.length === 3) {
-        finalInsights = signed;
-      } else {
-        console.warn("[generateInsights] Invalid LLM output, using DEMO_INSIGHTS");
+      // Hvis ikke eksakt 3 → fallback
+      if (signedInsights.length !== 3) {
+        console.warn(
+          `[generateInsights] Invalid LLM output. Expected 3 VALYXO insights. Got ${signedInsights.length}. Raw:\n${raw}`
+        );
         finalInsights = DEMO_INSIGHTS;
+        generatedBy = "demo_fallback_invalid_format";
+      } else {
+        finalInsights = signedInsights;
       }
     } catch (err) {
-      console.error("[generateInsights] OpenAI error, using DEMO_INSIGHTS:", err);
+      console.error("[generateInsights] OpenAI error:", err);
       finalInsights = DEMO_INSIGHTS;
+      generatedBy = "demo_fallback_openai_error";
     }
-  } else {
-    console.log("[generateInsights] LLM_PROVIDER not openai, using DEMO_INSIGHTS");
-    finalInsights = DEMO_INSIGHTS;
   }
 
-  console.log("[generateInsights] finalInsights:", finalInsights);
+  console.log("[generateInsights] writing generated_by/at", {
+    companyId,
+    generatedBy,
+    generatedAt: nowIso,
+  });
 
-  const { error } = await supabase
+  // 4) Skriv til DB (HER er fiksen)
+  const { error: updateError } = await supabase
     .from("companies")
     .update({
       latest_insights: finalInsights,
-      last_agent_run_at: new Date().toISOString(),
+      latest_insights_generated_at: nowIso,
+      latest_insights_generated_by: generatedBy,
+
+      last_agent_run_at: nowIso,
       last_agent_run_by: "valyxo-agent",
-      latest_insights_generated_at: new Date().toISOString(),
-      latest_insights_generated_by: env.LLM_PROVIDER === "openai" ? "openai" : "demo",
     })
     .eq("id", companyId);
 
-  if (error) throw error;
+  if (updateError) {
+    console.error("[generateInsights] DB update error:", updateError);
+    throw updateError;
+  }
 
+  // 5) Returner respons
   return {
     ok: true,
     companyId,
     insights: finalInsights,
+    generatedAt: nowIso,
+    generatedBy,
     savedToDb: true,
   };
 }
