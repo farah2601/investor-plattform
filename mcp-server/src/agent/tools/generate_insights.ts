@@ -1,6 +1,6 @@
 // mcp-server/src/agent/tools/generate_insights.ts
 import { supabase } from "../../db/supabase";
-import { openai } from "../../llm/openai";
+import { getOpenAI } from "../../llm/openai";
 import { env } from "../../env";
 
 // Demo fallback (kun hvis LLM_PROVIDER ikke er "openai")
@@ -63,6 +63,7 @@ No bullets, no numbering.
 `.trim();
 
     try {
+      const openai = getOpenAI();
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini", // Fixed: was "gpt-4.1-mini" (doesn't exist)
         messages: [{ role: "user", content: prompt }],
