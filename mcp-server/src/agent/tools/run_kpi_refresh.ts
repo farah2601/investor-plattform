@@ -27,8 +27,9 @@ export async function runKpiRefresh(input: unknown) {
   };
 
   const nowIso = new Date().toISOString();
+  const agentBy = "valyxo-agent";
 
-  // Skriv KPI-felter til DB
+  // Skriv KPI-felter til DB (bruk eksisterende last_agent_run_at/by kolonner)
   const { error: updateError } = await supabase
     .from("companies")
     .update({
@@ -38,8 +39,8 @@ export async function runKpiRefresh(input: unknown) {
       runway_months: kpis.runway_months,
       churn: kpis.churn,
       growth_percent: kpis.growth_percent,
-      kpi_refreshed_at: nowIso,
-      kpi_refreshed_by: "valyxo-agent",
+      last_agent_run_at: nowIso,
+      last_agent_run_by: agentBy,
     })
     .eq("id", companyId);
 
@@ -51,9 +52,15 @@ export async function runKpiRefresh(input: unknown) {
   return {
     ok: true,
     companyId,
-    result: {
-      refreshedAt: nowIso,
-      kpis,
+    updated: {
+      mrr: kpis.mrr,
+      arr: kpis.arr,
+      burn_rate: kpis.burn_rate,
+      runway_months: kpis.runway_months,
+      churn: kpis.churn,
+      growth_percent: kpis.growth_percent,
     },
+    last_agent_run_at: nowIso,
+    last_agent_run_by: agentBy,
   };
 }
