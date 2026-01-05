@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runKpiRefresh = runKpiRefresh;
 const zod_1 = require("zod");
+const supabase_1 = require("../../db/supabase");
 const InputSchema = zod_1.z.object({
     companyId: zod_1.z.string().uuid(),
 });
@@ -12,17 +13,41 @@ async function runKpiRefresh(input) {
     }
     const { companyId } = parsed.data;
     // 🧠 Her kommer ekte KPI-jobb senere
-    const result = {
-        refreshedAt: new Date().toISOString(),
-        kpis: {
-            revenue: 123,
-            mrr: 45,
-            churn: 0.02,
-        },
+    // For nå: placeholder KPI-verdier
+    const kpis = {
+        revenue: 123,
+        mrr: 45,
+        churn: 0.02,
+        arr: null,
+        burn_rate: null,
+        runway_months: null,
+        growth_percent: null,
     };
+    const nowIso = new Date().toISOString();
+    // Skriv KPI-felter til DB
+    const { error: updateError } = await supabase_1.supabase
+        .from("companies")
+        .update({
+        mrr: kpis.mrr,
+        arr: kpis.arr,
+        burn_rate: kpis.burn_rate,
+        runway_months: kpis.runway_months,
+        churn: kpis.churn,
+        growth_percent: kpis.growth_percent,
+        kpi_refreshed_at: nowIso,
+        kpi_refreshed_by: "valyxo-agent",
+    })
+        .eq("id", companyId);
+    if (updateError) {
+        console.error("[runKpiRefresh] DB update error:", updateError);
+        throw updateError;
+    }
     return {
         ok: true,
         companyId,
-        result,
+        result: {
+            refreshedAt: nowIso,
+            kpis,
+        },
     };
 }

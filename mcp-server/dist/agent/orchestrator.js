@@ -5,8 +5,8 @@ exports.runAgent = runAgent;
 const zod_1 = require("zod");
 const logger_1 = require("../logging/logger");
 const run_kpi_refresh_1 = require("./tools/run_kpi_refresh");
-const run_profile_refresh_1 = require("./tools/run_profile_refresh"); // hvis filen heter run_Profile_Refresh.ts: endre importen
-const generate_insights_1 = require("./tools/generate_insights");
+const run_profile_refresh_1 = require("./tools/run_profile_refresh");
+const run_insights_refresh_1 = require("./tools/run_insights_refresh");
 const get_agent_logs_1 = require("./tools/get_agent_logs");
 const run_all_1 = require("./tools/run_all");
 const Uuid = zod_1.z.string().uuid();
@@ -36,8 +36,8 @@ async function runAgent(params) {
                 result = await (0, run_kpi_refresh_1.runKpiRefresh)({ companyId });
                 break;
             }
-            case "generate_insights": {
-                result = await (0, generate_insights_1.generateInsights)({ companyId });
+            case "run_insights_refresh": {
+                result = await (0, run_insights_refresh_1.runInsightsRefresh)({ companyId });
                 break;
             }
             case "run_profile_refresh": {

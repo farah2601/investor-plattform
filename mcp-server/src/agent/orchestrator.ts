@@ -3,8 +3,8 @@ import { z } from "zod";
 
 import { logAgentEvent } from "../logging/logger";
 import { runKpiRefresh } from "./tools/run_kpi_refresh";
-import { runProfileRefresh } from "./tools/run_profile_refresh"; // hvis filen heter run_Profile_Refresh.ts: endre importen
-import { generateInsights } from "./tools/generate_insights";
+import { runProfileRefresh } from "./tools/run_profile_refresh";
+import { runInsightsRefresh } from "./tools/run_insights_refresh";
 import { getAgentLogs } from "./tools/get_agent_logs";
 import { runAll } from "./tools/run_all";
 
@@ -12,8 +12,8 @@ const Uuid = z.string().uuid();
 
 export type AgentTool =
   | "run_kpi_refresh"
+  | "run_insights_refresh"
   | "run_profile_refresh"
-  | "generate_insights"
   | "get_agent_logs"
   | "run_all";
 
@@ -52,8 +52,8 @@ export async function runAgent(params: { tool: AgentTool; input: unknown }) {
         break;
       }
 
-      case "generate_insights": {
-        result = await generateInsights({ companyId });
+      case "run_insights_refresh": {
+        result = await runInsightsRefresh({ companyId });
         break;
       }
 

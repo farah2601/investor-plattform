@@ -1,4 +1,4 @@
-/// mcp-server/src/agent/tools/generate_insights.ts
+// mcp-server/src/agent/tools/run_insights_refresh.ts
 import { supabase } from "../../db/supabase";
 import { openai } from "../../llm/openai";
 import { env } from "../../env";
@@ -10,7 +10,7 @@ const DEMO_INSIGHTS = [
   "VALYXO: Consider improving conversion to increase MRR.",
 ];
 
-export async function generateInsights(input: any) {
+export async function runInsightsRefresh(input: any) {
   const companyId = input?.companyId as string | undefined;
 
   if (!companyId) {
@@ -34,7 +34,7 @@ export async function generateInsights(input: any) {
 
   // 2) Sjekk LLM_PROVIDER - hvis ikke "openai", bruk demo
   if (env.LLM_PROVIDER !== "openai") {
-    console.log("[generateInsights] LLM_PROVIDER is not 'openai', using demo insights");
+    console.log("[runInsightsRefresh] LLM_PROVIDER is not 'openai', using demo insights");
     finalInsights = DEMO_INSIGHTS;
     generatedBy = "demo";
   } else {
@@ -84,7 +84,7 @@ No bullets, no numbering.
       // Hvis ikke eksakt 3 → fallback
       if (signedInsights.length !== 3) {
         console.warn(
-          `[generateInsights] Invalid LLM output. Expected 3 VALYXO insights. Got ${signedInsights.length}. Raw:\n${raw}`
+          `[runInsightsRefresh] Invalid LLM output. Expected 3 VALYXO insights. Got ${signedInsights.length}. Raw:\n${raw}`
         );
         finalInsights = DEMO_INSIGHTS;
         generatedBy = "demo_fallback_invalid_format";
@@ -92,33 +92,30 @@ No bullets, no numbering.
         finalInsights = signedInsights;
       }
     } catch (err) {
-      console.error("[generateInsights] OpenAI error:", err);
+      console.error("[runInsightsRefresh] OpenAI error:", err);
       finalInsights = DEMO_INSIGHTS;
       generatedBy = "demo_fallback_openai_error";
     }
   }
 
-  console.log("[generateInsights] writing generated_by/at", {
+  console.log("[runInsightsRefresh] writing generated_by/at", {
     companyId,
     generatedBy,
     generatedAt: nowIso,
   });
 
-  // 4) Skriv til DB (HER er fiksen)
+  // 4) Skriv til DB - ONLY latest_insights fields
   const { error: updateError } = await supabase
     .from("companies")
     .update({
       latest_insights: finalInsights,
       latest_insights_generated_at: nowIso,
       latest_insights_generated_by: generatedBy,
-
-      last_agent_run_at: nowIso,
-      last_agent_run_by: "valyxo-agent",
     })
     .eq("id", companyId);
 
   if (updateError) {
-    console.error("[generateInsights] DB update error:", updateError);
+    console.error("[runInsightsRefresh] DB update error:", updateError);
     throw updateError;
   }
 
