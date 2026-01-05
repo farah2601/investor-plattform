@@ -9,6 +9,10 @@ const DEMO_INSIGHTS = [
   "VALYXO: Churn looks stable, keep monitoring.",
   "VALYXO: Consider improving conversion to increase MRR.",
 ];
+console.log("[generateInsights] DEPLOY_SIGNATURE=LLM_V1_2026-01-05");
+console.log("[generateInsights] LLM_PROVIDER env =", env.LLM_PROVIDER);
+console.log("[generateInsights] process.env.LLM_PROVIDER =", process.env.LLM_PROVIDER);
+console.log("[generateInsights] hasOpenAIKey =", Boolean(process.env.OPENAI_API_KEY));
 
 export async function generateInsights(input: any) {
   const companyId = input?.companyId as string | undefined;
