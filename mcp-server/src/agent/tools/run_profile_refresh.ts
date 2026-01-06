@@ -2,6 +2,7 @@
 import { supabase } from "../../db/supabase";
 import { openai } from "../../llm/openai";
 import { env } from "../../env";
+import { formatKpisForPrompt } from "../utils/kpi_format";
 
 const DEPLOY_SIGNATURE = "PROFILE_LLM_V1_2026-01-05";
 
@@ -100,7 +101,7 @@ export async function runProfileRefresh(input: any) {
   const companyId = input?.companyId as string | undefined;
   if (!companyId) return { ok: false, error: "Missing companyId" };
 
-  // 1) Hent data vi bygger profilen fra
+  // 1) Hent data vi bygger profilen fra (inkludert currency/scale for formatering)
   const { data: company, error: companyError } = await supabase
     .from("companies")
     .select(
@@ -120,6 +121,8 @@ export async function runProfileRefresh(input: any) {
         "runway_months",
         "churn",
         "growth_percent",
+        "kpi_currency",
+        "kpi_scale",
       ].join(",")
     )
     .eq("id", companyId)
@@ -141,6 +144,9 @@ export async function runProfileRefresh(input: any) {
   const linkedinUrls = safeStringArray(company.linkedin_urls);
   const latestInsights = safeStringArray(company.latest_insights);
 
+  // Format KPIs for prompt
+  const kpiStrings = formatKpisForPrompt(company);
+
   // 3) OpenAI (hvis aktivert)
   if (env.LLM_PROVIDER === "openai") {
     const prompt = `
@@ -155,12 +161,12 @@ Company:
 - LinkedIn URLs: ${linkedinUrls.length ? linkedinUrls.join(", ") : "n/a"}
 
 KPIs (if present):
-- MRR: ${company.mrr ?? "n/a"}
-- ARR: ${company.arr ?? "n/a"}
-- Burn rate: ${company.burn_rate ?? "n/a"}
-- Runway months: ${company.runway_months ?? "n/a"}
-- Churn: ${company.churn ?? "n/a"}
-- Growth percent: ${company.growth_percent ?? "n/a"}
+- ${kpiStrings.mrr_str}
+- ${kpiStrings.arr_str}
+- ${kpiStrings.burn_rate_str}
+- ${kpiStrings.runway_str}
+- ${kpiStrings.churn_str}
+- ${kpiStrings.growth_str}
 
 Latest insights (if present):
 ${latestInsights.length ? latestInsights.join("\n") : "n/a"}

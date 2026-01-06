@@ -5,6 +5,7 @@ exports.runProfileRefresh = runProfileRefresh;
 const supabase_1 = require("../../db/supabase");
 const openai_1 = require("../../llm/openai");
 const env_1 = require("../../env");
+const kpi_format_1 = require("../utils/kpi_format");
 const DEPLOY_SIGNATURE = "PROFILE_LLM_V1_2026-01-05";
 // Fallback hvis LLM ikke brukes / feiler
 const DEMO_PROFILE = {
@@ -70,7 +71,7 @@ async function runProfileRefresh(input) {
     const companyId = input?.companyId;
     if (!companyId)
         return { ok: false, error: "Missing companyId" };
-    // 1) Hent data vi bygger profilen fra
+    // 1) Hent data vi bygger profilen fra (inkludert currency/scale for formatering)
     const { data: company, error: companyError } = await supabase_1.supabase
         .from("companies")
         .select([
@@ -89,6 +90,8 @@ async function runProfileRefresh(input) {
         "runway_months",
         "churn",
         "growth_percent",
+        "kpi_currency",
+        "kpi_scale",
     ].join(","))
         .eq("id", companyId)
         .single();
@@ -106,6 +109,8 @@ async function runProfileRefresh(input) {
     const websiteUrl = company.website_url || company.website || null;
     const linkedinUrls = safeStringArray(company.linkedin_urls);
     const latestInsights = safeStringArray(company.latest_insights);
+    // Format KPIs for prompt
+    const kpiStrings = (0, kpi_format_1.formatKpisForPrompt)(company);
     // 3) OpenAI (hvis aktivert)
     if (env_1.env.LLM_PROVIDER === "openai") {
         const prompt = `
@@ -120,12 +125,12 @@ Company:
 - LinkedIn URLs: ${linkedinUrls.length ? linkedinUrls.join(", ") : "n/a"}
 
 KPIs (if present):
-- MRR: ${company.mrr ?? "n/a"}
-- ARR: ${company.arr ?? "n/a"}
-- Burn rate: ${company.burn_rate ?? "n/a"}
-- Runway months: ${company.runway_months ?? "n/a"}
-- Churn: ${company.churn ?? "n/a"}
-- Growth percent: ${company.growth_percent ?? "n/a"}
+- ${kpiStrings.mrr_str}
+- ${kpiStrings.arr_str}
+- ${kpiStrings.burn_rate_str}
+- ${kpiStrings.runway_str}
+- ${kpiStrings.churn_str}
+- ${kpiStrings.growth_str}
 
 Latest insights (if present):
 ${latestInsights.length ? latestInsights.join("\n") : "n/a"}

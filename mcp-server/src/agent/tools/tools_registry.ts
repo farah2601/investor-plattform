@@ -2,11 +2,13 @@ import { z } from "zod";
 import { runKpiRefresh } from "./run_kpi_refresh";
 import { runInsightsRefresh } from "./run_insights_refresh";
 import { runProfileRefresh } from "./run_profile_refresh";
+import { runSheetsKpiRefresh } from "./run_sheets_kpi_refresh";
 
 export const ToolNameSchema = z.enum([
   "run_kpi_refresh",
   "run_insights_refresh",
   "run_profile_refresh",
+  "run_sheets_kpi_refresh",
   "run_all",
   "run_all_companies",
 ]);
@@ -35,6 +37,14 @@ export const ToolsRegistry = {
       companyId: z.string().uuid(),
     }),
     handler: runProfileRefresh,
+  },
+  run_sheets_kpi_refresh: {
+    name: "run_sheets_kpi_refresh",
+    description: "Sync KPIs from Google Sheets",
+    inputSchema: z.object({
+      companyId: z.string().uuid(),
+    }),
+    handler: runSheetsKpiRefresh,
   },
 } as const;
 

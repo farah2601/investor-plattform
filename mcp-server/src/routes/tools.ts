@@ -30,6 +30,20 @@ export async function toolsRoutes(app: FastifyInstance) {
     });
   });
 
+  app.post("/run_sheets_kpi_refresh", async (request) => {
+    return await runAgent({
+      tool: "run_sheets_kpi_refresh",
+      input: request.body,
+    });
+  });
+
+  app.post("/get_agent_logs", async (request) => {
+    return await runAgent({
+      tool: "get_agent_logs",
+      input: request.body,
+    });
+  });
+
   app.post("/run_all", async (request, reply) => {
     const body = request.body as any;
     const companyId = body?.companyId as string | undefined;

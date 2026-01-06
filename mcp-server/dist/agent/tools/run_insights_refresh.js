@@ -5,6 +5,7 @@ exports.runInsightsRefresh = runInsightsRefresh;
 const supabase_1 = require("../../db/supabase");
 const openai_1 = require("../../llm/openai");
 const env_1 = require("../../env");
+const kpi_format_1 = require("../utils/kpi_format");
 // Demo fallback (kun hvis LLM_PROVIDER ikke er "openai" eller ved feil)
 const DEMO_INSIGHTS = [
     "VALYXO: Revenue is trending up compared to last period.",
@@ -16,10 +17,10 @@ async function runInsightsRefresh(input) {
     if (!companyId) {
         return { ok: false, error: "Missing companyId" };
     }
-    // 1) Hent KPI-er til prompten
+    // 1) Hent KPI-er til prompten (inkludert currency/scale for formatering)
     const { data: company, error: companyError } = await supabase_1.supabase
         .from("companies")
-        .select("mrr, churn, growth_percent, burn_rate, runway_months, arr")
+        .select("mrr, churn, growth_percent, burn_rate, runway_months, arr, kpi_currency, kpi_scale")
         .eq("id", companyId)
         .single();
     if (companyError)
@@ -27,6 +28,8 @@ async function runInsightsRefresh(input) {
     if (!company)
         throw new Error("Company not found");
     const nowIso = new Date().toISOString();
+    // Format KPIs for prompt
+    const kpiStrings = (0, kpi_format_1.formatKpisForPrompt)(company);
     let finalInsights = [];
     let generatedBy = "valyxo-agent"; // default
     // 2) Sjekk LLM_PROVIDER - hvis ikke "openai", bruk demo
@@ -41,12 +44,12 @@ async function runInsightsRefresh(input) {
 You are a startup analyst writing concise investor insights.
 
 Company KPIs:
-- MRR: ${company.mrr ?? "n/a"}
-- ARR: ${company.arr ?? "n/a"}
-- Burn rate: ${company.burn_rate ?? "n/a"}
-- Runway months: ${company.runway_months ?? "n/a"}
-- Churn: ${company.churn ?? "n/a"}
-- Growth percent: ${company.growth_percent ?? "n/a"}
+- ${kpiStrings.mrr_str}
+- ${kpiStrings.arr_str}
+- ${kpiStrings.burn_rate_str}
+- ${kpiStrings.runway_str}
+- ${kpiStrings.churn_str}
+- ${kpiStrings.growth_str}
 
 Task:
 Generate exactly 3 short, clear insights.
