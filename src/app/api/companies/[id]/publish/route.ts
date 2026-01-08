@@ -3,12 +3,12 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const companyId = params.id;
+    const { id: companyId } = await params;
 
-    if (!companyId) {
+    if (!companyId || typeof companyId !== "string") {
       return NextResponse.json({ error: "Missing company ID" }, { status: 400 });
     }
 

@@ -7,9 +7,9 @@ import { useParams } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { cn } from "@/lib/utils";
 
-import { Card } from "../../../../components/ui/card";
-import { Badge } from "../../../../components/ui/badge";
-import { Avatar, AvatarFallback } from "../../../../components/ui/avatar";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 type TeamMember = {
   name?: string;
@@ -288,13 +288,14 @@ export default function InvestorCompanyProfilePage() {
         }
 
         // Check if profile is published (investor gating)
-        if (!companyRow.profile_published) {
+        const typedCompany = companyRow as any;
+        if (!typedCompany?.profile_published) {
           setError("This profile is not published yet. Please contact the company for access.");
           setLoading(false);
           return;
         }
 
-        setCompany(companyRow as unknown as CompanyRow);
+        setCompany(typedCompany as CompanyRow);
         setLoading(false);
       } catch (err: any) {
         if (cancelled) return;

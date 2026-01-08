@@ -4,7 +4,7 @@ import { generateInsights } from "./ai/insights";
 import { fetchCompanyData } from "./data/fetchCompanyData";
 import { calculateKpis, saveSnapshot, getLatestKpis } from "./kpiEngine";
 import { refreshCompanyProfile } from "./profile/profileAgent";
-import { supabaseAdmin } from "../../src/app/lib/supabaseAdmin";
+import { supabaseAdmin } from "../../src/lib/supabaseAdmin";
 
 // --- Typer (duplisert for å unngå path-problemer) ---
 export type KpiRecord = {

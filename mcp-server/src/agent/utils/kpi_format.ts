@@ -76,6 +76,7 @@ export function formatKpisForPrompt(company: {
   runway_months?: number | null;
   churn?: number | null;
   growth_percent?: number | null;
+  lead_velocity?: number | null;
   kpi_currency?: string | null;
   kpi_scale?: "unit" | "k" | "m" | null;
 }): {
@@ -85,6 +86,7 @@ export function formatKpisForPrompt(company: {
   runway_str: string;
   churn_str: string;
   growth_str: string;
+  lead_velocity_str: string;
 } {
   const currency = company.kpi_currency || "USD";
   const scale = company.kpi_scale || "unit";
@@ -111,6 +113,7 @@ export function formatKpisForPrompt(company: {
       : company.growth_percent != null
         ? `Growth: ${company.growth_percent}%`
         : "Growth: n/a",
+    lead_velocity_str: company.lead_velocity != null ? `Lead velocity: ${company.lead_velocity}` : "Lead velocity: n/a",
   };
 }
 

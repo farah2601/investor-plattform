@@ -49,6 +49,31 @@ export async function runAgent(params: { tool: AgentTool; input: unknown }) {
     switch (tool) {
       case "run_kpi_refresh": {
         result = await runKpiRefresh({ companyId });
+        
+        // CRITICAL: Always generate insights after KPI refresh
+        let insightsGenerated = false;
+        try {
+          const insightsResult = await runInsightsRefresh({ companyId });
+          insightsGenerated = insightsResult?.ok === true;
+          console.log("[orchestrator] Insights generated after KPI refresh:", insightsGenerated);
+        } catch (insightsError: any) {
+          // Log error but don't crash - KPI refresh succeeded
+          console.error("[orchestrator] Failed to generate insights after KPI refresh:", insightsError?.message || insightsError);
+          await logAgentEvent(
+            companyId,
+            "run_insights_refresh",
+            "fail",
+            `Insights generation failed after KPI refresh: ${insightsError?.message || "Unknown error"}`,
+            { error: { message: insightsError?.message, name: insightsError?.name } }
+          );
+        }
+        
+        // Return combined result
+        result = {
+          ...result,
+          kpiRefreshed: true,
+          insightsGenerated,
+        };
         break;
       }
 

@@ -1,9 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getMcpBaseUrl, getMcpSecret } from "@/lib/mcp";
 
 export const runtime = "nodejs"; // important: we need to use fetch against localhost (mcp-server)
 
 export async function POST(req: NextRequest) {
   try {
+    let MCP_URL: string;
+    let MCP_SECRET: string;
+    try {
+      MCP_URL = getMcpBaseUrl();
+      MCP_SECRET = getMcpSecret();
+    } catch (configError: any) {
+      return NextResponse.json(
+        { ok: false, error: configError?.message || "MCP configuration error" },
+        { status: 500 }
+      );
+    }
+
     const body = await req.json();
 
     // (valgfritt men fint) enkel sjekk
@@ -14,21 +27,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const MCP_URL = process.env.MCP_SERVER_URL || "http://localhost:3001";
-    const secret = process.env.VALYXO_SECRET;
-
-    if (!secret) {
-      return NextResponse.json(
-        { ok: false, error: "Missing VALYXO_SECRET in env" },
-        { status: 500 }
-      );
-    }
-
     const r = await fetch(`${MCP_URL}/tools/run_kpi_refresh`, {
       method: "POST",
       headers: {
-        "content-type": "application/json",
-        "x-valyxo-secret": secret,
+        "Content-Type": "application/json",
+        "x-mcp-secret": MCP_SECRET,
       },
       body: JSON.stringify(body),
       cache: "no-store",

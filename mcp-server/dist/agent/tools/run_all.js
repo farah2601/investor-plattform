@@ -75,9 +75,22 @@ async function runAll(companyId) {
     // Summary
     const successCount = steps.filter((s) => s.ok).length;
     const failCount = steps.filter((s) => !s.ok).length;
+    // Extract insights from run_insights_refresh step if available
+    const insightsStep = steps.find((s) => s.step === "run_insights_refresh");
+    const insights = insightsStep?.ok && insightsStep?.data?.insights ? insightsStep.data.insights : [];
+    // Ensure last_agent_run_at is updated (should already be done by run_insights_refresh, but ensure it)
+    const nowIso = new Date().toISOString();
+    await supabase_1.supabase
+        .from("companies")
+        .update({
+        last_agent_run_at: nowIso,
+        last_agent_run_by: "valyxo-agent",
+    })
+        .eq("id", companyId);
     return {
         ok: true,
         companyId,
+        insights,
         steps,
         summary: {
             total: steps.length,

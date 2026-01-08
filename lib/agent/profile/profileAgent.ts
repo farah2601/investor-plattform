@@ -1,6 +1,6 @@
 // lib/agent/profile/profileAgent.ts
 
-import { supabaseAdmin } from "../../../src/app/lib/supabaseAdmin";
+import { supabaseAdmin } from "../../../src/lib/supabaseAdmin";
 
 export type GeneratedProfile = {
   problem?: string;

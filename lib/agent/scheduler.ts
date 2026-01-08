@@ -1,4 +1,4 @@
-import { supabaseAdmin } from "../../src/app/lib/supabaseAdmin";
+import { supabaseAdmin } from "../../src/lib/supabaseAdmin";
 import { runAgentForCompany } from "./index";
 
 type RunAllResult = {

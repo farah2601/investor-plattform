@@ -88,5 +88,6 @@ function formatKpisForPrompt(company) {
             : company.growth_percent != null
                 ? `Growth: ${company.growth_percent}%`
                 : "Growth: n/a",
+        lead_velocity_str: company.lead_velocity != null ? `Lead velocity: ${company.lead_velocity}` : "Lead velocity: n/a",
     };
 }

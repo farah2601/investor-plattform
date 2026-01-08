@@ -1,23 +1,26 @@
 import { NextResponse } from "next/server";
+import { getMcpBaseUrl, getMcpSecret } from "@/lib/mcp";
 
 export async function POST(req: Request) {
   try {
+    let MCP_URL: string;
+    let MCP_SECRET: string;
+    try {
+      MCP_URL = getMcpBaseUrl();
+      MCP_SECRET = getMcpSecret();
+    } catch (configError: any) {
+      return NextResponse.json(
+        { ok: false, error: configError?.message || "MCP configuration error" },
+        { status: 500 }
+      );
+    }
+
     const { companyId } = await req.json();
 
     if (!companyId) {
       return NextResponse.json(
         { ok: false, error: "Missing companyId" },
         { status: 400 }
-      );
-    }
-
-    const MCP_URL = process.env.MCP_SERVER_URL;
-    const MCP_SECRET = process.env.MCP_SERVER_SECRET;
-
-    if (!MCP_URL || !MCP_SECRET) {
-      return NextResponse.json(
-        { ok: false, error: "MCP config missing" },
-        { status: 500 }
       );
     }
 

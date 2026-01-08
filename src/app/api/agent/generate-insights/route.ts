@@ -1,20 +1,23 @@
 import { NextResponse } from "next/server";
+import { getMcpBaseUrl, getMcpSecret } from "@/lib/mcp";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
+    let MCP_URL: string;
+    let MCP_SECRET: string;
+    try {
+      MCP_URL = getMcpBaseUrl();
+      MCP_SECRET = getMcpSecret();
+    } catch (configError: any) {
+      return NextResponse.json(
+        { ok: false, error: configError?.message || "MCP configuration error" },
+        { status: 500 }
+      );
+    }
+
     const body = await req.json();
-
-    const MCP_URL = process.env.MCP_SERVER_URL;
-    const MCP_SECRET = process.env.MCP_SERVER_SECRET;
-
-    if (!MCP_URL) {
-      return NextResponse.json({ ok: false, error: "Missing MCP_SERVER_URL" }, { status: 500 });
-    }
-    if (!MCP_SECRET) {
-      return NextResponse.json({ ok: false, error: "Missing MCP_SERVER_SECRET" }, { status: 500 });
-    }
 
     const res = await fetch(`${MCP_URL}/tools/generate_insights`, {
       method: "POST",

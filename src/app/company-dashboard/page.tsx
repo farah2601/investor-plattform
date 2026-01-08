@@ -427,14 +427,20 @@ function CompanyDashboardContent() {
       return;
     }
 
+    console.log("[Dashboard] runAgent called with companyId:", targetCompanyId);
+    console.log("[Dashboard] currentCompanyId state:", currentCompanyId);
+
     setRunningAgent(true);
     setAgentError(null);
 
     try {
+      const requestBody = { companyId: targetCompanyId };
+      console.log("[Dashboard] Sending request to /api/agent/run-all with body:", requestBody);
+      
       const res = await fetch("/api/agent/run-all", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ companyId: targetCompanyId }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await res.json().catch(() => ({}));

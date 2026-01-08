@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { runAgentForAllCompaniesCron } from "@/lib/agent/scheduler";
+import { runAgentForAllCompaniesCron } from "../scheduler";
 
 export async function POST(req: Request) {
   // Enkelt sikkerhetslag: krev secret header

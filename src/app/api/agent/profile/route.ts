@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { refreshCompanyProfile } from "@/lib/agent/profile/profileAgent";
+import { refreshCompanyProfile } from "../../../../../lib/agent/profile/profileAgent";
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));

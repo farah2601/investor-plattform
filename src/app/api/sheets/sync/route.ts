@@ -559,16 +559,43 @@ export async function POST(req: Request) {
     }, snapshots[0]);
 
     console.log("[api/sheets/sync] Latest snapshot period:", latestSnapshot.period_date);
+    console.log("[api/sheets/sync] Latest snapshot values:", {
+      mrr: latestSnapshot.mrr,
+      arr: latestSnapshot.arr,
+      burn_rate: latestSnapshot.burn_rate,
+      churn: latestSnapshot.churn,
+      growth_percent: latestSnapshot.growth_percent,
+      runway_months: latestSnapshot.runway_months,
+      lead_velocity: latestSnapshot.lead_velocity,
+    });
 
     // Build update payload for companies table from latest snapshot
+    // CRITICAL: Only update fields that have actual values (not null)
+    // Do NOT overwrite with null - only update fields we have data for
     const updatePayload: any = {};
-    if (latestSnapshot.mrr !== null) updatePayload.mrr = Math.round(latestSnapshot.mrr);
-    if (latestSnapshot.arr !== null) updatePayload.arr = Math.round(latestSnapshot.arr);
-    if (latestSnapshot.burn_rate !== null) updatePayload.burn_rate = Math.round(latestSnapshot.burn_rate);
-    if (latestSnapshot.churn !== null) updatePayload.churn = latestSnapshot.churn;
-    if (latestSnapshot.growth_percent !== null) updatePayload.growth_percent = latestSnapshot.growth_percent;
-    if (latestSnapshot.runway_months !== null) updatePayload.runway_months = latestSnapshot.runway_months;
-    if (latestSnapshot.lead_velocity !== null) updatePayload.lead_velocity = Math.round(latestSnapshot.lead_velocity);
+    if (latestSnapshot.mrr !== null && latestSnapshot.mrr !== undefined) {
+      updatePayload.mrr = Math.round(latestSnapshot.mrr);
+    }
+    if (latestSnapshot.arr !== null && latestSnapshot.arr !== undefined) {
+      updatePayload.arr = Math.round(latestSnapshot.arr);
+    }
+    if (latestSnapshot.burn_rate !== null && latestSnapshot.burn_rate !== undefined) {
+      updatePayload.burn_rate = Math.round(latestSnapshot.burn_rate);
+    }
+    if (latestSnapshot.churn !== null && latestSnapshot.churn !== undefined) {
+      updatePayload.churn = latestSnapshot.churn;
+    }
+    if (latestSnapshot.growth_percent !== null && latestSnapshot.growth_percent !== undefined) {
+      updatePayload.growth_percent = latestSnapshot.growth_percent;
+    }
+    if (latestSnapshot.runway_months !== null && latestSnapshot.runway_months !== undefined) {
+      updatePayload.runway_months = latestSnapshot.runway_months;
+    }
+    if (latestSnapshot.lead_velocity !== null && latestSnapshot.lead_velocity !== undefined) {
+      updatePayload.lead_velocity = Math.round(latestSnapshot.lead_velocity);
+    }
+
+    console.log("[api/sheets/sync] Update payload for companies table:", updatePayload);
 
     // UPSERT snapshots into kpi_snapshots table
     const now = new Date().toISOString();
