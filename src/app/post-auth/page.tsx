@@ -45,7 +45,7 @@ export default function PostAuthPage() {
       }
 
       // Company exists and published → dashboard
-      router.replace("/company-dashboard");
+      router.replace(`/company-dashboard?companyId=${company.id}`);
     };
 
     run();

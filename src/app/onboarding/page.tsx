@@ -98,7 +98,7 @@ export default function OnboardingPage() {
         if (company.profile_published === false) {
           router.push("/company-profile");
         } else {
-          router.push("/company-dashboard");
+          router.push(`/company-dashboard?companyId=${company.id}`);
         }
         return;
       }
@@ -180,7 +180,11 @@ export default function OnboardingPage() {
 
   // ✅ Step 3: done → go to company-dashboard
   function handleGoToDashboard() {
-    router.push("/company-dashboard");
+    if (companyId) {
+      router.push(`/company-dashboard?companyId=${companyId}`);
+    } else {
+      router.push("/company-dashboard");
+    }
   }
 
   // Show loading while checking if user should be here

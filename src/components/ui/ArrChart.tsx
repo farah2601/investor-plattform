@@ -9,25 +9,19 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-const data = [
-  { month: "Jan", arr: 1440000 },
-  { month: "Feb", arr: 1500000 },
-  { month: "Mar", arr: 1584000 },
-  { month: "Apr", arr: 1680000 },
-  { month: "May", arr: 1800000 },
-  { month: "Jun", arr: 1896000 },
-  { month: "Jul", arr: 1980000 },
-  { month: "Aug", arr: 2064000 },
-  { month: "Sep", arr: 2160000 },
-  { month: "Oct", arr: 2256000 },
-  { month: "Nov", arr: 2400000 },
-  { month: "Dec", arr: 2520000 },
-];
+export type ArrChartDataPoint = {
+  month: string;
+  arr: number | null;
+};
 
-function CustomTooltip({ active, payload, label }: any) {
+type ArrChartProps = {
+  data?: ArrChartDataPoint[];
+};
+
+function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) {
   if (!active || !payload || !payload.length) return null;
 
-  const value = payload[0].value as number;
+  const value = payload[0].value;
   const formatted = value >= 1000000 
     ? `$${(value / 1000000).toFixed(2)}M`
     : `$${(value / 1000).toFixed(0)}k`;
@@ -42,7 +36,18 @@ function CustomTooltip({ active, payload, label }: any) {
   );
 }
 
-export function ArrChart() {
+export function ArrChart({ data = [] }: ArrChartProps) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-sm text-slate-400">No historical data</p>
+          <p className="text-xs text-slate-500 mt-1">Historical ARR data will appear here</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3">
       <h3 className="text-sm font-medium text-slate-200 mb-2">

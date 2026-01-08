@@ -9,25 +9,19 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-const data = [
-  { month: "Jan", mrr: 120000 },
-  { month: "Feb", mrr: 125000 },
-  { month: "Mar", mrr: 132000 },
-  { month: "Apr", mrr: 140000 },
-  { month: "May", mrr: 150000 },
-  { month: "Jun", mrr: 158000 },
-  { month: "Jul", mrr: 165000 },
-  { month: "Aug", mrr: 172000 },
-  { month: "Sep", mrr: 180000 },
-  { month: "Oct", mrr: 188000 },
-  { month: "Nov", mrr: 200000 },
-  { month: "Dec", mrr: 210000 },
-];
+export type MrrChartDataPoint = {
+  month: string;
+  mrr: number | null;
+};
 
-function CustomTooltip({ active, payload, label }: any) {
+type MrrChartProps = {
+  data?: MrrChartDataPoint[];
+};
+
+function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) {
   if (!active || !payload || !payload.length) return null;
 
-  const value = payload[0].value as number;
+  const value = payload[0].value;
 
   return (
     <div className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-100 shadow-lg">
@@ -39,7 +33,18 @@ function CustomTooltip({ active, payload, label }: any) {
   );
 }
 
-export function MrrChart() {
+export function MrrChart({ data = [] }: MrrChartProps) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-sm text-slate-400">No historical data</p>
+          <p className="text-xs text-slate-500 mt-1">Historical MRR data will appear here</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3">
       <h3 className="text-sm font-medium text-slate-200 mb-2">

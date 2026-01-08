@@ -5,7 +5,6 @@ import { logAgentEvent } from "../logging/logger";
 import { runKpiRefresh } from "./tools/run_kpi_refresh";
 import { runProfileRefresh } from "./tools/run_profile_refresh";
 import { runInsightsRefresh } from "./tools/run_insights_refresh";
-import { runSheetsKpiRefresh } from "./tools/run_sheets_kpi_refresh";
 import { getAgentLogs } from "./tools/get_agent_logs";
 import { runAll } from "./tools/run_all";
 
@@ -15,7 +14,6 @@ export type AgentTool =
   | "run_kpi_refresh"
   | "run_insights_refresh"
   | "run_profile_refresh"
-  | "run_sheets_kpi_refresh"
   | "get_agent_logs"
   | "run_all";
 
@@ -61,11 +59,6 @@ export async function runAgent(params: { tool: AgentTool; input: unknown }) {
 
       case "run_profile_refresh": {
         result = await runProfileRefresh({ companyId });
-        break;
-      }
-
-      case "run_sheets_kpi_refresh": {
-        result = await runSheetsKpiRefresh({ companyId });
         break;
       }
 

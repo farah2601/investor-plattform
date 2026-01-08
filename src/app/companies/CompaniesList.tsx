@@ -12,7 +12,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "../../../components/ui/select";
 
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";

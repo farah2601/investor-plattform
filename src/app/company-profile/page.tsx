@@ -9,10 +9,10 @@ import { cn } from "@/lib/utils";
 import { Card } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Textarea } from "../../../components/ui/textarea";
+import { Label } from "../../../components/ui/label";
+import { Badge } from "../../../components/ui/badge";
+import { Avatar, AvatarFallback } from "../../../components/ui/avatar";
 
 type TeamMember = {
   name: string;
@@ -199,27 +199,48 @@ export default function CompanyProfilePage() {
 
   const handlePublish = async () => {
     if (!company) return;
+
+    // Toggle: if published, ask for confirmation to unpublish
+    const newPublishedState = !company.profile_published;
+    
+    if (company.profile_published && !confirm("Are you sure you want to unpublish this profile? Investors will no longer be able to view it.")) {
+      return;
+    }
+
     setSaving(true);
     setError(null);
 
     try {
-      const { error: updateError } = await supabase
-        .from("companies")
-        .update({ profile_published: true })
-        .eq("id", company.id);
+      // Get auth token for API call
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
 
-      if (updateError) {
-        console.error("Supabase publish error:", updateError);
-        setError(updateError.message || "Could not publish profile.");
-      } else {
-        setCompany({ ...company, profile_published: true });
+      const response = await fetch(`/api/companies/${company.id}/publish`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        body: JSON.stringify({ is_published: newPublishedState }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Could not update publish status.");
       }
+
+      // Update local state
+      setCompany({ ...company, profile_published: newPublishedState });
+      
+      // Show success message
+      alert(newPublishedState ? "Profile published successfully!" : "Profile unpublished.");
     } catch (err: any) {
-      console.error("Unexpected publish error:", err);
+      console.error("Publish error:", err);
       setError(
         typeof err?.message === "string"
           ? err.message
-          : "Could not publish profile."
+          : "Could not update publish status."
       );
     } finally {
       setSaving(false);
@@ -303,7 +324,7 @@ export default function CompanyProfilePage() {
         {/* Navigation back to dashboard */}
         <div className="flex items-center gap-3">
           <Link
-            href="/company-dashboard"
+            href={company?.id ? `/company-dashboard?companyId=${company.id}` : "/company-dashboard"}
             className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
           >
             ← Dashboard
@@ -378,20 +399,20 @@ export default function CompanyProfilePage() {
                     {aiGenerating ? "Generating…" : "Generate with AI"}
                   </Button>
 
-                  {/* Published pill / Approve & publish */}
+                  {/* Published pill / Toggle publish */}
                   <Button
                     size="sm"
-                    disabled={saving || company.profile_published === true}
+                    disabled={saving}
                     onClick={handlePublish}
                     className={cn(
                       "h-10 sm:h-9 rounded-xl w-full sm:w-auto px-4",
                       company.profile_published
-                        ? "border border-white/10 bg-white/5 text-slate-200"
+                        ? "border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
                         : "bg-[#2B74FF] text-white hover:bg-[#2B74FF]/90 active:bg-[#2B74FF]/85"
                     )}
                     variant={company.profile_published ? "outline" : "default"}
                   >
-                    {company.profile_published ? "Published" : "Approve & publish"}
+                    {company.profile_published ? "Unpublish" : "Publish"}
                   </Button>
                 </div>
 

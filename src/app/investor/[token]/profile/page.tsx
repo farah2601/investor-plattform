@@ -8,8 +8,8 @@ import { supabase } from "../../../lib/supabaseClient";
 import { cn } from "@/lib/utils";
 
 import { Card } from "../../../../components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "../../../../components/ui/badge";
+import { Avatar, AvatarFallback } from "../../../../components/ui/avatar";
 
 type TeamMember = {
   name?: string;
@@ -283,6 +283,13 @@ export default function InvestorCompanyProfilePage() {
 
         if (!companyRow) {
           setError("Company not found for this investor link.");
+          setLoading(false);
+          return;
+        }
+
+        // Check if profile is published (investor gating)
+        if (!companyRow.profile_published) {
+          setError("This profile is not published yet. Please contact the company for access.");
           setLoading(false);
           return;
         }

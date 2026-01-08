@@ -126,7 +126,7 @@ function AuthCallbackContent() {
 
         if (company?.id) {
           console.log("[AuthCallback] User has company, routing to dashboard");
-          router.replace("/company-dashboard");
+          router.replace(`/company-dashboard?companyId=${company.id}`);
         } else {
           console.log("[AuthCallback] User has no company, routing to onboarding");
           router.replace("/onboarding");

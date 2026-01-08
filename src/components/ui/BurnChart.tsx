@@ -10,25 +10,19 @@ import {
   Cell,
 } from "recharts";
 
-const data = [
-  { month: "Jan", burn: 80000 },
-  { month: "Feb", burn: 82000 },
-  { month: "Mar", burn: 83000 },
-  { month: "Apr", burn: 85000 },
-  { month: "May", burn: 86000 },
-  { month: "Jun", burn: 87000 },
-  { month: "Jul", burn: 88000 },
-  { month: "Aug", burn: 89000 },
-  { month: "Sep", burn: 90000 },
-  { month: "Oct", burn: 91000 },
-  { month: "Nov", burn: 92000 },
-  { month: "Dec", burn: 93000 },
-];
+export type BurnChartDataPoint = {
+  month: string;
+  burn: number | null;
+};
 
-function CustomTooltip({ active, payload, label }: any) {
+type BurnChartProps = {
+  data?: BurnChartDataPoint[];
+};
+
+function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) {
   if (!active || !payload || !payload.length) return null;
 
-  const value = payload[0].value as number;
+  const value = payload[0].value;
 
   return (
     <div className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-100 shadow-lg">
@@ -40,9 +34,23 @@ function CustomTooltip({ active, payload, label }: any) {
   );
 }
 
-export function BurnChart() {
-  // Calculate average burn for color coding
-  const avgBurn = data.reduce((sum, d) => sum + d.burn, 0) / data.length;
+export function BurnChart({ data = [] }: BurnChartProps) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-sm text-slate-400">No historical data</p>
+          <p className="text-xs text-slate-500 mt-1">Historical burn rate data will appear here</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Calculate average burn for color coding (only if we have data with non-null values)
+  const validData = data.filter((d) => d.burn !== null && d.burn !== undefined);
+  const avgBurn = validData.length > 0 
+    ? validData.reduce((sum, d) => sum + (d.burn || 0), 0) / validData.length 
+    : 0;
   
   return (
     <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3">
@@ -51,7 +59,7 @@ export function BurnChart() {
           Monthly Burn Rate
         </h3>
         <p className="text-xs text-slate-400">
-          Last 12 months
+          Historical data
         </p>
       </div>
       <div className="w-full h-[80%]">
@@ -75,12 +83,16 @@ export function BurnChart() {
             />
             <Tooltip content={<CustomTooltip />} />
             <Bar dataKey="burn" radius={[4, 4, 0, 0]}>
-              {data.map((entry, index) => (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={entry.burn > avgBurn ? "#ef4444" : "#2B74FF"}
-                />
-              ))}
+              {data.map((entry, index) => {
+                const burnValue = entry.burn ?? 0;
+                return (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={burnValue > avgBurn ? "#ef4444" : "#2B74FF"}
+                    opacity={entry.burn === null ? 0.3 : 1}
+                  />
+                );
+              })}
             </Bar>
           </BarChart>
         </ResponsiveContainer>

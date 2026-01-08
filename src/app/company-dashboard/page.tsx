@@ -1,17 +1,17 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState, useTransition, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
-import { supabase } from "../lib/supabaseClient";
-import { cn } from "@/lib/utils";
+import { supabase } from "../../app/lib/supabaseClient";
+import { cn } from "../../../lib/utils";
 import { KpiCard } from "../../components/ui/KpiCard";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
-import { ArrChart } from "../../components/ui/ArrChart";
-import { MrrChart } from "../../components/ui/MrrChart";
-import { BurnChart } from "../../components/ui/BurnChart";
+import { ArrChart, type ArrChartDataPoint } from "../../components/ui/ArrChart";
+import { BurnChart, type BurnChartDataPoint } from "../../components/ui/BurnChart";
+import { MrrChart, type MrrChartDataPoint } from "../../components/ui/MrrChart";
 import {
   Dialog,
   DialogContent,
@@ -19,7 +19,8 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from "@/components/ui/dialog";
+} from "../../../components/ui/dialog";
+import { FormattedDate } from "../../components/ui/FormattedDate";
 
 type RequestItem = {
   id: string;
@@ -53,6 +54,10 @@ type CompanyKpi = {
   // agent metadata
   last_agent_run_at?: string | null;
   last_agent_run_by?: string | null;
+  
+  // Google Sheets metadata
+  google_sheets_last_sync_at?: string | null;
+  google_sheets_last_sync_by?: string | null;
 };
 
 type AgentLog = {
@@ -78,7 +83,13 @@ function formatMoney(value: number | null) {
 
 function formatPercent(value: number | null) {
   if (value == null) return "—";
+  // Value is already in percentage format (e.g., 2.5 for 2.5%)
   return value.toFixed(1) + "%";
+}
+
+function formatRunway(value: number | null) {
+  if (value == null) return "—";
+  return `${value.toFixed(1)} months`;
 }
 
 function RequestActions({
@@ -242,12 +253,17 @@ const DATA_SOURCES = [
   { id: "sheets", category: "Manual input", name: "Google Sheets", status: "connected" },
 ];
 
-export default function CompanyDashboard() {
+function CompanyDashboardContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  
+  // Read companyId from query params (support both 'companyId' and 'company')
+  const companyIdFromUrl = searchParams.get("companyId") || searchParams.get("company");
 
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [company, setCompany] = useState<CompanyKpi | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [currentCompanyId, setCurrentCompanyId] = useState<string | null>(companyIdFromUrl);
 
   // auth-sjekk
   const [authChecked, setAuthChecked] = useState(false);
@@ -275,7 +291,14 @@ export default function CompanyDashboard() {
     runway_months: "",
     churn: "",
     growth_percent: "",
+    kpi_currency: "USD",
+    kpi_scale: "unit" as "unit" | "k" | "m",
   });
+
+  // KPI History for charts - using new API format with series
+  const [arrSeries, setArrSeries] = useState<Array<{ date: string; label: string; value: number | null }>>([]);
+  const [mrrSeries, setMrrSeries] = useState<Array<{ date: string; label: string; value: number | null }>>([]);
+  const [burnSeries, setBurnSeries] = useState<Array<{ date: string; label: string; value: number | null }>>([]);
 
   useEffect(() => {
     async function checkAuthAndLoad() {
@@ -289,12 +312,17 @@ export default function CompanyDashboard() {
       }
 
       setAuthChecked(true);
-      await loadData();
+      
+      // Update currentCompanyId when URL changes
+      const urlCompanyId = searchParams.get("companyId") || searchParams.get("company");
+      setCurrentCompanyId(urlCompanyId);
+      
+      await loadData(urlCompanyId);
     }
 
     checkAuthAndLoad();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]);
+  }, [router, searchParams]);
 
   async function loadInsights(companyId: string) {
     setLoadingInsights(true);
@@ -341,7 +369,64 @@ export default function CompanyDashboard() {
     }
   }
 
-  async function runAgent(companyId: string) {
+  async function loadKpiHistory(companyId: string) {
+    try {
+      console.log("[loadKpiHistory] Fetching KPI snapshots for companyId:", companyId);
+      
+      // Fetch from kpi_snapshots table - real historical data only
+      const res = await fetch(`/api/kpi/snapshots?companyId=${companyId}`, {
+        cache: "no-store",
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        console.error("[loadKpiHistory] API error:", res.status, errorData);
+        setArrSeries([]);
+        setMrrSeries([]);
+        setBurnSeries([]);
+        return;
+      }
+      
+      const json = await res.json().catch(() => ({}));
+      console.log("[Dashboard] series lengths", {
+        arr: json.arrSeries?.length,
+        mrr: json.mrrSeries?.length,
+        burn: json.burnSeries?.length,
+        rows: json.rows,
+      });
+      console.log("[Dashboard] first 2 arr points", json.arrSeries?.slice(0, 2));
+      
+      if (json?.ok && Array.isArray(json.arrSeries) && Array.isArray(json.mrrSeries) && Array.isArray(json.burnSeries)) {
+        // IMPORTANT: Use ALL data points, do NOT reduce to one element
+        setArrSeries(json.arrSeries);
+        setMrrSeries(json.mrrSeries);
+        setBurnSeries(json.burnSeries);
+        console.log("[loadKpiHistory] Set chart series:", {
+          arr: json.arrSeries.length,
+          mrr: json.mrrSeries.length,
+          burn: json.burnSeries.length,
+        });
+      } else {
+        setArrSeries([]);
+        setMrrSeries([]);
+        setBurnSeries([]);
+        console.log("[loadKpiHistory] No snapshot data available, set empty arrays");
+      }
+    } catch (e) {
+      console.error("Failed to load KPI history", e);
+      setArrSeries([]);
+      setMrrSeries([]);
+      setBurnSeries([]);
+    }
+  }
+
+  async function runAgent(companyIdParam?: string) {
+    const targetCompanyId = companyIdParam || currentCompanyId;
+    if (!targetCompanyId) {
+      alert("No company selected");
+      return;
+    }
+
     setRunningAgent(true);
     setAgentError(null);
 
@@ -349,7 +434,7 @@ export default function CompanyDashboard() {
       const res = await fetch("/api/agent/run-all", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ companyId }),
+        body: JSON.stringify({ companyId: targetCompanyId }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -358,7 +443,7 @@ export default function CompanyDashboard() {
       }
 
       // ✅ Refresh ALL (company + insights + logs)
-      await loadData();
+      await loadData(targetCompanyId);
 
       alert("Valyxo Agent completed successfully");
     } catch (e: any) {
@@ -371,7 +456,7 @@ export default function CompanyDashboard() {
     }
   }
 
-  async function loadData() {
+  async function loadData(companyIdParam?: string | null) {
     setError(null);
 
     // 1) access_requests + company name
@@ -405,52 +490,92 @@ export default function CompanyDashboard() {
 
     setRequests(withLinks);
 
-    // 3) first company
-    const { data: companiesData, error: companyError } = await supabase
-      .from("companies")
-      .select(
-        `
-        id,
-        name,
-        industry,
-        mrr,
-        arr,
-        burn_rate,
-        runway_months,
-        churn,
-        growth_percent,
-        lead_velocity,
-        last_agent_run_at,
-        last_agent_run_by
-        `
-      )
-      .order("name", { ascending: true })
-      .limit(1);
+    // 3) Require explicit companyId - no fallback
+    const targetCompanyId = companyIdParam || currentCompanyId;
+    
+    // If no companyId provided, don't fetch KPIs
+    if (!targetCompanyId) {
+      setCompany(null);
+      setInsights([]);
+      setAgentLogs([]);
+      setKpiForm({
+        mrr: "",
+        arr: "",
+        burn_rate: "",
+        runway_months: "",
+        churn: "",
+        growth_percent: "",
+        kpi_currency: "USD",
+        kpi_scale: "unit",
+      });
+      return;
+    }
+
+    // Fetch specific company by ID via API for fresh data
+    let companiesData: CompanyKpi[] | null = null;
+    let companyError: { message: string } | null = null;
+
+    try {
+      const res = await fetch(`/api/companies/${targetCompanyId}`, {
+        cache: "no-store",
+      });
+      
+      if (!res.ok) {
+        throw new Error(`Failed to fetch company: ${res.status}`);
+      }
+      
+      const apiData = await res.json();
+      if (apiData?.ok && apiData?.company) {
+        companiesData = [apiData.company as CompanyKpi];
+        companyError = null;
+      } else {
+        companiesData = [];
+        companyError = { message: apiData?.error || "Company not found" };
+      }
+    } catch (fetchError: any) {
+      console.error("Error fetching company via API:", fetchError);
+      companiesData = [];
+      companyError = { message: fetchError?.message || "Failed to fetch company" };
+    }
 
     if (companyError) {
       console.error("Error fetching company KPI", companyError);
       setError(companyError.message);
+      setCompany(null);
+      setInsights([]);
+      setAgentLogs([]);
       return;
     }
 
-    const first = (companiesData?.[0] as CompanyKpi) || null;
-    setCompany(first);
+    const selectedCompany = companiesData?.[0] || null;
+    setCompany(selectedCompany);
+    setCurrentCompanyId(targetCompanyId);
 
-    if (first) {
+    if (selectedCompany) {
       setKpiForm({
-        mrr: first.mrr != null ? String(first.mrr) : "",
-        arr: first.arr != null ? String(first.arr) : "",
-        burn_rate: first.burn_rate != null ? String(first.burn_rate) : "",
-        runway_months: first.runway_months != null ? String(first.runway_months) : "",
-        churn: first.churn != null ? String(first.churn) : "",
-        growth_percent: first.growth_percent != null ? String(first.growth_percent) : "",
+        mrr: selectedCompany.mrr != null ? String(selectedCompany.mrr) : "",
+        arr: selectedCompany.arr != null ? String(selectedCompany.arr) : "",
+        burn_rate: selectedCompany.burn_rate != null ? String(selectedCompany.burn_rate) : "",
+        runway_months: selectedCompany.runway_months != null ? String(selectedCompany.runway_months) : "",
+        churn: selectedCompany.churn != null ? String(selectedCompany.churn) : "",
+        growth_percent: selectedCompany.growth_percent != null ? String(selectedCompany.growth_percent) : "",
+        kpi_currency: (selectedCompany as any).kpi_currency || "USD",
+        kpi_scale: ((selectedCompany as any).kpi_scale as "unit" | "k" | "m") || "unit",
       });
 
       // ✅ load simultaneously
-      await Promise.all([loadInsights(first.id), loadAgentLogs(first.id)]);
+      await Promise.all([
+        loadInsights(selectedCompany.id), 
+        loadAgentLogs(selectedCompany.id),
+        loadKpiHistory(selectedCompany.id),
+      ]);
     } else {
       setInsights([]);
       setAgentLogs([]);
+      setArrSeries([]);
+      setMrrSeries([]);
+      setBurnSeries([]);
+      setError("Company not found");
     }
   }
 
@@ -462,6 +587,34 @@ export default function CompanyDashboard() {
 
   const investorUrl = latestLink ? `${baseUrl}/investor/${latestLink.access_token}` : null;
   const visibleRequests = requests.filter((r) => r.status !== "rejected");
+
+  // Transform API series to chart data formats
+  // API returns arrSeries/mrrSeries/burnSeries with { date, label, value } format
+  // Charts expect { month, arr/mrr/burn } format
+  // IMPORTANT: Use ALL data points, do NOT reduce to one element
+  const arrChartData: ArrChartDataPoint[] = arrSeries.map((point) => ({
+    month: point.label || point.date, // Use label (e.g., "Jan") for display
+    arr: point.value != null && !isNaN(Number(point.value)) ? Number(point.value) : null,
+  }));
+
+  const mrrChartData: MrrChartDataPoint[] = mrrSeries.map((point) => ({
+    month: point.label || point.date, // Use label (e.g., "Jan") for display
+    mrr: point.value != null && !isNaN(Number(point.value)) ? Number(point.value) : null,
+  }));
+
+  const burnChartData: BurnChartDataPoint[] = burnSeries.map((point) => ({
+    month: point.label || point.date, // Use label (e.g., "Jan") for display
+    burn: point.value != null && !isNaN(Number(point.value)) ? Number(point.value) : null,
+  }));
+
+  console.log("[Dashboard] Chart data lengths (from kpi_snapshots):", {
+    arrSeries: arrSeries.length,
+    mrrSeries: mrrSeries.length,
+    burnSeries: burnSeries.length,
+    arrChartData: arrChartData.length,
+    mrrChartData: mrrChartData.length,
+    burnChartData: burnChartData.length,
+  });
 
   async function copyLink() {
     if (!investorUrl) return;
@@ -486,6 +639,8 @@ export default function CompanyDashboard() {
         runway_months: company.runway_months != null ? String(company.runway_months) : "",
         churn: company.churn != null ? String(company.churn) : "",
         growth_percent: company.growth_percent != null ? String(company.growth_percent) : "",
+        kpi_currency: (company as any).kpi_currency || "USD",
+        kpi_scale: ((company as any).kpi_scale as "unit" | "k" | "m") || "unit",
       });
     }
     setKpiDialogOpen(true);
@@ -495,13 +650,15 @@ export default function CompanyDashboard() {
     if (!company) return;
     setSavingKpi(true);
 
-    const payload = {
+    const payload: any = {
       mrr: kpiForm.mrr ? Number(kpiForm.mrr) : null,
       arr: kpiForm.arr ? Number(kpiForm.arr) : null,
       burn_rate: kpiForm.burn_rate ? Number(kpiForm.burn_rate) : null,
       runway_months: kpiForm.runway_months ? Number(kpiForm.runway_months) : null,
       churn: kpiForm.churn ? Number(kpiForm.churn) : null,
       growth_percent: kpiForm.growth_percent ? Number(kpiForm.growth_percent) : null,
+      kpi_currency: kpiForm.kpi_currency,
+      kpi_scale: kpiForm.kpi_scale,
     };
 
     const { error: updateError } = await supabase
@@ -533,6 +690,27 @@ export default function CompanyDashboard() {
     );
   }
 
+  // Empty state: require explicit companyId
+  if (!currentCompanyId) {
+    return (
+      <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center">
+        <div className="max-w-md w-full text-center space-y-4 px-4">
+          <h1 className="text-2xl font-semibold text-slate-50">No Company Selected</h1>
+          <p className="text-sm text-slate-400">
+            Please select a company to view its dashboard.
+          </p>
+          <Link href="/companies">
+            <Button
+              className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white mt-4"
+            >
+              View Companies
+            </Button>
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
   if (error) {
     return (
       <main className="min-h-screen bg-slate-950 text-slate-50 p-10">
@@ -541,7 +719,6 @@ export default function CompanyDashboard() {
       </main>
     );
   }
-
   return (
     <>
       <main className="min-h-screen bg-slate-950 text-slate-50">
@@ -554,6 +731,15 @@ export default function CompanyDashboard() {
                 <h1 className="text-2xl sm:text-3xl font-semibold text-slate-50">{company?.name || "Company Dashboard"}</h1>
                 {company?.industry && (
                   <p className="text-sm text-slate-400 mt-1">{company.industry}</p>
+                )}
+                {/* Debug: Show companyId and sync info */}
+                {currentCompanyId && (
+                  <div className="text-xs text-slate-600 mt-1 font-mono space-y-0.5">
+                    <p>companyId: {currentCompanyId}</p>
+                    {company?.google_sheets_last_sync_at && (
+                      <p>Last sync: <FormattedDate date={company.google_sheets_last_sync_at} /></p>
+                    )}
+                  </div>
                 )}
               </div>
               
@@ -571,12 +757,15 @@ export default function CompanyDashboard() {
                   </span>
                   {company.last_agent_run_at && (
                     <p className="text-xs text-slate-500">
-                      Last updated · {new Date(company.last_agent_run_at).toLocaleString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit"
-                      })}
+                      Last updated · <FormattedDate 
+                        date={company.last_agent_run_at}
+                        options={{
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit"
+                        }}
+                      />
                     </p>
                   )}
                 </div>
@@ -588,14 +777,14 @@ export default function CompanyDashboard() {
               {company?.id && (
                 <Button
                   size="sm"
-                  onClick={() => runAgent(company.id)}
+                  onClick={() => runAgent()}
                   disabled={runningAgent}
                   className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white disabled:opacity-50 h-10 sm:h-9 px-4"
                 >
                   {runningAgent ? "Running…" : "Run Agent"}
                 </Button>
               )}
-              <Link href="/company-profile">
+              <Link href={company?.id ? `/company-profile?companyId=${company.id}` : "/company-profile"}>
                 <Button
                   variant="outline"
                   size="sm"
@@ -637,13 +826,16 @@ export default function CompanyDashboard() {
                   <p className="text-xs text-slate-500 mt-1">
                   {company.last_agent_run_at ? (
                     <>
-                        Last updated · {new Date(company.last_agent_run_at).toLocaleString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit"
-                        })}
+                        Last updated · <FormattedDate 
+                          date={company.last_agent_run_at}
+                          options={{
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit"
+                          }}
+                        />
                     </>
                   ) : (
                     <>Not updated yet</>
@@ -669,7 +861,7 @@ export default function CompanyDashboard() {
                 <KpiCard label="Burn rate" value={formatMoney(company.burn_rate)} sublabel="Monthly burn" />
                 <KpiCard
                   label="Runway"
-                  value={company.runway_months != null ? `${company.runway_months} months` : "—"}
+                  value={formatRunway(company.runway_months)}
                   sublabel="Estimated runway at current burn"
                 />
                 <KpiCard label="Churn" value={formatPercent(company.churn)} sublabel="MRR churn rate" />
@@ -691,17 +883,17 @@ export default function CompanyDashboard() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                 {/* ARR Chart */}
                 <div>
-                  <ArrChart />
+                  <ArrChart data={arrChartData} />
                 </div>
 
                 {/* MRR Chart */}
                 <div>
-                  <MrrChart />
+                  <MrrChart data={mrrChartData} />
                 </div>
 
                 {/* Burn/Runway Chart - full width on desktop */}
                 <div className="lg:col-span-2">
-                  <BurnChart />
+                  <BurnChart data={burnChartData} />
                 </div>
               </div>
             </section>
@@ -725,7 +917,7 @@ export default function CompanyDashboard() {
               {company?.id && !runningAgent && !loadingInsights && insights.length === 0 && (
                 <Button
                   size="sm"
-                      onClick={() => runAgent(company.id)}
+                      onClick={() => runAgent()}
                   className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white"
                 >
                   Run Valyxo Agent
@@ -754,7 +946,7 @@ export default function CompanyDashboard() {
                 {company?.id && (
                   <Button
                     size="sm"
-                    onClick={() => runAgent(company.id)}
+                    onClick={() => runAgent()}
                     variant="outline"
                     className="border-slate-700 text-slate-200 bg-slate-800/40 hover:bg-slate-700/50"
                   >
@@ -776,16 +968,16 @@ export default function CompanyDashboard() {
                 <div className="pt-2 border-t border-slate-800">
                   <p className="text-xs text-slate-500">
                     Last updated · Powered by Valyxo Agent ·{" "}
-                    {insightsGeneratedAt ? (
-                      new Date(insightsGeneratedAt).toLocaleString("en-US", {
+                    <FormattedDate 
+                      date={insightsGeneratedAt}
+                      options={{
                         month: "short",
                         day: "numeric",
                         hour: "2-digit",
                         minute: "2-digit"
-                      })
-                    ) : (
-                      "—"
-                    )}
+                      }}
+                      fallback="—"
+                    />
                   </p>
                 </div>
               </div>
@@ -833,14 +1025,18 @@ export default function CompanyDashboard() {
                         <span className="text-slate-300">
                           {step} <span className="text-slate-500">·</span> <span className="text-slate-400">{status}</span>
                       </span>
-                        <span className="text-slate-600 text-[10px]">
-                          {log.created_at ? new Date(log.created_at).toLocaleString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit"
-                          }) : ""}
-                      </span>
+                         <span className="text-slate-600 text-[10px]">
+                           <FormattedDate 
+                             date={log.created_at}
+                             options={{
+                               month: "short",
+                               day: "numeric",
+                               hour: "2-digit",
+                               minute: "2-digit"
+                             }}
+                             fallback=""
+                           />
+                       </span>
                     </div>
 
                     {log.error && (
@@ -953,7 +1149,7 @@ export default function CompanyDashboard() {
             </div>
 
             <div className="pt-2">
-              <Link href="/integration">
+              <Link href={company?.id ? `/integration?companyId=${company.id}` : "/integration"}>
                   <Button
                     variant="outline"
                     size="sm"
@@ -1098,6 +1294,44 @@ export default function CompanyDashboard() {
             </div>
           </div>
 
+          {/* KPI Format Settings */}
+          <div className="border-t border-slate-800 pt-4 space-y-4">
+            <div>
+              <h3 className="text-sm font-medium text-slate-200 mb-3">KPI Format Settings</h3>
+              <p className="text-xs text-slate-400 mb-4">
+                These settings control how KPIs are formatted in AI-generated insights and profiles.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs text-slate-400">Currency</label>
+                <select
+                  value={kpiForm.kpi_currency}
+                  onChange={(e) => setKpiForm((f) => ({ ...f, kpi_currency: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-700 rounded-md text-slate-50 focus:outline-none focus:ring-2 focus:ring-[#2B74FF]"
+                >
+                  <option value="USD">USD ($)</option>
+                  <option value="NOK">NOK (kr)</option>
+                  <option value="EUR">EUR (€)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs text-slate-400">Scale</label>
+                <select
+                  value={kpiForm.kpi_scale}
+                  onChange={(e) => setKpiForm((f) => ({ ...f, kpi_scale: e.target.value as "unit" | "k" | "m" }))}
+                  className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-700 rounded-md text-slate-50 focus:outline-none focus:ring-2 focus:ring-[#2B74FF]"
+                >
+                  <option value="unit">Unit (e.g. $45,000)</option>
+                  <option value="k">Thousands (e.g. $45k)</option>
+                  <option value="m">Millions (e.g. $45m)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
           <DialogFooter className="mt-2 flex-col sm:flex-row gap-2">
             <Button
               variant="outline"
@@ -1118,5 +1352,17 @@ export default function CompanyDashboard() {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+export default function CompanyDashboard() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center">
+        <p className="text-sm text-slate-400">Loading dashboard...</p>
+      </main>
+    }>
+      <CompanyDashboardContent />
+    </Suspense>
   );
 }
