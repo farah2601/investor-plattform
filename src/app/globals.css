@@ -130,3 +130,59 @@ body {
 body {
   min-height: 100%;
 }
+
+/* Background from index.html - bg-dark class */
+body.bg-dark {
+  background:
+    radial-gradient(1100px 700px at 18% 10%, rgba(66, 120, 255, .09), transparent 62%),
+    radial-gradient(980px 720px at 88% 18%, rgba(160, 90, 255, .08), transparent 64%),
+    radial-gradient(1200px 900px at 52% 120%, rgba(40, 170, 190, .06), transparent 66%),
+    linear-gradient(180deg, #081227 0%, #071021 45%, #060e1d 100%) !important;
+  background-attachment: fixed;
+}
+
+body.bg-dark::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  /* vignette */
+  background:
+    radial-gradient(1200px 700px at 50% 0%, rgba(255,255,255,.06), transparent 60%),
+    radial-gradient(1200px 900px at 50% 110%, rgba(0,0,0,.42), transparent 65%),
+    radial-gradient(900px 600px at 0% 40%, rgba(0,0,0,.45), transparent 60%),
+    radial-gradient(900px 600px at 100% 45%, rgba(0,0,0,.45), transparent 60%);
+  opacity: .88;
+}
+
+body.bg-dark::after {
+  content: '';
+  position: fixed;
+  inset: -20%;
+  pointer-events: none;
+  z-index: 0;
+  /* subtle grain (very light) */
+  background-image:
+    repeating-linear-gradient(135deg,
+      rgba(255,255,255,.020) 0px,
+      rgba(255,255,255,.020) 1px,
+      rgba(255,255,255,0) 1px,
+      rgba(255,255,255,0) 10px
+    );
+  opacity: .18;
+  mix-blend-mode: overlay;
+  transform: translateZ(0);
+}
+
+/* Ensure content stays above overlays */
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Ensure body wrapper from index.html has correct styling */
+body > div[data-vtbot-replace="body"] {
+  position: relative;
+  z-index: 1;
+}
