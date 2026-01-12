@@ -186,3 +186,11 @@ body > div[data-vtbot-replace="body"] {
   position: relative;
   z-index: 1;
 }
+
+/* Force dialog content to be centered */
+[data-slot="dialog-content"] {
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  position: fixed !important;
+}
