@@ -272,6 +272,7 @@ function CompanyDashboardContent() {
   const [insights, setInsights] = useState<string[]>([]);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [insightsGeneratedAt, setInsightsGeneratedAt] = useState<string | null>(null);
+  const [basedOnSnapshotDate, setBasedOnSnapshotDate] = useState<string | null>(null);
 
   // Run agent
   const [runningAgent, setRunningAgent] = useState(false);
@@ -327,23 +328,26 @@ function CompanyDashboardContent() {
   async function loadInsights(companyId: string) {
     setLoadingInsights(true);
     try {
-      const res = await fetch("/api/insights", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ companyId }),
+      const res = await fetch(`/api/insights?companyId=${encodeURIComponent(companyId)}`, {
+        method: "GET",
+        cache: "no-store",
       });
 
       const data = await res.json().catch(() => ({}));
-      if (data?.insights && Array.isArray(data.insights)) {
+      if (data?.ok && Array.isArray(data.insights)) {
         setInsights(data.insights);
         setInsightsGeneratedAt(data?.generatedAt ?? null);
+        setBasedOnSnapshotDate(data?.basedOnSnapshotDate ?? null);
       } else {
         setInsights([]);
         setInsightsGeneratedAt(null);
+        setBasedOnSnapshotDate(null);
       }
     } catch (e) {
       console.error("Failed to load insights", e);
       setInsights([]);
+      setInsightsGeneratedAt(null);
+      setBasedOnSnapshotDate(null);
     } finally {
       setLoadingInsights(false);
     }
@@ -984,6 +988,9 @@ function CompanyDashboardContent() {
                       }}
                       fallback="—"
                     />
+                    {basedOnSnapshotDate && (
+                      <> · Based on snapshot: {basedOnSnapshotDate}</>
+                    )}
                   </p>
                 </div>
               </div>

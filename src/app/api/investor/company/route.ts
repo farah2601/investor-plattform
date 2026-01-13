@@ -70,7 +70,8 @@ export async function GET(req: Request) {
 
       latest_insights,
       latest_insights_generated_at,
-      latest_insights_generated_by
+      latest_insights_generated_by,
+      based_on_snapshot_date
     `)
     .eq("id", companyId)
     .maybeSingle();

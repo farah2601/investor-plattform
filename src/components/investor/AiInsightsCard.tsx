@@ -8,6 +8,7 @@ type Props = {
   insights?: string[] | null;
   lastAgentRunAt?: string | null;
   lastAgentRunBy?: string | null;
+  basedOnSnapshotDate?: string | null;
   onRunAgent?: () => Promise<void> | void; // brukes i steg 2 (knapp)
   running?: boolean; // brukes i steg 2 (loading state)
 };
@@ -17,6 +18,7 @@ export function AiInsightsCard({
   insights,
   lastAgentRunAt,
   lastAgentRunBy,
+  basedOnSnapshotDate,
   onRunAgent,
   running,
 }: Props) {
@@ -90,6 +92,9 @@ export function AiInsightsCard({
               hour: "2-digit",
               minute: "2-digit",
             })}
+            {basedOnSnapshotDate && (
+              <> · Based on snapshot: {basedOnSnapshotDate}</>
+            )}
           </>
         ) : (
           <>Last updated · aldri</>

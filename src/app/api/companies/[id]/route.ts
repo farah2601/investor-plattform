@@ -48,7 +48,11 @@ export async function GET(
         growth_percent,
         lead_velocity,
         last_agent_run_at,
-        last_agent_run_by
+        last_agent_run_by,
+        latest_insights,
+        latest_insights_generated_at,
+        latest_insights_generated_by,
+        based_on_snapshot_date
       `)
       .eq("id", companyId)
       .maybeSingle();

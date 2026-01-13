@@ -7,7 +7,7 @@ import { runProfileRefresh } from "./tools/run_profile_refresh";
 import { runInsightsRefresh } from "./tools/run_insights_refresh";
 import { getAgentLogs } from "./tools/get_agent_logs";
 import { runAll } from "./tools/run_all";
-
+import { generateInsights } from "./tools/generate_insights";
 const Uuid = z.string().uuid();
 
 export type AgentTool =
@@ -15,7 +15,10 @@ export type AgentTool =
   | "run_insights_refresh"
   | "run_profile_refresh"
   | "get_agent_logs"
-  | "run_all";
+  | "run_all"
+  | "generate_insights";
+  
+
 
 type CompanyInput = { companyId: string };
 
@@ -76,6 +79,10 @@ export async function runAgent(params: { tool: AgentTool; input: unknown }) {
         };
         break;
       }
+      case "generate_insights": {
+  result = await generateInsights({ companyId });
+  break;
+}
 
       case "run_insights_refresh": {
         result = await runInsightsRefresh({ companyId });

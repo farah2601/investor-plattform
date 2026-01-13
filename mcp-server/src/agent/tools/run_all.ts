@@ -1,8 +1,9 @@
 // mcp-server/src/agent/tools/run_all.ts
 import { supabase } from "../../db/supabase";
 import { runKpiRefresh } from "./run_kpi_refresh";
-import { runInsightsRefresh } from "./run_insights_refresh";
 import { runProfileRefresh } from "./run_profile_refresh";
+import { generateInsights } from "./generate_insights";
+
 
 type StepStatus = "START" | "SUCCESS" | "FAIL";
 
@@ -49,9 +50,9 @@ export async function runAll(companyId: string) {
   // b) run_insights_refresh
   await logAgentStep({ companyId, step: "run_insights_refresh", status: "START" });
   try {
-    const insightsRes = await runInsightsRefresh({ companyId });
+    const insightsRes = await generateInsights({ companyId });
     await logAgentStep({ companyId, step: "run_insights_refresh", status: "SUCCESS" });
-    steps.push({ step: "run_insights_refresh", ok: true, data: insightsRes });
+    steps.push({ step: "generate_insights", ok: true, data: insightsRes });
   } catch (err: any) {
     await logAgentStep({ companyId, step: "run_insights_refresh", status: "FAIL", error: err });
     steps.push({ step: "run_insights_refresh", ok: false, error: String(err?.message ?? err) });
