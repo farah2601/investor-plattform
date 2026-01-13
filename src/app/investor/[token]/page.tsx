@@ -55,6 +55,7 @@ type CompanyProfile = {
   latest_insights?: string[] | null;
   latest_insights_generated_at?: string | null;
   latest_insights_generated_by?: string | null;
+  based_on_snapshot_date?: string | null;
 };
 
 type InvestorLinkMeta = {
@@ -710,6 +711,9 @@ export default function InvestorCompanyPage() {
                     hour: "2-digit",
                     minute: "2-digit"
                   })}
+                  {company.based_on_snapshot_date && (
+                    <> · Based on snapshot: {company.based_on_snapshot_date}</>
+                  )}
                 </>
               ) : (
                 <>Not generated yet · Powered by Valyxo Agent</>

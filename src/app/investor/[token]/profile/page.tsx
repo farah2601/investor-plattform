@@ -60,6 +60,7 @@ type CompanyRow = {
   latest_insights: any;
   latest_insights_generated_at: string | null;
   latest_insights_generated_by: string | null;
+  based_on_snapshot_date: string | null;
 };
 
 type InvestorLinkMeta = {
@@ -184,6 +185,7 @@ export default function InvestorCompanyProfilePage() {
             ],
             latest_insights_generated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
             latest_insights_generated_by: "Valyxo Agent",
+            based_on_snapshot_date: "2024-12-31",
           };
 
           setCompany(demoCompany);
@@ -675,7 +677,12 @@ export default function InvestorCompanyProfilePage() {
 
             <p className="text-xs text-slate-500">
               {company.latest_insights_generated_at ? (
-                <>AI Insights generated automatically · {formatDateLabel(company.latest_insights_generated_at)}</>
+                <>
+                  AI Insights generated automatically · {formatDateLabel(company.latest_insights_generated_at)}
+                  {company.based_on_snapshot_date && (
+                    <> · Based on snapshot: {company.based_on_snapshot_date}</>
+                  )}
+                </>
               ) : (
                 <>Not generated yet · Powered by Valyxo Agent</>
               )}

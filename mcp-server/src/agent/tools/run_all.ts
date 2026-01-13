@@ -1,8 +1,9 @@
 // mcp-server/src/agent/tools/run_all.ts
 import { supabase } from "../../db/supabase";
 import { runKpiRefresh } from "./run_kpi_refresh";
-import { runInsightsRefresh } from "./run_insights_refresh";
 import { runProfileRefresh } from "./run_profile_refresh";
+import { generateInsights } from "./generate_insights";
+
 
 type StepStatus = "START" | "SUCCESS" | "FAIL";
 
@@ -46,19 +47,19 @@ export async function runAll(companyId: string) {
     };
   }
 
-  // b) run_insights_refresh
-  await logAgentStep({ companyId, step: "run_insights_refresh", status: "START" });
+  // b) generate_insights (deterministic - facts from kpi_snapshots)
+  await logAgentStep({ companyId, step: "generate_insights", status: "START" });
   try {
-    const insightsRes = await runInsightsRefresh({ companyId });
-    await logAgentStep({ companyId, step: "run_insights_refresh", status: "SUCCESS" });
-    steps.push({ step: "run_insights_refresh", ok: true, data: insightsRes });
+    const insightsRes = await generateInsights({ companyId });
+    await logAgentStep({ companyId, step: "generate_insights", status: "SUCCESS" });
+    steps.push({ step: "generate_insights", ok: true, data: insightsRes });
   } catch (err: any) {
-    await logAgentStep({ companyId, step: "run_insights_refresh", status: "FAIL", error: err });
-    steps.push({ step: "run_insights_refresh", ok: false, error: String(err?.message ?? err) });
+    await logAgentStep({ companyId, step: "generate_insights", status: "FAIL", error: err });
+    steps.push({ step: "generate_insights", ok: false, error: String(err?.message ?? err) });
     return {
       ok: false,
       companyId,
-      error: `run_insights_refresh failed: ${String(err?.message ?? err)}`,
+      error: `generate_insights failed: ${String(err?.message ?? err)}`,
       steps,
     };
   }
@@ -84,8 +85,8 @@ export async function runAll(companyId: string) {
   const successCount = steps.filter((s) => s.ok).length;
   const failCount = steps.filter((s) => !s.ok).length;
 
-  // Extract insights from run_insights_refresh step if available
-  const insightsStep = steps.find((s) => s.step === "run_insights_refresh");
+  // Extract insights from generate_insights step if available
+  const insightsStep = steps.find((s) => s.step === "generate_insights");
   const insights = insightsStep?.ok && insightsStep?.data?.insights ? insightsStep.data.insights : [];
 
   // Ensure last_agent_run_at is updated (should already be done by run_insights_refresh, but ensure it)

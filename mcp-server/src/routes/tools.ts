@@ -6,28 +6,23 @@ import { runAll } from "../agent/tools/run_all";
 import { runAllCompanies } from "../agent/tools/run_all_companies";
 
 export async function toolsRoutes(app: FastifyInstance) {
-  // 🔐 Auth på alle /tools/*
   app.addHook("preHandler", verifySecret);
 
   app.post("/run_kpi_refresh", async (request) => {
-    return await runAgent({
-      tool: "run_kpi_refresh",
-      input: request.body,
-    });
+    return await runAgent({ tool: "run_kpi_refresh", input: request.body });
   });
 
   app.post("/run_insights_refresh", async (request) => {
-    return await runAgent({
-      tool: "run_insights_refresh",
-      input: request.body,
-    });
+    return await runAgent({ tool: "run_insights_refresh", input: request.body });
   });
 
   app.post("/run_profile_refresh", async (request) => {
-    return await runAgent({
-      tool: "run_profile_refresh",
-      input: request.body,
-    });
+    return await runAgent({ tool: "run_profile_refresh", input: request.body });
+  });
+
+  // ✅ NY: deterministic insights tool
+  app.post("/generate_insights", async (request) => {
+    return await runAgent({ tool: "generate_insights", input: request.body });
   });
 
   app.post("/run_all", async (request, reply) => {
