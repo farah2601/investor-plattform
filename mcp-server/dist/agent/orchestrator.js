@@ -9,6 +9,7 @@ const run_profile_refresh_1 = require("./tools/run_profile_refresh");
 const run_insights_refresh_1 = require("./tools/run_insights_refresh");
 const get_agent_logs_1 = require("./tools/get_agent_logs");
 const run_all_1 = require("./tools/run_all");
+const generate_insights_1 = require("./tools/generate_insights");
 const Uuid = zod_1.z.string().uuid();
 function isObject(x) {
     return typeof x === "object" && x !== null;
@@ -34,17 +35,18 @@ async function runAgent(params) {
         switch (tool) {
             case "run_kpi_refresh": {
                 result = await (0, run_kpi_refresh_1.runKpiRefresh)({ companyId });
-                // CRITICAL: Always generate insights after KPI refresh
+                // CRITICAL: Always generate deterministic insights after KPI refresh
+                // Use generateInsights (deterministic) NOT runInsightsRefresh (LLM)
                 let insightsGenerated = false;
                 try {
-                    const insightsResult = await (0, run_insights_refresh_1.runInsightsRefresh)({ companyId });
+                    const insightsResult = await (0, generate_insights_1.generateInsights)({ companyId });
                     insightsGenerated = insightsResult?.ok === true;
-                    console.log("[orchestrator] Insights generated after KPI refresh:", insightsGenerated);
+                    console.log("[orchestrator] Deterministic insights generated after KPI refresh:", insightsGenerated);
                 }
                 catch (insightsError) {
                     // Log error but don't crash - KPI refresh succeeded
-                    console.error("[orchestrator] Failed to generate insights after KPI refresh:", insightsError?.message || insightsError);
-                    await (0, logger_1.logAgentEvent)(companyId, "run_insights_refresh", "fail", `Insights generation failed after KPI refresh: ${insightsError?.message || "Unknown error"}`, { error: { message: insightsError?.message, name: insightsError?.name } });
+                    console.error("[orchestrator] Failed to generate deterministic insights after KPI refresh:", insightsError?.message || insightsError);
+                    await (0, logger_1.logAgentEvent)(companyId, "generate_insights", "fail", `Deterministic insights generation failed after KPI refresh: ${insightsError?.message || "Unknown error"}`, { error: { message: insightsError?.message, name: insightsError?.name } });
                 }
                 // Return combined result
                 result = {
@@ -52,6 +54,10 @@ async function runAgent(params) {
                     kpiRefreshed: true,
                     insightsGenerated,
                 };
+                break;
+            }
+            case "generate_insights": {
+                result = await (0, generate_insights_1.generateInsights)({ companyId });
                 break;
             }
             case "run_insights_refresh": {

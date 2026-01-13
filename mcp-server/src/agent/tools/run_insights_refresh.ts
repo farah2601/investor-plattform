@@ -1,245 +1,116 @@
 // mcp-server/src/agent/tools/run_insights_refresh.ts
-import { supabase } from "../../db/supabase";
-import { openai } from "../../llm/openai";
-import { env } from "../../env";
-import { formatKpisForPrompt } from "../utils/kpi_format";
 
-// Demo fallback (kun hvis LLM_PROVIDER ikke er "openai" eller ved feil)
-const DEMO_INSIGHTS = [
-  "VALYXO: Revenue is trending up compared to last period.",
-  "VALYXO: Churn looks stable, keep monitoring.",
-  "VALYXO: Consider improving conversion to increase MRR.",
-];
+import { supabase } from "../../db/supabase";
+import { env } from "../../env";
+import { openai } from "../../llm/openai";
+import { generateInsights } from "./generate_insights";
+
+const PREFIX = "VALYXO:";
+
+function ensurePrefix(lines: string[]) {
+  return lines.map((l) => (l.trim().startsWith(PREFIX) ? l.trim() : `${PREFIX} ${l.trim()}`));
+}
 
 export async function runInsightsRefresh(input: any) {
   const companyId = input?.companyId as string | undefined;
+  if (!companyId) return { ok: false, error: "Missing companyId" };
 
-  if (!companyId) {
-    return { ok: false, error: "Missing companyId" };
-  }
+  // 1) ALWAYS compute deterministic insights first (facts)
+  const det = await generateInsights({ companyId });
+  if (!det?.ok) return det;
 
-  // CRITICAL: Always fetch the LATEST company row from Supabase RIGHT BEFORE generating insights
-  // This ensures we use the most recent KPI values after any Sheets sync
-  const { data: company, error: companyError } = await supabase
-    .from("companies")
-    .select("id, name, industry, mrr, arr, burn_rate, runway_months, churn, growth_percent, lead_velocity, google_sheets_last_sync_at, google_sheets_last_sync_by, last_agent_run_at, last_agent_run_by, kpi_currency, kpi_scale")
-    .eq("id", companyId)
-    .single();
-
-  if (companyError) throw companyError;
-  if (!company) throw new Error("Company not found");
-
+  const deterministicBullets: string[] = det.insights ?? [];
+  const basedOnSnapshotDate = det.based_on_snapshot_date ?? null;
   const nowIso = new Date().toISOString();
 
-  // Format KPIs for prompt
-  const kpiStrings = formatKpisForPrompt(company);
-
-  // Build KPI context object for LLM
-  const kpiContext = {
-    companyName: company.name || "Unknown",
-    industry: company.industry || null,
-    kpis: {
-      mrr: company.mrr,
-      arr: company.arr,
-      burn_rate: company.burn_rate,
-      runway_months: company.runway_months,
-      churn: company.churn,
-      growth_percent: company.growth_percent,
-      lead_velocity: company.lead_velocity,
-    },
-    lastSheetsSyncAt: company.google_sheets_last_sync_at,
-    lastSheetsSyncBy: company.google_sheets_last_sync_by,
-  };
-
-  // Track which KPIs have actual values (not null)
-  const usedKpis = Object.entries(kpiContext.kpis)
-    .filter(([_, value]) => value !== null && value !== undefined)
-    .map(([key]) => key);
-
-  // Dev logging: log KPIs being used
-  if (process.env.NODE_ENV !== "production") {
-    console.log("[runInsightsRefresh] KPIs used for insights:", {
+  // 2) If LLM disabled -> return deterministic as-is
+  if (env.LLM_PROVIDER !== "openai") {
+    return {
+      ok: true,
       companyId,
-      companyName: company.name,
-      usedKpis,
-      kpiValues: kpiContext.kpis,
-      lastSheetsSync: company.google_sheets_last_sync_at,
-    });
+      insights: deterministicBullets,
+      generatedAt: nowIso,
+      generatedBy: "deterministic",
+      based_on_snapshot_date: basedOnSnapshotDate,
+      savedToDb: true,
+      note: "LLM disabled; returned deterministic insights",
+    };
   }
 
-  let finalInsights: string[] = [];
-  let generatedBy: string = "valyxo-agent";
+  // 3) LLM is allowed ONLY to rewrite language (no new facts)
+  // CRITICAL: This is a language-only rewrite. Facts are immutable.
+  const prompt = `
+You are rewriting investor insights for clarity and tone ONLY. You are NOT generating insights.
 
-  // Check if we have ANY real KPI data - if not, use demo only if DB error
-  const hasRealKpiData = usedKpis.length > 0;
+CRITICAL RULES:
+- You MUST keep the meaning identical.
+- You MUST NOT introduce any new numbers, KPIs, percentages, or claims.
+- You MUST NOT remove important qualifiers (e.g., "high", "low", "trending up", "short").
+- You MUST NOT change any numerical values.
+- You MUST NOT add or remove any factual information.
+- Keep exactly the same number of lines as input (${deterministicBullets.length} lines).
+- Each line MUST start with "${PREFIX}".
+- You may only improve wording, grammar, and clarity.
 
-  // 2) Sjekk LLM_PROVIDER - hvis ikke "openai", bruk demo
-  if (env.LLM_PROVIDER !== "openai") {
-    console.log("[runInsightsRefresh] LLM_PROVIDER is not 'openai', using demo insights");
-    if (!hasRealKpiData) {
-      finalInsights = DEMO_INSIGHTS;
-      generatedBy = "demo";
-    } else {
-      // Even if not OpenAI, try to generate basic insights from real data
-      finalInsights = [
-        `VALYXO: ${company.name} has ${usedKpis.length} KPI metrics available.`,
-        `VALYXO: Latest data sync: ${company.google_sheets_last_sync_at ? new Date(company.google_sheets_last_sync_at).toLocaleDateString() : "never"}.`,
-        `VALYXO: Connect Google Sheets to enable AI-powered insights.`,
-      ];
-      generatedBy = "demo_with_data";
-    }
-  } else {
-    generatedBy = "openai";
+Input insights (these are FACTS - do not change meaning or numbers):
+${deterministicBullets.map((b, i) => `${i + 1}. ${b}`).join("\n")}
 
-    // Calculate derived metrics for prompt
-    const mrr = company.mrr;
-    const arr = company.arr;
-    const burnRate = company.burn_rate;
-    const runwayMonths = company.runway_months;
-    const churn = company.churn;
-    const growthPercent = company.growth_percent;
-    const leadVelocity = company.lead_velocity;
-
-    // Derived calculations (for LLM context, not stored)
-    const estimatedArr = mrr && !arr ? mrr * 12 : null;
-    const churnWarning = churn && churn > 5;
-    const runwayWarning = runwayMonths && runwayMonths < 6;
-    const growthWarning = growthPercent !== null && growthPercent < 5;
-
-    // Format estimated ARR if needed
-    let estimatedArrNote = "";
-    if (estimatedArr) {
-      const currency = company.kpi_currency || "USD";
-      const scale = company.kpi_scale || "unit";
-      const formatted = formatKpisForPrompt({ arr: estimatedArr, kpi_currency: currency, kpi_scale: scale });
-      estimatedArrNote = `\nNOTE: ARR is not set, but MRR suggests estimated ARR ≈ ${formatted.arr_str} (estimate, not stored).`;
-    }
-
-    const sheetsSyncInfo = company.google_sheets_last_sync_at
-      ? `Based on Google Sheets sync at ${new Date(company.google_sheets_last_sync_at).toLocaleString()}.`
-      : "No Google Sheets sync detected. Connect Sheets to get real-time KPIs.";
-
-    const prompt = `
-You are a startup analyst writing concise, concrete investor insights based on KPI data.
-
-COMPANY CONTEXT:
-- Name: ${company.name || "Unknown"}
-- Industry: ${company.industry || "Not specified"}
-- ${sheetsSyncInfo}
-
-KPI DATA (use exact numbers, mark missing as "not available"):
-${JSON.stringify(kpiContext.kpis, null, 2)}
-
-FORMATTED KPIs:
-- ${kpiStrings.mrr_str}
-- ${kpiStrings.arr_str}
-- ${kpiStrings.burn_rate_str}
-- ${kpiStrings.runway_str}
-- ${kpiStrings.churn_str}
-- ${kpiStrings.growth_str}
-- ${kpiStrings.lead_velocity_str}
-${estimatedArrNote}
-
-TASK:
-Generate 4-7 short, concrete insights (one sentence each) covering:
-1. Health metrics: runway, churn, burn rate (with specific numbers)
-2. Growth metrics: growth_percent, lead_velocity (with specific numbers)
-3. Revenue quality: MRR/ARR trends, churn impact (with specific numbers)
-4. Action items: 1-3 concrete recommendations based on the data
-
-CRITICAL REQUIREMENTS:
-- Each insight MUST start with "VALYXO:"
-- ALWAYS include specific numbers when available (e.g., "MRR is $255k", "Burn rate is $92k/mo", "Churn is 2.5%", "Runway is 12 months")
-- If a KPI field is null/missing, explicitly state what's missing and what should be connected/added (e.g., "Runway months not set - connect cash balance to calculate runway")
-- Flag warnings if: runway < 6 months, churn > 5%, burn rate high relative to revenue, growth < 5%
-- Be concrete and actionable - no generic statements like "looks stable" without numbers
-- Use the exact numbers from the KPI data above
-${churnWarning ? "- WARNING: Churn is ${churn}% (above 5% threshold) - flag this prominently" : ""}
-${runwayWarning ? "- WARNING: Runway is ${runwayMonths} months (below 6 months) - flag this prominently" : ""}
-${growthWarning ? "- WARNING: Growth is ${growthPercent}% (below 5% threshold) - flag this prominently" : ""}
-
-OUTPUT FORMAT:
-Return ONLY the insights as separate lines (one per line).
-No bullets, no numbering, no extra text.
-Each line must start with "VALYXO:"
+Output format: Return exactly ${deterministicBullets.length} lines, each starting with "${PREFIX}".
 `.trim();
 
-    try {
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.4,
+  let rewritten: string[] = deterministicBullets;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+    });
+
+    const raw = completion.choices?.[0]?.message?.content ?? "";
+    const lines = raw
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((line) => {
+        // Remove numbering if present (e.g., "1. VALYXO: ..." -> "VALYXO: ...")
+        return line.replace(/^\d+\.\s*/, "").trim();
       });
 
-      const raw = completion.choices?.[0]?.message?.content ?? "";
-
-      // 3) Parse ROBUST: splitt på "VALYXO:" og bygg tilbake
-      // (fanger både linjer, bullets, nummerering osv.)
-      // Accept 3-6 insights (not just 3)
-      const signedInsights = raw
-        .split("VALYXO:")
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .map((s) => `VALYXO: ${s.replace(/^[:\-\s]+/, "")}`) // fjerner ": -  " i starten
-        .slice(0, 6); // Allow up to 6 insights
-
-      // Validate: must have at least 3 insights
-      if (signedInsights.length < 3) {
-        console.warn(
-          `[runInsightsRefresh] Invalid LLM output. Expected 3-6 VALYXO insights. Got ${signedInsights.length}. Raw:\n${raw}`
-        );
-        finalInsights = DEMO_INSIGHTS;
-        generatedBy = "demo_fallback_invalid_format";
-      } else {
-        finalInsights = signedInsights;
-      }
-    } catch (err) {
-      console.error("[runInsightsRefresh] OpenAI error:", err);
-      finalInsights = DEMO_INSIGHTS;
-      generatedBy = "demo_fallback_openai_error";
+    // enforce format + count
+    if (lines.length === deterministicBullets.length) {
+      rewritten = ensurePrefix(lines);
+    } else {
+      // If line count doesn't match, reject LLM output and use deterministic
+      console.warn(
+        `[runInsightsRefresh] LLM returned ${lines.length} lines, expected ${deterministicBullets.length}. Using deterministic insights.`
+      );
+      rewritten = deterministicBullets;
     }
+  } catch (e) {
+    // If rewrite fails, keep deterministic
+    rewritten = deterministicBullets;
   }
 
-  console.log("[runInsightsRefresh] writing insights and agent run metadata", {
-    companyId,
-    generatedBy,
-    generatedAt: nowIso,
-    insightsCount: finalInsights.length,
-  });
-
-  // 4) Skriv til DB - latest_insights fields + last_agent_run_at/by
-  const { error: updateError } = await supabase
+  // 4) Save narrative separately (recommended)
+  await supabase
     .from("companies")
     .update({
-      latest_insights: finalInsights,
-      latest_insights_generated_at: nowIso,
-      latest_insights_generated_by: generatedBy,
-      // CRITICAL: Update last_agent_run_at and last_agent_run_by
-      last_agent_run_at: nowIso,
-      last_agent_run_by: "valyxo-agent",
+      latest_insights_narrative: rewritten,
+      latest_insights_narrative_generated_at: nowIso,
+      latest_insights_narrative_generated_by: "openai-language-only",
+      // keep last_agent_run fields if you want, but do NOT overwrite deterministic
     })
     .eq("id", companyId);
 
-  if (updateError) {
-    console.error("[runInsightsRefresh] DB update error:", updateError);
-    throw updateError;
-  }
-
-  // 5) Returner structured output
   return {
     ok: true,
     companyId,
-    insights: finalInsights,
-    meta: {
-      usedKpis,
-      companyId,
-      generatedAt: nowIso,
-      companyName: company.name,
-      hasRealKpiData: usedKpis.length > 0,
-      lastSheetsSync: company.google_sheets_last_sync_at,
-    },
+    insights: deterministicBullets, // still return deterministic as canonical
+    narrative: rewritten,           // optional: return rewritten too
     generatedAt: nowIso,
-    generatedBy,
+    generatedBy: "deterministic+language",
+    based_on_snapshot_date: basedOnSnapshotDate,
     savedToDb: true,
   };
 }

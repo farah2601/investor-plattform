@@ -6,25 +6,19 @@ const orchestrator_1 = require("../agent/orchestrator");
 const run_all_1 = require("../agent/tools/run_all");
 const run_all_companies_1 = require("../agent/tools/run_all_companies");
 async function toolsRoutes(app) {
-    // 🔐 Auth på alle /tools/*
     app.addHook("preHandler", verify_1.verifySecret);
     app.post("/run_kpi_refresh", async (request) => {
-        return await (0, orchestrator_1.runAgent)({
-            tool: "run_kpi_refresh",
-            input: request.body,
-        });
+        return await (0, orchestrator_1.runAgent)({ tool: "run_kpi_refresh", input: request.body });
     });
     app.post("/run_insights_refresh", async (request) => {
-        return await (0, orchestrator_1.runAgent)({
-            tool: "run_insights_refresh",
-            input: request.body,
-        });
+        return await (0, orchestrator_1.runAgent)({ tool: "run_insights_refresh", input: request.body });
     });
     app.post("/run_profile_refresh", async (request) => {
-        return await (0, orchestrator_1.runAgent)({
-            tool: "run_profile_refresh",
-            input: request.body,
-        });
+        return await (0, orchestrator_1.runAgent)({ tool: "run_profile_refresh", input: request.body });
+    });
+    // ✅ NY: deterministic insights tool
+    app.post("/generate_insights", async (request) => {
+        return await (0, orchestrator_1.runAgent)({ tool: "generate_insights", input: request.body });
     });
     app.post("/run_all", async (request, reply) => {
         const body = request.body;

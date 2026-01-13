@@ -1,122 +1,186 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateInsights = generateInsights;
-/// mcp-server/src/agent/tools/generate_insights.ts
+// mcp-server/src/agent/tools/generate_insights.ts
 const supabase_1 = require("../../db/supabase");
-const openai_1 = require("../../llm/openai");
-const env_1 = require("../../env");
-// Demo fallback (kun hvis LLM_PROVIDER ikke er "openai" eller ved feil)
-const DEMO_INSIGHTS = [
-    "VALYXO: Revenue is trending up compared to last period.",
-    "VALYXO: Churn looks stable, keep monitoring.",
-    "VALYXO: Consider improving conversion to increase MRR.",
-];
-async function generateInsights(input) {
-    const companyId = input?.companyId;
-    if (!companyId) {
-        return { ok: false, error: "Missing companyId" };
-    }
-    // 1) Hent KPI-er til prompten
-    const { data: company, error: companyError } = await supabase_1.supabase
-        .from("companies")
-        .select("mrr, churn, growth_percent, burn_rate, runway_months, arr")
-        .eq("id", companyId)
-        .single();
-    if (companyError)
-        throw companyError;
-    if (!company)
-        throw new Error("Company not found");
-    const nowIso = new Date().toISOString();
-    let finalInsights = [];
-    let generatedBy = "valyxo-agent"; // default
-    // 2) Sjekk LLM_PROVIDER - hvis ikke "openai", bruk demo
-    if (env_1.env.LLM_PROVIDER !== "openai") {
-        console.log("[generateInsights] LLM_PROVIDER is not 'openai', using demo insights");
-        finalInsights = DEMO_INSIGHTS;
-        generatedBy = "demo";
+const PREFIX = "VALYXO:";
+function n(v) {
+    if (v === null || v === undefined)
+        return null;
+    const num = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(num) ? num : null;
+}
+function fmt(v, digits = 0) {
+    if (v === null)
+        return "n/a";
+    const factor = Math.pow(10, digits);
+    const rounded = Math.round(v * factor) / factor;
+    return digits > 0 ? rounded.toFixed(digits) : String(Math.round(rounded));
+}
+function getKpi(kpis, key) {
+    return n(kpis?.[key]);
+}
+function trend(values) {
+    const xs = values.filter((v) => typeof v === "number");
+    if (xs.length < 2)
+        return "unknown";
+    const first = xs[0];
+    const last = xs[xs.length - 1];
+    if (last > first)
+        return "up";
+    if (last < first)
+        return "down";
+    return "flat";
+}
+function buildDeterministicInsights(latestKpis, history) {
+    const bullets = [];
+    // Stable series from history (always same order)
+    const mrrSeries = history.map(h => getKpi(h.kpis, "mrr"));
+    const burnSeries = history.map(h => getKpi(h.kpis, "burn_rate"));
+    const churnSeries = history.map(h => getKpi(h.kpis, "churn"));
+    const runwaySeries = history.map(h => getKpi(h.kpis, "runway_months"));
+    const growthSeries = history.map(h => getKpi(h.kpis, "growth_percent"));
+    const mrr = getKpi(latestKpis, "mrr");
+    const burn = getKpi(latestKpis, "burn_rate");
+    const churn = getKpi(latestKpis, "churn");
+    const runway = getKpi(latestKpis, "runway_months");
+    const growth = getKpi(latestKpis, "growth_percent");
+    const arr = getKpi(latestKpis, "arr");
+    // 1) MRR trend
+    const mrrT = trend(mrrSeries);
+    if (mrr !== null) {
+        if (mrrT === "up")
+            bullets.push(`${PREFIX} MRR is trending up; latest is ${fmt(mrr)}.`);
+        else if (mrrT === "down")
+            bullets.push(`${PREFIX} MRR is trending down; latest is ${fmt(mrr)}.`);
+        else if (mrrT === "flat")
+            bullets.push(`${PREFIX} MRR looks flat; latest is ${fmt(mrr)}.`);
+        else
+            bullets.push(`${PREFIX} Latest MRR is ${fmt(mrr)}.`);
     }
     else {
-        generatedBy = "openai";
-        const prompt = `
-You are a startup analyst writing concise investor insights.
-
-Company KPIs:
-- MRR: ${company.mrr ?? "n/a"}
-- ARR: ${company.arr ?? "n/a"}
-- Burn rate: ${company.burn_rate ?? "n/a"}
-- Runway months: ${company.runway_months ?? "n/a"}
-- Churn: ${company.churn ?? "n/a"}
-- Growth percent: ${company.growth_percent ?? "n/a"}
-
-Task:
-Generate exactly 3 short, clear insights.
-Each insight must be one sentence.
-
-IMPORTANT:
-Each insight MUST start with the prefix "VALYXO:".
-If an insight does not start with "VALYXO:", the response is invalid.
-
-Return ONLY the 3 insights as separate lines.
-No bullets, no numbering.
-`.trim();
-        try {
-            const completion = await openai_1.openai.chat.completions.create({
-                model: "gpt-4o-mini",
-                messages: [{ role: "user", content: prompt }],
-                temperature: 0.4,
-            });
-            const raw = completion.choices?.[0]?.message?.content ?? "";
-            // 3) Parse ROBUST: splitt på "VALYXO:" og bygg tilbake
-            // (fanger både linjer, bullets, nummerering osv.)
-            const signedInsights = raw
-                .split("VALYXO:")
-                .map((s) => s.trim())
-                .filter(Boolean)
-                .map((s) => `VALYXO: ${s.replace(/^[:\-\s]+/, "")}`) // fjerner ": -  " i starten
-                .slice(0, 3);
-            // Hvis ikke eksakt 3 → fallback
-            if (signedInsights.length !== 3) {
-                console.warn(`[generateInsights] Invalid LLM output. Expected 3 VALYXO insights. Got ${signedInsights.length}. Raw:\n${raw}`);
-                finalInsights = DEMO_INSIGHTS;
-                generatedBy = "demo_fallback_invalid_format";
-            }
-            else {
-                finalInsights = signedInsights;
-            }
-        }
-        catch (err) {
-            console.error("[generateInsights] OpenAI error:", err);
-            finalInsights = DEMO_INSIGHTS;
-            generatedBy = "demo_fallback_openai_error";
-        }
+        bullets.push(`${PREFIX} MRR is not available in the latest snapshot.`);
     }
-    console.log("[generateInsights] writing generated_by/at", {
-        companyId,
-        generatedBy,
-        generatedAt: nowIso,
-    });
-    // 4) Skriv til DB (HER er fiksen)
-    const { error: updateError } = await supabase_1.supabase
+    // 2) Burn + runway sanity
+    const burnT = trend(burnSeries);
+    if (burn !== null) {
+        if (burnT === "up")
+            bullets.push(`${PREFIX} Burn rate is increasing; latest is ${fmt(burn)}.`);
+        else if (burnT === "down")
+            bullets.push(`${PREFIX} Burn rate is decreasing; latest is ${fmt(burn)}.`);
+        else if (burnT === "flat")
+            bullets.push(`${PREFIX} Burn rate looks stable; latest is ${fmt(burn)}.`);
+        else
+            bullets.push(`${PREFIX} Latest burn rate is ${fmt(burn)}.`);
+    }
+    else {
+        bullets.push(`${PREFIX} Burn rate is not available in the latest snapshot.`);
+    }
+    if (runway !== null) {
+        if (runway < 6)
+            bullets.push(`${PREFIX} Runway is short (${fmt(runway, 1)} months); prioritize extending runway.`);
+        else if (runway < 12)
+            bullets.push(`${PREFIX} Runway is moderate (${fmt(runway, 1)} months); keep a close eye on burn.`);
+        else
+            bullets.push(`${PREFIX} Runway is healthy (${fmt(runway, 1)} months) at current burn.`);
+    }
+    else {
+        bullets.push(`${PREFIX} Runway is not available in the latest snapshot.`);
+    }
+    // 3) Churn threshold
+    if (churn !== null) {
+        const churnPct = churn * 100;
+        if (churnPct >= 5)
+            bullets.push(`${PREFIX} Churn is high (${fmt(churnPct, 1)}%); retention should be a focus.`);
+        else if (churnPct >= 2)
+            bullets.push(`${PREFIX} Churn is moderate (${fmt(churnPct, 1)}%); continue retention improvements.`);
+        else
+            bullets.push(`${PREFIX} Churn is low (${fmt(churnPct, 1)}%); retention looks strong.`);
+    }
+    else {
+        bullets.push(`${PREFIX} Churn is not available in the latest snapshot.`);
+    }
+    // 4) Growth
+    const gT = trend(growthSeries);
+    if (growth !== null) {
+        if (gT === "up")
+            bullets.push(`${PREFIX} Growth is improving; latest is ${fmt(growth, 1)}%.`);
+        else if (gT === "down")
+            bullets.push(`${PREFIX} Growth is slowing; latest is ${fmt(growth, 1)}%.`);
+        else if (gT === "flat")
+            bullets.push(`${PREFIX} Growth is stable; latest is ${fmt(growth, 1)}%.`);
+        else
+            bullets.push(`${PREFIX} Latest growth is ${fmt(growth, 1)}%.`);
+    }
+    else {
+        bullets.push(`${PREFIX} Growth is not available in the latest snapshot.`);
+    }
+    // Optional: ARR mention (if present)
+    if (arr !== null) {
+        bullets.push(`${PREFIX} ARR is ${fmt(arr)} based on the latest snapshot.`);
+    }
+    // Keep it 3–7 bullets stable
+    return bullets.slice(0, 7);
+}
+async function generateInsights(input) {
+    const companyId = input?.companyId;
+    if (!companyId)
+        return { ok: false, error: "Missing companyId" };
+    // 1) SOURCE OF TRUTH: kpi_snapshots
+    const { data: snapshots, error: snapErr } = await supabase_1.supabase
+        .from("kpi_snapshots")
+        .select("period_date, kpis")
+        .eq("company_id", companyId)
+        .order("period_date", { ascending: true })
+        .limit(12);
+    if (snapErr)
+        throw snapErr;
+    const rows = (snapshots ?? []);
+    if (!rows.length) {
+        // store empty insights (optional)
+        await supabase_1.supabase
+            .from("companies")
+            .update({
+            latest_insights: [],
+            latest_insights_generated_by: "deterministic",
+            latest_insights_generated_at: new Date().toISOString(),
+            based_on_snapshot_date: null,
+            last_agent_run_at: new Date().toISOString(),
+            last_agent_run_by: "valyxo-agent",
+        })
+            .eq("id", companyId);
+        return { ok: true, companyId, insights: [], based_on_snapshot_date: null };
+    }
+    const latest = rows[rows.length - 1];
+    const latestKpis = latest.kpis || {};
+    const history = rows.map(r => ({ date: r.period_date, kpis: r.kpis || {} }));
+    // 2) Deterministic insights
+    const bullets = buildDeterministicInsights(latestKpis, history);
+    const nowIso = new Date().toISOString();
+    // 3) Save for fast UI
+    const { data: updated, error: updateError } = await supabase_1.supabase
         .from("companies")
         .update({
-        latest_insights: finalInsights,
+        latest_insights: bullets,
+        latest_insights_generated_by: "deterministic",
         latest_insights_generated_at: nowIso,
-        latest_insights_generated_by: generatedBy,
+        based_on_snapshot_date: latest.period_date, // må være "YYYY-MM-DD"
         last_agent_run_at: nowIso,
         last_agent_run_by: "valyxo-agent",
     })
-        .eq("id", companyId);
-    if (updateError) {
-        console.error("[generateInsights] DB update error:", updateError);
+        .eq("id", companyId)
+        .select("based_on_snapshot_date")
+        .single();
+    if (updateError)
         throw updateError;
-    }
-    // 5) Returner respons
+    console.log("[generate_insights] saved based_on_snapshot_date =", updated?.based_on_snapshot_date);
     return {
         ok: true,
         companyId,
-        insights: finalInsights,
+        insights: bullets,
         generatedAt: nowIso,
-        generatedBy,
+        generatedBy: "deterministic",
+        based_on_snapshot_date: latest.period_date,
         savedToDb: true,
     };
 }
