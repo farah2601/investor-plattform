@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { ValyxoLogo } from "../components/brand/ValyxoLogo";
+import { Header } from "../components/landing/Header";
 import { TrackingScripts } from "../components/landing/TrackingScripts";
 import { TourButton } from "../components/landing/TourButton";
 import { OneSourceOfTruth } from "../components/landing/OneSourceOfTruth";
@@ -39,34 +39,7 @@ export default function LandingPage() {
       <TrackingScripts />
       <div className="relative bg-dark text-white" data-vtbot-replace="body">
         {/* Header */}
-        <header className="fixed z-20 w-full bg-dark px-2 text-white">
-          <div className="mx-auto flex max-w-screen-xl items-center justify-between py-2 text-sm lg:py-0">
-            <Link href="/" aria-label="Homepage" className="lg:flex-1 lg:py-2">
-              <ValyxoLogo size={40} priority />
-            </Link>
-            <nav className="hidden lg:block">
-              <div className="relative flex">
-                <Link href="/pricing" className="flex items-center gap-2 px-3 py-4 text-sm font-normal hover:font-medium">
-                  Pricing
-                </Link>
-              </div>
-            </nav>
-            <div className="hidden flex-1 items-center justify-end gap-2 lg:flex">
-              <Link
-                href="/login"
-                className="px-3 py-2 text-white border rounded text-base hover:bg-gray-700 transition-colors ease-in text-sm border-transparent"
-              >
-                Sign In
-              </Link>
-              <Link
-                href="/login"
-                className="relative z-10 rounded border border-emerald-500/40 px-3 py-2 text-base text-white before:absolute before:inset-0 before:-z-20 before:rounded before:bg-gradient-to-r before:from-black before:from-35% before:opacity-0 before:transition-opacity before:duration-300 before:ease-in hover:before:opacity-100 after:absolute after:inset-0 after:-z-10 after:rounded after:bg-gradient-to-b after:from-black after:opacity-0 after:transition-opacity after:duration-500 after:ease-in hover:after:opacity-100 transition-colors ease-in before:to-brand-blue after:to-brand-blue text-sm"
-              >
-                Get Valyxo Free
-              </Link>
-            </div>
-          </div>
-        </header>
+        <Header />
 
         {/* Main Content */}
         <main className="overflow-x-clip pt-[68px]">
