@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import { Header } from "@/components/landing/Header";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,7 @@ type FAQItem = {
 type Category = {
   id: string;
   name: string;
-  icon: JSX.Element;
+  icon: React.ReactNode;
   faqs: FAQItem[];
 };
 
