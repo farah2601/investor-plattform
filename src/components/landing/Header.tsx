@@ -1,16 +1,32 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { ValyxoLogo } from "../brand/ValyxoLogo";
 
 export function Header() {
+  const [isNavHovered, setIsNavHovered] = useState(false);
+
   return (
-    <header className="fixed z-20 w-full bg-dark px-2 text-white">
+    <>
+      {/* Dark overlay that dims content below when hovering over navigation */}
+      {isNavHovered && (
+        <div
+          className="fixed inset-0 top-[68px] bg-black/50 backdrop-blur-sm pointer-events-none transition-opacity duration-200"
+          style={{ zIndex: 15 }}
+        />
+      )}
+
+      <header className="fixed z-20 w-full bg-dark px-2 text-white">
       <div className="mx-auto flex max-w-screen-xl items-center justify-between py-2 text-sm lg:py-0">
         <Link href="/" aria-label="Homepage" className="lg:flex-1 lg:py-2">
-          <ValyxoLogo size={40} priority />
+          <ValyxoLogo size={28} priority />
         </Link>
-        <nav className="hidden lg:block">
+        <nav
+          className="hidden lg:block"
+          onMouseEnter={() => setIsNavHovered(true)}
+          onMouseLeave={() => setIsNavHovered(false)}
+        >
           <div className="relative flex">
             {/* For Founders Dropdown */}
             <div className="group peer">
@@ -445,5 +461,6 @@ export function Header() {
         </div>
       </div>
     </header>
+    </>
   );
 }

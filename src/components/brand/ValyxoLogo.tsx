@@ -14,15 +14,15 @@ export function ValyxoLogo({
 }: ValyxoLogoProps) {
   return (
     <Image
-      src="/brand/valyxo-logo-white.png"
+      src="/favicon.svg"
       alt="Valyxo"
       height={size}
       width={size * 4.0} // ⬅️ logo
       priority={priority}
-     className={cn(
-  "select-none object-contain opacity-100",
-  className
-)}
+      className={cn(
+        "select-none object-contain opacity-100",
+        className
+      )}
     />
   );
 }

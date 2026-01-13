@@ -7,6 +7,7 @@ import Image from "next/image";
 import { Header } from "../components/landing/Header";
 import { TrackingScripts } from "../components/landing/TrackingScripts";
 import { TourButton } from "../components/landing/TourButton";
+import { TourModal } from "../components/landing/TourModal";
 import { OneSourceOfTruth } from "../components/landing/OneSourceOfTruth";
 import { FoundersInvestorsToggle } from "../components/landing/FoundersInvestorsToggle";
 import { PurposeSection } from "../components/landing/PurposeSection";
@@ -37,6 +38,7 @@ export default function LandingPage() {
   return (
     <>
       <TrackingScripts />
+      <TourModal />
       <div className="relative bg-dark text-white" data-vtbot-replace="body">
         {/* Header */}
         <Header />
