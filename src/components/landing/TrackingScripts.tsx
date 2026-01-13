@@ -50,7 +50,8 @@ export function TrackingScripts() {
         strategy="afterInteractive"
       />
 
-      {/* Intercom */}
+      {/* Intercom - Temporarily disabled */}
+      {/*
       <Script id="intercom-config" strategy="afterInteractive">
         {`
           window.intercomSettings = {
@@ -92,6 +93,7 @@ export function TrackingScripts() {
           })();
         `}
       </Script>
+      */}
     </>
   );
 }
