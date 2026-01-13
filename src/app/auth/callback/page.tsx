@@ -12,8 +12,7 @@ import { supabase, isSupabaseConfigured } from "../../lib/supabaseClient";
  * - Email/password login (session refresh)
  * 
  * ROUTING LOGIC:
- * - New user (no company) → /onboarding
- * - Existing user (has company) → /company-dashboard
+ * - All users after login → /onboarding
  * 
  * ERROR HANDLING:
  * - OAuth exchange fails → /login?error=oauth_failed&details=...
@@ -41,6 +40,37 @@ function AuthCallbackContent() {
         console.error("[AuthCallback] Supabase not configured");
         router.replace("/login?error=config_missing");
         return;
+      }
+
+      // Check for hash fragment (access_token from Supabase OAuth redirect)
+      // Supabase sometimes redirects with hash fragment instead of query params
+      if (typeof window !== "undefined" && window.location.hash) {
+        try {
+          const hashParams = new URLSearchParams(window.location.hash.substring(1));
+          const accessToken = hashParams.get("access_token");
+          const refreshToken = hashParams.get("refresh_token");
+          
+          if (accessToken && refreshToken) {
+            console.log("[AuthCallback] Found access_token in hash, setting session");
+            // Supabase will automatically handle the hash and set the session
+            // Wait a bit for Supabase to process the hash
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+            
+            if (sessionError || !session?.user) {
+              console.error("[AuthCallback] Failed to get session from hash:", sessionError);
+              router.replace("/login?error=oauth_failed&details=session_error");
+              return;
+            }
+            
+            console.log("[AuthCallback] Session from hash, routing user:", session.user.id);
+            await routeUser(session.user.id);
+            return;
+          }
+        } catch (err) {
+          console.error("[AuthCallback] Error parsing hash:", err);
+        }
       }
 
       const code = searchParams.get("code");
@@ -111,26 +141,9 @@ function AuthCallbackContent() {
 
     const routeUser = async (userId: string) => {
       try {
-        const { data: company, error: companyError } = await supabase
-          .from("companies")
-          .select("id")
-          .eq("owner_id", userId)
-          .maybeSingle();
-
-        if (companyError) {
-          console.error("[AuthCallback] Error checking company:", companyError);
-          // Still route to onboarding if we can't check company
-          router.replace("/onboarding");
-          return;
-        }
-
-        if (company?.id) {
-          console.log("[AuthCallback] User has company, routing to dashboard");
-          router.replace(`/company-dashboard?companyId=${company.id}`);
-        } else {
-          console.log("[AuthCallback] User has no company, routing to onboarding");
-          router.replace("/onboarding");
-        }
+        // Always route to onboarding after login
+        console.log("[AuthCallback] Routing user to onboarding:", userId);
+        router.replace("/onboarding");
       } catch (err) {
         console.error("[AuthCallback] Unexpected error during routing:", err);
         // Default to onboarding on error

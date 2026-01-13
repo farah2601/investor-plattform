@@ -23,6 +23,28 @@ export default function LoginPage() {
     password: "",
   });
 
+  // Check if user is already logged in and redirect them
+  useEffect(() => {
+    const checkSession = async () => {
+      if (!isSupabaseConfigured()) return;
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session?.user) {
+          // User is already logged in, redirect through callback for proper routing
+          console.log("[Login] User already logged in, redirecting to callback");
+          router.replace("/auth/callback");
+        }
+      } catch (err) {
+        console.error("[Login] Error checking session:", err);
+        // Continue with login page if there's an error
+      }
+    };
+
+    checkSession();
+  }, [router]);
+
   // Check for error query params from callback redirect
   useEffect(() => {
     const errorParam = searchParams.get("error");
