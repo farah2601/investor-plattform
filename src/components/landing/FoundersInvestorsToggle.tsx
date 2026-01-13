@@ -46,7 +46,7 @@ export function FoundersInvestorsToggle() {
                 Auto-sync core metrics and share a live dashboard with investors. Keep one source of truth and cut down follow-up questions.
               </div>
               <div className="vx-ffis-ctaRow">
-                <Link className="vx-ffis-cta" href="/login" onClick={(e) => e.stopPropagation()}>
+                <Link className="vx-ffis-cta" href="/sign-up" onClick={(e) => e.stopPropagation()}>
                   Get Valyxo Free
                 </Link>
                 <div className="vx-ffis-ctaHint">Click anywhere</div>

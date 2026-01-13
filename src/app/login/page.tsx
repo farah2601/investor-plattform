@@ -225,30 +225,46 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#050712] text-slate-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-sm bg-[#0B0E17] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
-        {/* Back to home link */}
+    <main className="min-h-screen text-slate-50 flex items-center justify-center px-4 relative">
+      <div className="w-full max-w-sm">
+        {/* Back to home link - repositioned */}
         <Link
           href="/"
-          className="inline-flex items-center text-xs text-slate-400 hover:text-slate-200 transition-colors mb-2"
+          className="inline-flex items-center text-xs text-slate-400 hover:text-slate-200 transition-colors mb-4 group"
         >
-          ← Back to home
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            fill="none" 
+            viewBox="0 0 24 24" 
+            stroke="currentColor" 
+            className="w-3 h-3 mr-1.5 group-hover:-translate-x-0.5 transition-transform"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to home
         </Link>
 
-        <header className="space-y-1">
-          <h1 className="text-2xl font-bold">Sign in</h1>
-          <p className="text-sm text-slate-400">
-            Enter your email and password to access your dashboard.
-          </p>
-        </header>
-
-        {/* OAuth button */}
-        <Button
-          type="button"
-          onClick={handleGoogleOAuth}
-          disabled={loading || oauthLoading || !isSupabaseConfigured()}
-          className="w-full bg-white hover:bg-white/90 text-slate-900 font-medium flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+        {/* Card with subtle depth */}
+        <div 
+          className="relative bg-gradient-to-b from-[#0B0E17]/95 to-[#080B14]/95 border border-white/10 rounded-2xl p-8 shadow-2xl space-y-6 backdrop-blur-sm"
+          style={{
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05)'
+          }}
         >
+          <header className="space-y-2">
+            <h1 className="text-2xl font-semibold text-white">Welcome back to Valyxo</h1>
+            <p className="text-sm text-slate-400">
+              Access your investor-ready dashboard
+            </p>
+          </header>
+
+          {/* OAuth button - dark/glass style */}
+          <Button
+            type="button"
+            onClick={handleGoogleOAuth}
+            disabled={loading || oauthLoading || !isSupabaseConfigured()}
+            className="w-full bg-slate-900/50 hover:bg-slate-800/60 border border-slate-700/50 text-slate-200 font-medium flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed rounded-md backdrop-blur-sm transition-all"
+          >
           {oauthLoading ? (
             <>
               <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
@@ -282,74 +298,77 @@ export default function LoginPage() {
           )}
         </Button>
 
-        {/* Divider */}
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-slate-700"></div>
+          {/* Divider */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-slate-700/50"></div>
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-gradient-to-b from-[#0B0E17]/95 to-[#080B14]/95 px-3 text-slate-500">Or</span>
+            </div>
           </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-[#0B0E17] px-2 text-slate-500">Or</span>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-2">
+              <label className="text-xs text-slate-400 font-medium">Email</label>
+              <Input
+                type="email"
+                required
+                className="bg-slate-900/50 border-slate-700/50 text-white placeholder:text-slate-500"
+                value={form.email}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, email: e.target.value }))
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs text-slate-400 font-medium">Password</label>
+              <Input
+                type="password"
+                required
+                className="bg-slate-900/50 border-slate-700/50 text-white placeholder:text-slate-500"
+                value={form.password}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, password: e.target.value }))
+                }
+              />
+            </div>
+
+            {error && (
+              <p className="text-xs text-rose-400">
+                {error}
+              </p>
+            )}
+
+            {timeoutMessage && (
+              <p className="text-xs text-amber-400">
+                {timeoutMessage}
+              </p>
+            )}
+
+            <Button
+              type="submit"
+              className="w-full h-11 bg-gradient-to-r from-[#2B74FF] to-[#4D9FFF] hover:from-[#2563EB] hover:to-[#3B82F6] text-white font-medium shadow-lg shadow-[#2B74FF]/20 hover:shadow-[#4D9FFF]/30 transition-all disabled:opacity-50"
+              disabled={loading}
+            >
+              {loading ? "Signing in..." : "Sign in"}
+            </Button>
+          </form>
+
+          <div className="space-y-3 pt-2">
+            <p className="text-xs text-slate-500 text-center">
+              If you signed up with Google, use Google to sign in again.
+            </p>
+
+            <p className="text-xs text-slate-500 text-center">
+              Don't have an account?{" "}
+              <a href="/sign-up" className="text-[#4D9FFF] hover:text-[#60A5FA] hover:underline transition-colors">
+                Sign up
+              </a>
+            </p>
           </div>
         </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-xs text-slate-400">Email</label>
-            <Input
-              type="email"
-              required
-              className="bg-slate-900 border-slate-700"
-              value={form.email}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, email: e.target.value }))
-              }
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-xs text-slate-400">Password</label>
-            <Input
-              type="password"
-              required
-              className="bg-slate-900 border-slate-700"
-              value={form.password}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, password: e.target.value }))
-              }
-            />
-          </div>
-
-          {error && (
-            <p className="text-xs text-rose-400">
-              {error}
-            </p>
-          )}
-
-          {timeoutMessage && (
-            <p className="text-xs text-amber-400">
-              {timeoutMessage}
-            </p>
-          )}
-
-          <Button
-            type="submit"
-            className="w-full bg-[#2B74FF] hover:bg-[#2B74FF]/90"
-            disabled={loading}
-          >
-            {loading ? "Signing in..." : "Sign in"}
-          </Button>
-        </form>
-
-        <p className="text-xs text-slate-500 text-center">
-          If you signed up with Google, use Google to sign in again.
-        </p>
-
-        <p className="text-xs text-slate-500 text-center">
-          Don't have an account?{" "}
-          <a href="/sign-up" className="text-[#2B74FF] hover:underline">
-            Sign up
-          </a>
-        </p>
       </div>
     </main>
   );

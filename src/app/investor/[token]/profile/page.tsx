@@ -315,7 +315,7 @@ export default function InvestorCompanyProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen w-full overflow-x-hidden bg-slate-950 text-slate-50">
+      <div className="min-h-screen w-full overflow-x-hidden text-slate-50">
         <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
           {/* Skeleton Header */}
           <div className="rounded-3xl bg-gradient-to-br from-sky-500/15 via-slate-900/80 to-slate-950 p-[1px]">
@@ -356,7 +356,7 @@ export default function InvestorCompanyProfilePage() {
 
   if (error || !company) {
     return (
-      <div className="min-h-screen w-full bg-slate-950 text-slate-50 flex items-center justify-center px-4">
+      <div className="min-h-screen w-full text-slate-50 flex items-center justify-center px-4">
         <p className="max-w-md text-center text-sm text-red-400">
           {error || "Could not load profile for this link."}
         </p>
@@ -388,7 +388,7 @@ export default function InvestorCompanyProfilePage() {
   const hasNarrative = hasNarrativeContent(company);
 
   return (
-    <div className="min-h-screen w-full overflow-x-hidden bg-slate-950 text-slate-50">
+    <div className="min-h-screen w-full overflow-x-hidden text-slate-50">
       <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
         {/* TOP / OVERVIEW */}
         <div className="rounded-3xl bg-gradient-to-br from-sky-500/15 via-slate-900/80 to-slate-950 p-[1px]">

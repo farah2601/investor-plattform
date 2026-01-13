@@ -12,7 +12,9 @@ import { supabase, isSupabaseConfigured } from "../../lib/supabaseClient";
  * - Email/password login (session refresh)
  * 
  * ROUTING LOGIC:
- * - All users after login → /onboarding
+ * - No company → /onboarding
+ * - Company but profile_published = false → /company-profile
+ * - Company and profile_published = true → /company-dashboard
  * 
  * ERROR HANDLING:
  * - OAuth exchange fails → /login?error=oauth_failed&details=...
@@ -141,9 +143,37 @@ function AuthCallbackContent() {
 
     const routeUser = async (userId: string) => {
       try {
-        // Always route to onboarding after login
-        console.log("[AuthCallback] Routing user to onboarding:", userId);
-        router.replace("/onboarding");
+        // Check if user has a company and its publication status
+        const { data: company, error: companyError } = await supabase
+          .from("companies")
+          .select("id, profile_published")
+          .eq("owner_id", userId)
+          .maybeSingle();
+
+        if (companyError) {
+          console.error("[AuthCallback] Error checking company:", companyError);
+          // Default to onboarding on error
+          router.replace("/onboarding");
+          return;
+        }
+
+        // No company → onboarding
+        if (!company?.id) {
+          console.log("[AuthCallback] No company found, routing to onboarding:", userId);
+          router.replace("/onboarding");
+          return;
+        }
+
+        // Company exists but not published → company profile (edit mode)
+        if (company.profile_published === false) {
+          console.log("[AuthCallback] Company not published, routing to company-profile:", userId);
+          router.replace("/company-profile");
+          return;
+        }
+
+        // Company exists and published → dashboard
+        console.log("[AuthCallback] Company published, routing to dashboard:", userId);
+        router.replace(`/company-dashboard?companyId=${company.id}`);
       } catch (err) {
         console.error("[AuthCallback] Unexpected error during routing:", err);
         // Default to onboarding on error
@@ -157,7 +187,7 @@ function AuthCallbackContent() {
   // Show error message if error state is set (shouldn't happen often, but good UX)
   if (error) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-[#050712] text-slate-400">
+      <main className="min-h-screen flex items-center justify-center text-slate-400">
         <div className="text-center space-y-4">
           <p className="text-rose-400">Error: {error}</p>
           <button
@@ -172,7 +202,7 @@ function AuthCallbackContent() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-[#050712] text-slate-400">
+    <main className="min-h-screen flex items-center justify-center text-slate-400">
       Completing sign in…
     </main>
   );
@@ -181,7 +211,7 @@ function AuthCallbackContent() {
 export default function AuthCallbackPage() {
   return (
     <Suspense fallback={
-      <main className="min-h-screen flex items-center justify-center bg-[#050712] text-slate-400">
+      <main className="min-h-screen flex items-center justify-center text-slate-400">
         Loading…
       </main>
     }>

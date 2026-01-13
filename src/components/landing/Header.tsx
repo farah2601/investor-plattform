@@ -150,7 +150,7 @@ export function Header() {
                       <div className="text-sm text-white">Templates</div>
                     </div>
                   </Link>
-                  <Link href="https://help.valyxo.com/" target="_blank" rel="noopener" className="group flex gap-2 rounded-md hover:bg-gray-700 p-3" role="menuitem">
+                  <Link href="/help" className="group flex gap-2 rounded-md hover:bg-gray-700 p-3" role="menuitem">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 25 25" className="inline-flex shrink-0 mt-0.5 size-5 text-gray-400">
                       <path fill="currentColor" d="M12.5 20.313a7.812 7.812 0 1 1 0-15.626 7.812 7.812 0 0 1 0 15.624Zm0-14.063a6.25 6.25 0 1 0 0 12.5 6.25 6.25 0 0 0 0-12.5Zm-.782 9.375h1.563v1.563h-1.563v-1.563Zm0-6.25h1.563a1.562 1.562 0 1 1 0 3.125v1.563h-1.563V10.5a.782.782 0 0 1 .782-.781 1 1 0 1 0 0-2h-1.563V6.594h1.563a2.344 2.344 0 0 1 0 4.688Z" />
                     </svg>
@@ -295,7 +295,7 @@ export function Header() {
                 <hr className="mt-4" />
                 <div className="mt-4 space-y-2" role="none">
                   <Link href="/login" className="text-white text-base font-normal hover:font-medium py-2 block">Templates</Link>
-                  <Link href="https://help.valyxo.com/" target="_blank" rel="noopener" className="text-white text-base font-normal hover:font-medium py-2 block">Help Center</Link>
+                  <Link href="/help" className="text-white text-base font-normal hover:font-medium py-2 block">Help Center</Link>
                   <Link href="https://updates.valyxo.com/" target="_blank" rel="noopener" className="text-white text-base font-normal hover:font-medium py-2 block">Product Updates</Link>
                 </div>
               </div>
@@ -322,7 +322,7 @@ export function Header() {
               <Link href="/login" className="px-3 py-2 text-white border rounded text-base hover:bg-gray-700 transition-colors ease-in text-sm">
                 Sign In
               </Link>
-              <Link href="/login" className="px-3 py-2 text-dark bg-white border rounded text-lg hover:bg-transparent hover:text-white transition-colors ease-in text-sm">
+              <Link href="/sign-up" className="px-3 py-2 text-dark bg-white border rounded text-lg hover:bg-transparent hover:text-white transition-colors ease-in text-sm">
                 Get Valyxo Free
               </Link>
             </div>
@@ -337,7 +337,7 @@ export function Header() {
             Sign In
           </Link>
           <Link
-            href="/login"
+            href="/sign-up"
             className="relative z-10 rounded border border-emerald-500/40 px-3 py-2 text-base text-white before:absolute before:inset-0 before:-z-20 before:rounded before:bg-gradient-to-r before:from-black before:from-35% before:opacity-0 before:transition-opacity before:duration-300 before:ease-in hover:before:opacity-100 after:absolute after:inset-0 after:-z-10 after:rounded after:bg-gradient-to-b after:from-black after:opacity-0 after:transition-opacity after:duration-500 after:ease-in hover:after:opacity-100 transition-colors ease-in before:to-brand-blue after:to-brand-blue text-sm"
           >
             Get Valyxo Free

@@ -5,7 +5,7 @@ import Image from "next/image";
 export function PurposeSection() {
   return (
     <section className="relative mx-auto mt-16 max-w-screen-xl lg:mt-32 lg:px-4">
-      <div className="bg-gradient-to-b from-black to-black/20 px-4 py-14 lg:rounded-lg">
+      <div className="bg-gradient-to-b from-black/80 to-black/40 px-4 py-14 lg:rounded-lg">
         <div className="mx-auto max-w-2xl text-center text-xl">
           <div className="text-base uppercase">The purpose behind Valyxo</div>
           <p className="mt-4 text-pretty">

@@ -236,7 +236,7 @@ export default function SignUpPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#050712] text-slate-50 flex items-center justify-center px-4">
+    <main className="min-h-screen text-slate-50 flex items-center justify-center px-4">
       <div className="w-full max-w-sm bg-[#0B0E17] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
         {/* Back to home link */}
         <Link
@@ -246,12 +246,44 @@ export default function SignUpPage() {
           ← Back to home
         </Link>
 
-        <header className="space-y-1">
+        <header className="space-y-2">
           <h1 className="text-2xl font-bold">Sign up</h1>
-          <p className="text-sm text-slate-400">
-            Create an account to get started with Valyxo.
+          <p className="text-sm text-slate-400 leading-relaxed">
+            Join Valyxo early access — free for now.<br />
+            We're working closely with founders and investors to build the most reliable metrics and reporting platform.
           </p>
         </header>
+
+        {/* Early Access Badge */}
+        <div className="flex items-center justify-center">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-green/10 border border-brand-green/20 text-xs text-brand-green">
+            <span className="font-medium">Early Access</span>
+            <span className="text-brand-green/70">·</span>
+            <span>Free for now</span>
+          </div>
+        </div>
+
+        {/* Benefits Section */}
+        <div className="space-y-2.5 py-2">
+          <div className="flex items-start gap-2.5">
+            <svg className="w-4 h-4 text-brand-green mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <span className="text-sm text-slate-300">Get investor-ready metrics in minutes</span>
+          </div>
+          <div className="flex items-start gap-2.5">
+            <svg className="w-4 h-4 text-brand-green mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <span className="text-sm text-slate-300">Share clear updates without manual reporting</span>
+          </div>
+          <div className="flex items-start gap-2.5">
+            <svg className="w-4 h-4 text-brand-green mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <span className="text-sm text-slate-300">Help shape the future of Valyxo</span>
+          </div>
+        </div>
 
         {/* OAuth button */}
         <Button
@@ -364,12 +396,17 @@ export default function SignUpPage() {
           </Button>
         </form>
 
-        <p className="text-xs text-slate-500 text-center">
-          Already have an account?{" "}
-          <a href="/login" className="text-[#2B74FF] hover:underline">
-            Sign in
-          </a>
-        </p>
+        <div className="space-y-3 pt-2">
+          <p className="text-xs text-slate-500 text-center italic">
+            Your feedback directly influences what we build next.
+          </p>
+          <p className="text-xs text-slate-500 text-center">
+            Already have an account?{" "}
+            <a href="/login" className="text-[#2B74FF] hover:underline">
+              Sign in
+            </a>
+          </p>
+        </div>
       </div>
     </main>
   );

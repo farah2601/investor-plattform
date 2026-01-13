@@ -337,7 +337,7 @@ export default function InvestorCompanyPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen w-full bg-slate-950 text-slate-50 flex items-center justify-center">
+      <div className="min-h-screen w-full text-slate-50 flex items-center justify-center">
         <p className="text-sm text-slate-400">Loading investor view…</p>
       </div>
     );
@@ -345,7 +345,7 @@ export default function InvestorCompanyPage() {
 
   if (error || !company) {
     return (
-      <div className="min-h-screen w-full bg-slate-950 text-slate-50 flex items-center justify-center px-4">
+      <div className="min-h-screen w-full text-slate-50 flex items-center justify-center px-4">
         <div className="max-w-xl text-center space-y-3">
           <p className="text-sm text-red-400">
             {error || "Could not load investor view for this link."}
@@ -361,7 +361,7 @@ export default function InvestorCompanyPage() {
   const initial = company.name?.charAt(0)?.toUpperCase() || "C";
 
   return (
-    <div className="min-h-screen w-full overflow-x-hidden bg-slate-950 text-slate-50">
+    <div className="min-h-screen w-full overflow-x-hidden text-slate-50">
       <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
         {/* TOP AREA WITH GRADIENT BACKGROUND */}
         <div className="rounded-3xl bg-gradient-to-br from-sky-500/15 via-slate-900/80 to-slate-950 p-[1px]">

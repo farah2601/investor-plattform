@@ -113,7 +113,7 @@ export default function FounderPricingPage() {
               {/* CTA */}
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Link
-                  href="/login"
+                  href="/sign-up"
                   className="vx-cta-green relative z-10 rounded-md border px-7 py-3.5 text-base text-white before:absolute before:inset-0 before:-z-20 before:rounded-md before:bg-gradient-to-r before:from-black before:from-35% before:opacity-0 before:transition-opacity before:duration-300 before:ease-in hover:before:opacity-100 after:absolute after:inset-0 after:-z-10 after:rounded-md after:bg-gradient-to-b after:from-black after:opacity-0 after:transition-opacity after:duration-500 after:ease-in hover:after:opacity-100 transition-colors ease-in before:to-brand-blue after:to-brand-blue block border-0 bg-brand-blue text-lg shadow-lg shadow-brand-blue/25 text-center"
                 >
                   Get Valyxo Free

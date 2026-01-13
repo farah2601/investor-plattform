@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { ValyxoLogo } from "../../components/brand/ValyxoLogo";
-import { X, ArrowLeft } from "lucide-react";
+import { X } from "lucide-react";
 
 type Step = 1 | 2 | 3;
 
@@ -315,7 +315,9 @@ export default function OnboardingPage() {
                 </Button>
 
                 <Button type="button" variant="outline" onClick={handleExit} className={secondaryCta}>
-                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
                   Exit
                 </Button>
               </div>
@@ -389,7 +391,9 @@ export default function OnboardingPage() {
                 </Button>
 
                 <Button type="button" variant="outline" className={secondaryCta} onClick={back}>
-                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
                   Back
                 </Button>
               </div>
@@ -417,7 +421,9 @@ export default function OnboardingPage() {
                 </Button>
 
                 <Button type="button" variant="outline" className={secondaryCta} onClick={back}>
-                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
                   Back
                 </Button>
               </div>

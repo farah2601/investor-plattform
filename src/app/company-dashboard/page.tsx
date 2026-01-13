@@ -694,7 +694,7 @@ function CompanyDashboardContent() {
 
   if (!authChecked) {
     return (
-      <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center">
+      <main className="min-h-screen text-slate-50 flex items-center justify-center">
         <p className="text-sm text-slate-400">Checking access…</p>
       </main>
     );
@@ -703,7 +703,7 @@ function CompanyDashboardContent() {
   // Empty state: require explicit companyId
   if (!currentCompanyId) {
     return (
-      <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center">
+      <main className="min-h-screen text-slate-50 flex items-center justify-center">
         <div className="max-w-md w-full text-center space-y-4 px-4">
           <h1 className="text-2xl font-semibold text-slate-50">No Company Selected</h1>
           <p className="text-sm text-slate-400">
@@ -723,7 +723,7 @@ function CompanyDashboardContent() {
 
   if (error) {
     return (
-      <main className="min-h-screen bg-slate-950 text-slate-50 p-10">
+      <main className="min-h-screen text-slate-50 p-10">
         <h1 className="text-2xl font-bold mb-4">Error</h1>
         <pre className="text-red-400">{error}</pre>
       </main>
@@ -731,7 +731,7 @@ function CompanyDashboardContent() {
   }
   return (
     <>
-      <main className="min-h-screen bg-slate-950 text-slate-50">
+      <main className="min-h-screen text-slate-50">
         <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-6 sm:space-y-8">
           {/* HEADER - mobile: stack, desktop: side-by-side */}
           <header className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 sm:gap-6 pb-2">
@@ -1371,7 +1371,7 @@ function CompanyDashboardContent() {
 export default function CompanyDashboard() {
   return (
     <Suspense fallback={
-      <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center">
+      <main className="min-h-screen text-slate-50 flex items-center justify-center">
         <p className="text-sm text-slate-400">Loading dashboard...</p>
       </main>
     }>

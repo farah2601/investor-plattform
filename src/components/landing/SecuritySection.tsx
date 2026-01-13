@@ -2,8 +2,9 @@ export function SecuritySection() {
   return (
     <section className="mt-16 lg:mt-32">
       <div className="mx-auto max-w-screen-xl lg:px-4">
-        <div className="flex flex-col gap-8 bg-gradient-to-b from-black to-black/20 p-8 lg:flex-row lg:rounded-lg lg:p-16 lg:gap-12">
-          <div className="lg:w-1/2">
+        <div className="relative flex flex-col gap-8 bg-gradient-to-b from-black/80 to-black/40 p-8 lg:flex-row lg:rounded-lg lg:p-16 lg:gap-12 overflow-hidden">
+          
+          <div className="relative lg:w-1/2">
             <div className="inline-flex shrink-0 flex size-16">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 348 348" className="w-full h-full">
                 <g clipPath="url(#security-clip)">
@@ -27,12 +28,13 @@ export function SecuritySection() {
                 </defs>
               </svg>
             </div>
-            <div className="mt-6 uppercase tracking-wider">SECURITY</div>
-            <h3 className="font-dark mt-1.5 text-3xl font-medium">Security by default</h3>
-            <p className="mt-2.5 text-xl">Encryption, access controls, and data isolation.</p>
+            <div className="mt-6 text-xs uppercase tracking-[0.15em] text-slate-400">SECURITY</div>
+            <h3 className="font-dark mt-2 text-4xl font-medium text-white">Security by default</h3>
+            <div className="mt-3 h-px w-16 bg-gradient-to-r from-brand-blue/50 to-transparent" />
+            <p className="mt-4 text-lg text-slate-300 leading-relaxed">Enterprise-grade security built into every layer of Valyxo.</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:w-1/2 lg:gap-5">
-            <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 lg:w-1/2 lg:gap-6">
+            <div className="group flex flex-col gap-3 p-4 rounded-lg transition-all duration-300 hover:bg-white/5 hover:shadow-lg hover:shadow-brand-blue/10 hover:-translate-y-0.5">
               <div className="inline-flex shrink-0 size-14 text-brand-blue">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 63 63" className="w-full h-full">
                   <rect width="60.372" height="60.372" x="1.086" y="1.517" stroke="currentColor" strokeOpacity=".18" strokeWidth="1.628" rx="7.186" />
@@ -41,16 +43,14 @@ export function SecuritySection() {
                   <path stroke="currentColor" strokeWidth="1.5" d="M25 32h12" />
                 </svg>
               </div>
-              <div className="space-y-0.5">
-                <div className="text-lg font-medium">Data encryption</div>
-                <p className="font-thin text-sm leading-relaxed">
-                  TLS 1.2+ in transit
-                  <br />
-                  Encrypted at rest
+              <div className="space-y-1">
+                <div className="text-lg font-medium text-white">Data encryption</div>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  TLS 1.2+ in transit · AES-256 at rest
                 </p>
               </div>
             </div>
-            <div className="flex flex-col gap-3">
+            <div className="group flex flex-col gap-3 p-4 rounded-lg transition-all duration-300 hover:bg-white/5 hover:shadow-lg hover:shadow-brand-green/10 hover:-translate-y-0.5">
               <div className="inline-flex shrink-0 size-14 text-brand-green">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 63 63" className="w-full h-full">
                   <rect width="60.372" height="60.372" x="1.086" y="1.634" stroke="currentColor" strokeOpacity=".18" strokeWidth="1.628" rx="7.186" />
@@ -58,16 +58,14 @@ export function SecuritySection() {
                   <path stroke="currentColor" strokeWidth="1.5" d="M31 24v16M23 32h16" />
                 </svg>
               </div>
-              <div className="space-y-0.5">
-                <div className="text-lg font-medium">Access control</div>
-                <p className="font-thin text-sm leading-relaxed">
-                  Role-based permissions
-                  <br />
-                  MFA for internal access
+              <div className="space-y-1">
+                <div className="text-lg font-medium text-white">Access control</div>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Role-based permissions · MFA for internal access
                 </p>
               </div>
             </div>
-            <div className="flex flex-col gap-3">
+            <div className="group flex flex-col gap-3 p-4 rounded-lg transition-all duration-300 hover:bg-white/5 hover:shadow-lg hover:shadow-brand-purple/10 hover:-translate-y-0.5">
               <div className="inline-flex shrink-0 size-14 text-brand-purple">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 63 63" className="w-full h-full">
                   <rect width="60.372" height="60.372" x="1.086" y="1.72" stroke="currentColor" strokeOpacity=".18" strokeWidth="1.628" rx="7.186" />
@@ -75,16 +73,14 @@ export function SecuritySection() {
                   <path stroke="currentColor" strokeWidth="1.5" d="M28 28h6M28 32h6M28 36h4" />
                 </svg>
               </div>
-              <div className="space-y-0.5">
-                <div className="text-lg font-medium">Secure infrastructure</div>
-                <p className="font-thin text-sm leading-relaxed">
-                  Isolated environments
-                  <br />
-                  Separate backups
+              <div className="space-y-1">
+                <div className="text-lg font-medium text-white">Secure infrastructure</div>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Isolated environments · Separate backups
                 </p>
               </div>
             </div>
-            <div className="flex flex-col gap-3">
+            <div className="group flex flex-col gap-3 p-4 rounded-lg transition-all duration-300 hover:bg-white/5 hover:shadow-lg hover:shadow-brand-blue/10 hover:-translate-y-0.5">
               <div className="inline-flex shrink-0 size-14 text-brand-blue">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 63 63" className="w-full h-full">
                   <rect width="60.372" height="60.372" x="1.086" y="1.517" stroke="currentColor" strokeOpacity=".18" strokeWidth="1.628" rx="7.186" />
@@ -97,12 +93,10 @@ export function SecuritySection() {
                   <circle cx="38" cy="31" r="2" fill="currentColor" />
                 </svg>
               </div>
-              <div className="space-y-0.5">
-                <div className="text-lg font-medium">Data isolation</div>
-                <p className="font-thin text-sm leading-relaxed">
-                  Customer data is logically isolated
-                  <br />
-                  No access by other customers or third parties
+              <div className="space-y-1">
+                <div className="text-lg font-medium text-white">Data isolation</div>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Customer data logically isolated · No cross-customer access
                 </p>
               </div>
             </div>

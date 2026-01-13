@@ -60,7 +60,7 @@ export default function LandingPage() {
               <div className="mt-5 lg:mt-8">
                 <div data-ab-test-single-button>
                   <Link
-                    href="/login"
+                    href="/sign-up"
                     className="vx-cta-green relative z-10 rounded-md border px-7 py-3.5 text-base text-white before:absolute before:inset-0 before:-z-20 before:rounded-md before:bg-gradient-to-r before:from-black before:from-35% before:opacity-0 before:transition-opacity before:duration-300 before:ease-in hover:before:opacity-100 after:absolute after:inset-0 after:-z-10 after:rounded-md after:bg-gradient-to-b after:from-black after:opacity-0 after:transition-opacity after:duration-500 after:ease-in hover:after:opacity-100 transition-colors ease-in before:to-brand-blue after:to-brand-blue block border-0 bg-brand-blue text-lg shadow-lg shadow-brand-blue/25"
                   >
                     Get Valyxo Free
@@ -136,13 +136,18 @@ export default function LandingPage() {
                     <div className="font-medium text-white mb-4">For Founders</div>
                     <ul className="space-y-3 text-sm text-white/70">
                       <li>
-                        <Link href="/company-dashboard?role=company" className="hover:text-white">
-                          Dashboards
+                        <Link href="/login" className="hover:text-white">
+                          Investor Updates
                         </Link>
                       </li>
                       <li>
                         <Link href="/login" className="hover:text-white">
-                          Metrics
+                          Fundraising
+                        </Link>
+                      </li>
+                      <li>
+                        <Link href="/login" className="hover:text-white">
+                          Metric Tracking
                         </Link>
                       </li>
                     </ul>
@@ -155,24 +160,49 @@ export default function LandingPage() {
                           Portfolio Monitoring
                         </Link>
                       </li>
+                      <li>
+                        <Link href="/login" className="hover:text-white">
+                          Portfolio Insights
+                        </Link>
+                      </li>
+                      <li>
+                        <Link href="/login" className="hover:text-white">
+                          LP Reporting
+                        </Link>
+                      </li>
                     </ul>
                   </div>
                   <div>
                     <div className="font-medium text-white mb-4">Resources</div>
                     <ul className="space-y-3 text-sm text-white/70">
                       <li>
-                        <Link href="#" className="hover:text-white">
-                          Blog
+                        <Link href="/login" className="hover:text-white">
+                          Templates
+                        </Link>
+                      </li>
+                      <li>
+                        <Link href="/help" className="hover:text-white">
+                          Help Center
+                        </Link>
+                      </li>
+                      <li>
+                        <Link href="https://updates.valyxo.com/" target="_blank" rel="noopener" className="hover:text-white">
+                          Product Updates
                         </Link>
                       </li>
                     </ul>
                   </div>
                   <div>
-                    <div className="font-medium text-white mb-4">Company</div>
+                    <div className="font-medium text-white mb-4">Pricing</div>
                     <ul className="space-y-3 text-sm text-white/70">
                       <li>
-                        <Link href="mailto:support@valyxo.com" className="hover:text-white">
-                          Contact
+                        <Link href="/pricing/founders" className="hover:text-white">
+                          Founder Pricing
+                        </Link>
+                      </li>
+                      <li>
+                        <Link href="/pricing/investors" className="hover:text-white">
+                          Investor Pricing
                         </Link>
                       </li>
                     </ul>

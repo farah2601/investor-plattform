@@ -1,6 +1,6 @@
 export default function PrivacyPolicyPage() {
   return (
-    <main className="min-h-screen bg-[#020617] text-slate-50">
+    <main className="min-h-screen text-slate-50">
       <div className="mx-auto w-full max-w-4xl px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
         <h1 className="text-3xl sm:text-4xl font-bold mb-6 text-slate-50">
           Privacy Policy
