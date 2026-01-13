@@ -13,14 +13,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "An investor relationship hub for best-in-class founders - Valyxo.vc",
+  title: "Valyxo",
   description:
     "Founder-friendly fundraising, stakeholder communication, and reporting tools for startup founders and the investors who back them.",
-  icons: {
-    icon: "/favicon.ico",
-    shortcut: "/favicon.ico",
-    apple: "/favicon.ico",
-  },
+  // Next.js automatically detects favicon.ico in src/app/ directory
   openGraph: {
     title: "An investor relationship hub for best-in-class founders",
     description:

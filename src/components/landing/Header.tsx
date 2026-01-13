@@ -185,7 +185,7 @@ export function Header() {
               </button>
               <div className="absolute left-1/2 z-10 hidden -translate-x-1/2 rounded-lg bg-gradient-to-l from-dark/70 to-neutral-900 shadow-lg backdrop-blur-[2px] group-hover:block w-[704px]" role="menu">
                 <div className="grid auto-cols-fr grid-flow-col gap-x-8 gap-y-2 px-10 py-8 grid-rows-1" role="none">
-                  <Link href="/pricing" className="group flex gap-2 rounded-md hover:bg-gray-700 p-3" role="menuitem">
+                  <Link href="/pricing/founders" className="group flex gap-2 rounded-md hover:bg-gray-700 p-3" role="menuitem">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32" className="inline-flex shrink-0 mt-0.5 size-5 text-gray-400">
                       <path d="M8 8h2v4H8zm0 6h2v4H8zm6-6h2v4h-2zm0 6h2v4h-2zm-6 6h2v4H8zm6 0h2v4h-2z" />
                       <path d="M30 14a2 2 0 0 0-2-2h-6V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v26h28ZM4 4h16v24H4Zm18 24V14h6v14Z" />
@@ -196,7 +196,7 @@ export function Header() {
                       <div className="mt-2 text-sm text-gray-50">Plans & features for founders</div>
                     </div>
                   </Link>
-                  <Link href="/investor-pricing" className="group flex gap-2 rounded-md hover:bg-gray-700 p-3" role="menuitem">
+                  <Link href="/pricing/investors" className="group flex gap-2 rounded-md hover:bg-gray-700 p-3" role="menuitem">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32" className="inline-flex shrink-0 mt-0.5 size-5 text-gray-400">
                       <path d="M2 28h28v2H2zm25-17a1 1 0 0 0 1-1V7a1 1 0 0 0-.66-.94l-11-4a1 1 0 0 0-.68 0l-11 4A1 1 0 0 0 4 7v3a1 1 0 0 0 1 1h1v13H4v2h24v-2h-2V11ZM6 7.7l10-3.64L26 7.7V9H6ZM18 24h-4V11h4ZM8 11h4v13H8Zm16 13h-4V11h4Z" />
                       <path d="M0 0h32v32H0z" fill="none" />
@@ -312,8 +312,8 @@ export function Header() {
               <div className="hidden peer-checked:block" role="menu" tabIndex={-1}>
                 <hr className="mt-4" />
                 <div className="mt-4 space-y-2" role="none">
-                  <Link href="/pricing" className="text-white text-base font-normal hover:font-medium py-2 block">Founder Pricing</Link>
-                  <Link href="/investor-pricing" className="text-white text-base font-normal hover:font-medium py-2 block">Investor Pricing</Link>
+                  <Link href="/pricing/founders" className="text-white text-base font-normal hover:font-medium py-2 block">Founder Pricing</Link>
+                  <Link href="/pricing/investors" className="text-white text-base font-normal hover:font-medium py-2 block">Investor Pricing</Link>
                 </div>
               </div>
             </div>
