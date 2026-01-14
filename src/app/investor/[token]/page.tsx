@@ -688,37 +688,35 @@ export default function InvestorCompanyPage() {
             </div>
           </Card>
 
-          {/* LIVE AI INSIGHTS (from DB) */}
+          {/* COMPUTED INSIGHTS */}
           <Card className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8 space-y-3">
-            <div className="flex items-center justify-between gap-3">
+            <div className="space-y-1">
               <h2 className="text-base font-semibold text-white sm:text-lg">
-                AI Insights
+                Computed insights
               </h2>
               <p className="text-xs text-slate-500">
-                Powered by{" "}
-                <span className="font-medium text-slate-300">Valyxo Agent</span>
+                {company.latest_insights_generated_at ? (
+                  <>
+                    Last generated: {new Date(company.latest_insights_generated_at).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric"
+                    })}
+                    {company.based_on_snapshot_date ? (
+                      <> · Based on snapshot: {new Date(company.based_on_snapshot_date + "T00:00:00").toLocaleDateString("en-US", {
+                        month: "short",
+                        year: "numeric"
+                      })}</>
+                    ) : (
+                      <> · Based on snapshot: n/a</>
+                    )}
+                    <> · Computed</>
+                  </>
+                ) : (
+                  <>Last generated: n/a · Based on snapshot: n/a · Computed</>
+                )}
               </p>
             </div>
-
-            <p className="text-xs text-slate-500">
-              {company.latest_insights_generated_at ? (
-                <>
-                  AI Insights generated automatically ·{" "}
-                  {new Date(company.latest_insights_generated_at).toLocaleString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit"
-                  })}
-                  {company.based_on_snapshot_date && (
-                    <> · Based on snapshot: {company.based_on_snapshot_date}</>
-                  )}
-                </>
-              ) : (
-                <>Not generated yet · Powered by Valyxo Agent</>
-              )}
-            </p>
 
             {insights.length > 0 ? (
               <ul className="mt-2 space-y-2">
@@ -730,7 +728,7 @@ export default function InvestorCompanyPage() {
               </ul>
             ) : (
               <p className="text-sm text-slate-400 italic">
-                Insights are automatically updated by Valyxo Agent when new KPI snapshots are saved.
+                No insights computed yet.
               </p>
             )}
           </Card>

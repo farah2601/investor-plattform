@@ -37,7 +37,7 @@ export function AiInsightsCard({
             <span className="text-sm">✦</span>
           </div>
           <h2 className="text-base font-semibold text-white sm:text-lg">
-            AI insights
+            Computed insights
           </h2>
         </div>
 
@@ -56,8 +56,27 @@ export function AiInsightsCard({
         )}
       </div>
 
-      <p className="text-xs text-slate-400">
-        Powered by Valyxo Agent (lagret i database).
+      <p className="text-xs text-slate-500">
+        {lastAgentRunAt ? (
+          <>
+            Last generated: {new Date(lastAgentRunAt).toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric"
+            })}
+            {basedOnSnapshotDate ? (
+              <> · Based on snapshot: {new Date(basedOnSnapshotDate + "T00:00:00").toLocaleDateString("en-US", {
+                month: "short",
+                year: "numeric"
+              })}</>
+            ) : (
+              <> · Based on snapshot: n/a</>
+            )}
+            <> · Computed</>
+          </>
+        ) : (
+          <>Last generated: n/a · Based on snapshot: n/a · Computed</>
+        )}
       </p>
 
       {hasInsights ? (
@@ -69,37 +88,17 @@ export function AiInsightsCard({
       ) : (
         <div className="space-y-2">
           <p className="text-sm text-slate-500">
-            Ingen AI-innsikt tilgjengelig enda.
+            No insights computed yet.
           </p>
 
           {/* CTA hvis du vil */}
           {onRunAgent && (
             <p className="text-xs text-slate-400">
-              Trykk “Run Valyxo Agent” for å generere første innsikt.
+              Click "Run Valyxo Agent" to compute first insights.
             </p>
           )}
         </div>
       )}
-
-      <p className="mt-2 text-[10px] text-slate-500">
-        {lastAgentRunAt ? (
-          <>
-            Last updated · {lastAgentRunBy || "valyxo-agent"} ·{" "}
-            {new Date(lastAgentRunAt).toLocaleString("nb-NO", {
-              year: "numeric",
-              month: "short",
-              day: "2-digit",
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-            {basedOnSnapshotDate && (
-              <> · Based on snapshot: {basedOnSnapshotDate}</>
-            )}
-          </>
-        ) : (
-          <>Last updated · aldri</>
-        )}
-      </p>
     </Card>
   );
 }
