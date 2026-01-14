@@ -1,0 +1,8 @@
+[build]
+builder = "NIXPACKS"
+buildCommand = "cd mcp-server && npm install --legacy-peer-deps && npm run build"
+
+[deploy]
+startCommand = "cd mcp-server && npm run start"
+healthcheckPath = "/health"
+healthcheckTimeout = 120

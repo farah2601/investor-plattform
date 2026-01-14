@@ -1,0 +1,138 @@
+export function SecuritySection() {
+  return (
+    <section className="mt-16 lg:mt-32">
+      <div className="mx-auto max-w-screen-xl lg:px-4">
+        <div className="relative flex flex-col gap-8 bg-gradient-to-b from-black/80 to-black/40 p-8 lg:flex-row lg:rounded-lg lg:p-16 lg:gap-12 overflow-hidden">
+          
+          <div className="relative lg:w-1/2">
+            <div className="inline-flex shrink-0 flex size-16">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 348 348" className="w-full h-full">
+                <g clipPath="url(#security-clip)">
+                  <circle cx="173.87" cy="173.87" r="134.92" fill="#231F20" />
+                  {/* Premium sølvstjerne - 5-punktet stjerne */}
+                  <path
+                    d="M173.87 30 L200.5 115 L290 115 L220 165 L245 250 L173.87 210 L102.74 250 L127.74 165 L57.74 115 L147.24 115 Z"
+                    fill="url(#star-gradient)"
+                    stroke="url(#star-stroke-gradient)"
+                    strokeWidth="1.5"
+                    strokeLinejoin="round"
+                    filter="url(#star-glow)"
+                  />
+                  <path
+                    fill="#fff"
+                    d="M109.52 268.83c-.1-.21-.19-.57-.25-1.1-.83.86-1.82 1.29-2.97 1.29-1.03 0-1.87-.29-2.53-.87-.66-.58-.99-1.32-.99-2.21 0-1.08.41-1.93 1.24-2.53.83-.6 1.99-.9 3.48-.9h1.73v-.82c0-.62-.19-1.12-.56-1.49-.37-.37-.92-.55-1.65-.55-.64 0-1.17.16-1.6.48-.43.32-.65.71-.65 1.17h-1.79c0-.52.18-1.02.55-1.51.37-.49.87-.87 1.5-1.15.63-.28 1.33-.42 2.08-.42 1.2 0 2.14.3 2.82.9.68.6 1.03 1.43 1.06 2.48v4.8c0 .96.12 1.72.37 2.28v.15h-1.87.03Zm-2.96-1.36c.56 0 1.09-.14 1.59-.43s.86-.66 1.09-1.13v-2.14h-1.4c-2.18 0-3.27.64-3.27 1.92 0 .56.19 1 .56 1.31.37.31.85.47 1.43.47Zm6.77-11.83c0-.29.09-.53.27-.73.18-.2.44-.3.78-.3s.61.1.79.3c.18.2.27.44.27.73s-.09.53-.27.72c-.18.19-.44.29-.79.29-.35 0-.61-.1-.78-.29-.18-.19-.27-.43-.27-.72Zm1.93 13.18h-1.78V258.4h1.78v10.42Zm6.53-1.25c.64 0 1.19-.19 1.67-.58.48-.39.74-.87.79-1.44h1.69c-.03.6-.24 1.17-.62 1.7-.38.54-.88.97-1.52 1.29-.63.32-1.3.48-2.01.48-1.42 0-2.55-.47-3.38-1.42-.84-.95-1.26-2.24-1.26-3.89v-.3c0-1.01.19-1.92.56-2.71.37-.79.91-1.4 1.6-1.84.69-.44 1.52-.65 2.47-.65 1.17 0 2.14.35 2.91 1.05.77.7 1.19 1.61 1.24 2.73h-1.69c-.05-.67-.31-1.23-.77-1.66-.46-.43-1.03-.65-1.7-.65-.91 0-1.61.33-2.1.98-.5.65-.75 1.59-.75 2.83v.34c0 1.2.25 2.13.74 2.77.49.65 1.2.97 2.12.97h.01Zm14.45-3.84c0 1.59-.36 2.86-1.09 3.83-.73.97-1.71 1.45-2.95 1.45-1.24 0-2.26-.4-2.99-1.2v5.02h-1.78V258.4h1.63l.09 1.16c.73-.9 1.73-1.35 3.02-1.35s2.24.47 2.97 1.42 1.09 2.26 1.09 3.94v.16h.01Zm-1.78-.2c0-1.17-.25-2.1-.75-2.78-.5-.68-1.19-1.02-2.06-1.02-1.08 0-1.89.48-2.43 1.44v4.98c.53.95 1.35 1.43 2.45 1.43.85 0 1.53-.34 2.04-1.02.51-.68.76-1.68.76-3.02l-.01-.01Zm9.99 5.3c-.1-.21-.19-.57-.25-1.1-.83.86-1.82 1.29-2.97 1.29-1.03 0-1.87-.29-2.53-.87-.66-.58-.99-1.32-.99-2.21 0-1.08.41-1.93 1.24-2.53.83-.6 1.99-.9 3.48-.9h1.73v-.82c0-.62-.19-1.12-.56-1.49-.37-.37-.92-.55-1.65-.55-.64 0-1.17.16-1.6.48-.43.32-.65.71-.65 1.17h-1.79c0-.52.18-1.02.55-1.51.37-.49.87-.87 1.5-1.15.63-.28 1.33-.42 2.08-.42 1.2 0 2.14.3 2.82.9.68.6 1.03 1.43 1.06 2.48v4.8c0 .96.12 1.72.37 2.28v.15h-1.87.03Zm-2.96-1.36c.56 0 1.09-.14 1.59-.43s.86-.66 1.09-1.13v-2.14h-1.4c-2.18 0-3.27.64-3.27 1.92 0 .56.19 1 .56 1.31.37.31.85.47 1.43.47Zm6.8.42c0-.31.09-.56.27-.77.18-.21.46-.31.82-.31.36 0 .64.1.83.31.19.21.28.46.28.77s-.09.54-.28.74c-.19.2-.47.3-.83.3s-.64-.1-.82-.3c-.18-.2-.27-.45-.27-.74Zm4.18-4.37c0-1.02.2-1.94.6-2.75.4-.81.96-1.44 1.68-1.89.71-.44 1.53-.66 2.45-.66 1.42 0 2.57.49 3.44 1.47.88.98 1.31 2.29 1.31 3.92v.12c0 1.01-.19 1.92-.58 2.73-.39.81-.94 1.43-1.67 1.88-.73.45-1.55.67-2.49.67-1.41 0-2.56-.49-3.43-1.47-.88-.98-1.31-2.28-1.31-3.9v-.12Zm1.79.21c0 1.16.27 2.08.8 2.78.53.7 1.25 1.05 2.15 1.05.9 0 1.62-.35 2.16-1.06.53-.71.8-1.7.8-2.98 0-1.14-.27-2.07-.81-2.78s-1.26-1.06-2.16-1.06c-.9 0-1.59.35-2.13 1.05-.54.7-.81 1.7-.81 3Zm14.48-3.72c-.27-.04-.56-.07-.88-.07-1.17 0-1.96.5-2.38 1.49v7.4h-1.78v-10.42h1.73l.03 1.2c.58-.93 1.41-1.4 2.48-1.4.35 0 .61.04.79.13V260l.01.01Zm.72 3.52c0-1.62.38-2.92 1.13-3.88.75-.96 1.75-1.44 2.99-1.44 1.24 0 2.26.45 2.98 1.35l.09-1.16h1.63v10.17c0 1.35-.4 2.41-1.2 3.19-.8.78-1.87 1.17-3.22 1.17-.75 0-1.49-.16-2.21-.48-.72-.32-1.27-.76-1.65-1.32l.92-1.07c.76.94 1.7 1.42 2.8 1.42.87 0 1.54-.24 2.03-.73.48-.49.73-1.17.73-2.06v-.9c-.71.82-1.69 1.23-2.92 1.23s-2.21-.49-2.96-1.47-1.13-2.32-1.13-4.02h-.01Zm1.79.2c0 1.17.24 2.1.72 2.77.48.67 1.16 1.01 2.02 1.01 1.12 0 1.95-.51 2.48-1.53v-4.76c-.55-.99-1.36-1.49-2.46-1.49-.87 0-1.54.34-2.03 1.01-.49.67-.73 1.67-.73 3v-.01Zm9.56 6.3h-1.53l5.85-15.23h1.52l-5.85 15.23h.01Zm13.34-3.97c0-.48-.18-.86-.54-1.12-.36-.27-1-.5-1.9-.69-.9-.19-1.62-.42-2.15-.69-.53-.27-.92-.59-1.17-.96-.25-.37-.38-.82-.38-1.33 0-.85.36-1.58 1.08-2.17.72-.59 1.65-.89 2.77-.89 1.18 0 2.14.31 2.88.92.73.61 1.1 1.39 1.1 2.34h-1.79c0-.49-.21-.91-.62-1.26-.41-.35-.94-.53-1.57-.53-.63 0-1.16.14-1.52.42-.37.28-.55.65-.55 1.11 0 .43.17.75.51.97.34.22.95.43 1.84.63.89.2 1.61.44 2.16.71.55.28.96.61 1.23 1s.4.86.4 1.42c0 .93-.37 1.68-1.12 2.24-.74.56-1.71.84-2.9.84-.83 0-1.57-.15-2.21-.44-.64-.29-1.14-.71-1.51-1.24-.36-.53-.54-1.1-.54-1.72h1.78c.03.6.27 1.07.72 1.42.45.35 1.04.52 1.77.52.67 0 1.21-.14 1.62-.41.41-.27.61-.64.61-1.09Zm3.14-2.54c0-1.02.2-1.94.6-2.75.4-.81.96-1.44 1.68-1.89.71-.44 1.53-.66 2.45-.66 1.42 0 2.57.49 3.44 1.47.88.98 1.31 2.29 1.31 3.92v.12c0 1.01-.19 1.92-.58 2.73-.39.81-.94 1.43-1.67 1.88-.73.45-1.55.67-2.49.67-1.41 0-2.56-.49-3.43-1.47-.88-.98-1.31-2.28-1.31-3.9v-.12Zm1.79.21c0 1.16.27 2.08.8 2.78.53.7 1.25 1.05 2.15 1.05.9 0 1.62-.35 2.16-1.06.53-.71.8-1.7.8-2.98 0-1.14-.27-2.07-.81-2.78s-1.26-1.06-2.16-1.06c-.9 0-1.59.35-2.13 1.05-.54.7-.81 1.7-.81 3Zm13.62 3.84c.64 0 1.19-.19 1.67-.58.48-.39.74-.87.79-1.44h1.69c-.03.6-.24 1.17-.62 1.7-.38.54-.88.97-1.52 1.29-.63.32-1.3.48-2.01.48-1.42 0-2.55-.47-3.38-1.42-.84-.95-1.26-2.24-1.26-3.89v-.3c0-1.01.19-1.92.56-2.71.37-.79.91-1.4 1.6-1.84.69-.44 1.52-.65 2.47-.65 1.17 0 2.14.35 2.91 1.05.77.7 1.19 1.61 1.24 2.73h-1.69c-.05-.67-.31-1.23-.77-1.66-.46-.43-1.03-.65-1.7-.65-.91 0-1.61.33-2.1.98-.5.65-.75 1.59-.75 2.83v.34c0 1.2.25 2.13.74 2.77.49.65 1.2.97 2.12.97h.01Zm12.99-3.45h1.95v1.45h-1.95v3.25h-1.79v-3.25h-6.38v-1.05l6.28-9.72h1.9v9.31l-.01.01Zm-6.15 0h4.36v-6.88l-.21.39-4.15 6.49Zm15.46 1.94c0-.48-.18-.86-.54-1.12-.36-.27-1-.5-1.9-.69-.9-.19-1.62-.42-2.15-.69-.53-.27-.92-.59-1.17-.96-.25-.37-.38-.82-.38-1.33 0-.85.36-1.58 1.08-2.17.72-.59 1.65-.89 2.77-.89 1.18 0 2.14.31 2.88.92.73.61 1.1 1.39 1.1 2.34h-1.79c0-.49-.21-.91-.62-1.26-.41-.35-.94-.53-1.57-.53-.63 0-1.16.14-1.52.42-.37.28-.55.65-.55 1.11 0 .43.17.75.51.97.34.22.95.43 1.84.63.89.2 1.61.44 2.16.71.55.28.96.61 1.23 1s.4.86.4 1.42c0 .93-.37 1.68-1.12 2.24-.74.56-1.71.84-2.9.84-.83 0-1.57-.15-2.21-.44-.64-.29-1.14-.71-1.51-1.24-.36-.53-.54-1.1-.54-1.72h1.78c.03.6.27 1.07.72 1.42.45.35 1.04.52 1.77.52.67 0 1.21-.14 1.62-.41.41-.27.61-.64.61-1.09Zm3.13-2.54c0-1.02.2-1.94.6-2.75.4-.81.96-1.44 1.68-1.89.71-.44 1.53-.66 2.45-.66 1.42 0 2.57.49 3.44 1.47.88.98 1.31 2.29 1.31 3.92v.12c0 1.01-.19 1.92-.58 2.73-.39.81-.94 1.43-1.67 1.88-.73.45-1.55.67-2.49.67-1.41 0-2.56-.49-3.43-1.47-.88-.98-1.31-2.28-1.31-3.9v-.12Zm1.79.21c0 1.16.27 2.08.8 2.78.53.7 1.25 1.05 2.15 1.05.9 0 1.62-.35 2.16-1.06.53-.71.8-1.7.8-2.98 0-1.14-.27-2.07-.81-2.78s-1.26-1.06-2.16-1.06c-.9 0-1.59.35-2.13 1.05-.54.7-.81 1.7-.81 3Z"
+                  />
+                  <path stroke="#fff" strokeLinecap="round" strokeLinejoin="round" strokeWidth=".93" d="M74.63 170.15H280.6" />
+                </g>
+                <defs>
+                  {/* Premium sølv gradient for stjerne */}
+                  <linearGradient id="star-gradient" x1="0%" y1="0%" x2="100%" y2="100%" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stopColor="#F5F5F5" />
+                    <stop offset="20%" stopColor="#E0E0E0" />
+                    <stop offset="40%" stopColor="#C8C8C8" />
+                    <stop offset="60%" stopColor="#B0B0B0" />
+                    <stop offset="80%" stopColor="#C8C8C8" />
+                    <stop offset="100%" stopColor="#E8E8E8" />
+                  </linearGradient>
+                  <linearGradient id="star-stroke-gradient" x1="0%" y1="0%" x2="100%" y2="100%" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.9" />
+                    <stop offset="50%" stopColor="#D8D8D8" stopOpacity="0.7" />
+                    <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.9" />
+                  </linearGradient>
+                  {/* Glow effect for premium look */}
+                  <filter id="star-glow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                    <feMerge>
+                      <feMergeNode in="coloredBlur"/>
+                      <feMergeNode in="SourceGraphic"/>
+                    </feMerge>
+                  </filter>
+                  <linearGradient id="security-gradient" x1="0" x2="347.75" y1="173.87" y2="173.87" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="#231F20" />
+                    <stop offset=".69" stopColor="#464647" />
+                    <stop offset="1" stopColor="#58595B" />
+                  </linearGradient>
+                  <clipPath id="security-clip">
+                    <path fill="#fff" d="M0 0h347.75v347.75H0z" />
+                  </clipPath>
+                </defs>
+              </svg>
+            </div>
+            <div className="mt-6 text-xs uppercase tracking-[0.15em] text-slate-400">SECURITY</div>
+            <h3 className="font-dark mt-2 text-4xl font-medium text-white">Security by default</h3>
+            <div className="mt-3 h-px w-16 bg-gradient-to-r from-brand-blue/50 to-transparent" />
+            <p className="mt-4 text-lg text-slate-300 leading-relaxed">Enterprise-grade security built into every layer of Valyxo.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 lg:w-1/2 lg:gap-6">
+            <div className="group flex flex-col gap-3 p-4 rounded-lg transition-all duration-300 hover:bg-white/5 hover:shadow-lg hover:shadow-brand-blue/10 hover:-translate-y-0.5">
+              <div className="inline-flex shrink-0 size-14 text-brand-blue">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 63 63" className="w-full h-full">
+                  <rect width="60.372" height="60.372" x="1.086" y="1.517" stroke="currentColor" strokeOpacity=".18" strokeWidth="1.628" rx="7.186" />
+                  <rect x="17.837" y="14.447" width="27" height="21" rx="4" fill="currentColor" fillOpacity=".1" />
+                  <circle cx="31" cy="25" r="3" fill="currentColor" />
+                  <path stroke="currentColor" strokeWidth="1.5" d="M25 32h12" />
+                </svg>
+              </div>
+              <div className="space-y-1">
+                <div className="text-lg font-medium text-white">Data encryption</div>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  TLS 1.2+ in transit · AES-256 at rest
+                </p>
+              </div>
+            </div>
+            <div className="group flex flex-col gap-3 p-4 rounded-lg transition-all duration-300 hover:bg-white/5 hover:shadow-lg hover:shadow-brand-green/10 hover:-translate-y-0.5">
+              <div className="inline-flex shrink-0 size-14 text-brand-green">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 63 63" className="w-full h-full">
+                  <rect width="60.372" height="60.372" x="1.086" y="1.634" stroke="currentColor" strokeOpacity=".18" strokeWidth="1.628" rx="7.186" />
+                  <circle cx="31" cy="32" r="8" fill="currentColor" fillOpacity=".1" />
+                  <path stroke="currentColor" strokeWidth="1.5" d="M31 24v16M23 32h16" />
+                </svg>
+              </div>
+              <div className="space-y-1">
+                <div className="text-lg font-medium text-white">Access control</div>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Role-based permissions · MFA for internal access
+                </p>
+              </div>
+            </div>
+            <div className="group flex flex-col gap-3 p-4 rounded-lg transition-all duration-300 hover:bg-white/5 hover:shadow-lg hover:shadow-brand-purple/10 hover:-translate-y-0.5">
+              <div className="inline-flex shrink-0 size-14 text-brand-purple">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 63 63" className="w-full h-full">
+                  <rect width="60.372" height="60.372" x="1.086" y="1.72" stroke="currentColor" strokeOpacity=".18" strokeWidth="1.628" rx="7.186" />
+                  <rect x="20" y="20" width="22" height="22" rx="4" fill="currentColor" fillOpacity=".1" />
+                  <path stroke="currentColor" strokeWidth="1.5" d="M28 28h6M28 32h6M28 36h4" />
+                </svg>
+              </div>
+              <div className="space-y-1">
+                <div className="text-lg font-medium text-white">Secure infrastructure</div>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Isolated environments · Separate backups
+                </p>
+              </div>
+            </div>
+            <div className="group flex flex-col gap-3 p-4 rounded-lg transition-all duration-300 hover:bg-white/5 hover:shadow-lg hover:shadow-brand-blue/10 hover:-translate-y-0.5">
+              <div className="inline-flex shrink-0 size-14 text-brand-blue">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 63 63" className="w-full h-full">
+                  <rect width="60.372" height="60.372" x="1.086" y="1.517" stroke="currentColor" strokeOpacity=".18" strokeWidth="1.628" rx="7.186" />
+                  <rect x="17" y="17" width="28" height="28" rx="4" fill="currentColor" fillOpacity=".1" />
+                  <circle cx="24" cy="24" r="2" fill="currentColor" />
+                  <circle cx="31" cy="24" r="2" fill="currentColor" />
+                  <circle cx="38" cy="24" r="2" fill="currentColor" />
+                  <circle cx="24" cy="31" r="2" fill="currentColor" />
+                  <circle cx="31" cy="31" r="2" fill="currentColor" />
+                  <circle cx="38" cy="31" r="2" fill="currentColor" />
+                </svg>
+              </div>
+              <div className="space-y-1">
+                <div className="text-lg font-medium text-white">Data isolation</div>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Customer data logically isolated · No cross-customer access
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}

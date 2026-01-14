@@ -1,0 +1,1 @@
+import"./CustomersGrid.astro_astro_type_script_index_0_lang.C5mZzUh0.js";import"./HomeToggle.astro_astro_type_script_index_0_lang.B5KdhpHG.js";import"./hoisted.BOYWiEH3.js";import"./embla-carousel.esm.v-CXq_RL.js";document.addEventListener("astro:page-load",()=>{document.querySelectorAll(".prose h2").forEach(t=>{t.id=t.innerText,t.classList.add("scroll-mt-20")})});
