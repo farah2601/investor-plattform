@@ -17,22 +17,22 @@ type NavItem = {
 function Logo({ size = "lg" }: { size?: LogoSize }) {
   const cfg =
     size === "sm"
-      ? { w: 110, h: 28, className: "h-6" }
+      ? { h: 28, className: "h-7" }
       : size === "md"
-      ? { w: 130, h: 34, className: "h-7" }
+      ? { h: 34, className: "h-8" }
       : size === "xl"
-      ? { w: 170, h: 46, className: "h-9" }
-      : { w: 140, h: 40, className: "h-8" }; // lg default
+      ? { h: 46, className: "h-11" }
+      : { h: 40, className: "h-10" }; // lg default
 
   return (
     <div className="flex items-center gap-3">
       <Image
-        src="/brand/valyxo-logo-white.png"
+        src="/favicon.svg"
         alt="Valyxo"
-        width={cfg.w}
         height={cfg.h}
+        width={cfg.h * 4.0}
         priority
-        className={cn(cfg.className, "w-auto")}
+        className={cn(cfg.className, "w-auto select-none object-contain opacity-100")}
       />
     </div>
   );

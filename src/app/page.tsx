@@ -52,10 +52,10 @@ export default function LandingPage() {
                 className="text-center font-medium"
                 style={{ fontSize: "clamp(44px, 5.5vw, 68px)", lineHeight: "1.1" }}
               >
-                Investor ready metrics. Automatically.
+                Know your numbers
               </h1>
               <div className="mt-6 max-w-2xl text-balance text-center text-lg lg:text-xl text-white/80">
-                Auto sync KPIs, MRR, churn, and runway and share live dashboards with investors.
+                Connect your systems. Get instant control. Your numbers update automatically.
               </div>
               <div className="mt-5 lg:mt-8">
                 <div data-ab-test-single-button>

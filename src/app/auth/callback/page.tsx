@@ -14,7 +14,7 @@ import { supabase, isSupabaseConfigured } from "../../lib/supabaseClient";
  * ROUTING LOGIC:
  * - No company → /onboarding
  * - Company but profile_published = false → /company-profile
- * - Company and profile_published = true → /company-dashboard
+ * - Company and profile_published = true → /overview
  * 
  * ERROR HANDLING:
  * - OAuth exchange fails → /login?error=oauth_failed&details=...
@@ -171,9 +171,9 @@ function AuthCallbackContent() {
           return;
         }
 
-        // Company exists and published → dashboard
-        console.log("[AuthCallback] Company published, routing to dashboard:", userId);
-        router.replace(`/company-dashboard?companyId=${company.id}`);
+        // Company exists and published → overview
+        console.log("[AuthCallback] Company published, routing to overview:", userId);
+        router.replace(`/overview`);
       } catch (err) {
         console.error("[AuthCallback] Unexpected error during routing:", err);
         // Default to onboarding on error

@@ -8,7 +8,7 @@ import { supabase } from "../../app/lib/supabaseClient";
  * Post-auth routing logic:
  * - No company → /onboarding
  * - Company but profile_published = false → /company-profile
- * - Company and profile_published = true → /company-dashboard
+ * - Company and profile_published = true → /overview
  */
 export default function PostAuthPage() {
   const router = useRouter();
@@ -44,8 +44,8 @@ export default function PostAuthPage() {
         return;
       }
 
-      // Company exists and published → dashboard
-      router.replace(`/company-dashboard?companyId=${company.id}`);
+      // Company exists and published → overview
+      router.replace(`/overview`);
     };
 
     run();
