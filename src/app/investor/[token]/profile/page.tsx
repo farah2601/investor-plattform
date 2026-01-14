@@ -667,45 +667,51 @@ export default function InvestorCompanyProfilePage() {
           </Card>
 
           {/* COMPUTED INSIGHTS */}
-          <Card className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8 space-y-3">
-            <div className="space-y-1">
-              <h2 className="text-base font-semibold text-white sm:text-lg">Computed insights</h2>
-              <p className="text-xs text-slate-500">
-                {company.latest_insights_generated_at ? (
-                  <>
-                    Last generated: {new Date(company.latest_insights_generated_at).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric"
-                    })}
-                    {company.based_on_snapshot_date ? (
-                      <> · Based on snapshot: {new Date(company.based_on_snapshot_date + "T00:00:00").toLocaleDateString("en-US", {
+          <section className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/80 to-slate-950/60 p-4 sm:p-6 lg:p-8 shadow-xl space-y-4">
+            <div className="flex items-start justify-between">
+              <div className="space-y-1">
+                <h2 className="text-base font-semibold text-slate-100">Computed insights</h2>
+                <p className="text-xs text-slate-500">
+                  {company.latest_insights_generated_at ? (
+                    <>
+                      Last generated: {new Date(company.latest_insights_generated_at).toLocaleDateString("en-US", {
                         month: "short",
+                        day: "numeric",
                         year: "numeric"
-                      })}</>
-                    ) : (
-                      <> · Based on snapshot: n/a</>
-                    )}
-                    <> · Computed</>
-                  </>
-                ) : (
-                  <>Last generated: n/a · Based on snapshot: n/a · Computed</>
-                )}
-              </p>
+                      })}
+                      {company.based_on_snapshot_date ? (
+                        <> · Based on snapshot: {new Date(company.based_on_snapshot_date + "T00:00:00").toLocaleDateString("en-US", {
+                          month: "short",
+                          year: "numeric"
+                        })}</>
+                      ) : (
+                        <> · Based on snapshot: n/a</>
+                      )}
+                      <> · Computed</>
+                    </>
+                  ) : (
+                    <>Last generated: n/a · Based on snapshot: n/a · Computed</>
+                  )}
+                </p>
+              </div>
             </div>
 
             {insights.length > 0 ? (
-              <ul className="mt-2 space-y-2">
-                {insights.map((x, i) => (
-                  <li key={i} className="text-sm text-slate-200">• {x}</li>
-                ))}
-              </ul>
+              <div className="space-y-3">
+                <ul className="space-y-2.5">
+                  {insights.map((x, i) => (
+                    <li key={i} className="text-sm text-slate-200 leading-relaxed pl-4 border-l-2 border-[#2B74FF]/30">
+                      {x}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ) : (
-              <p className="text-sm text-slate-400 italic">
-                No insights computed yet.
-              </p>
+              <div className="py-8 text-center space-y-3">
+                <p className="text-sm text-slate-400">No insights yet.</p>
+              </div>
             )}
-          </Card>
+          </section>
         </div>
         
         {/* Footer */}
