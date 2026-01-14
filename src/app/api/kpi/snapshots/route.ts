@@ -67,9 +67,9 @@ export async function GET(req: Request) {
 
     console.log("[api/kpi/snapshots] Fetching snapshots for companyId:", companyId);
 
-    // Fetch all snapshots for the company, ordered by period_date ASC (oldest first)
+    // Fetch snapshots for the company, ordered by period_date ASC (oldest first)
     // CRITICAL: Only select period_date and kpis (JSONB), NOT numeric columns
-    // No limit - get all rows to show complete history
+    // Limit to last 12 snapshots for charts (get all, then take last 12)
     const { data, error } = await supabaseAdmin
       .from("kpi_snapshots")
       .select("period_date, kpis")
@@ -109,8 +109,10 @@ export async function GET(req: Request) {
     }
 
     // Data is already sorted by period_date ASC (oldest first)
-    const sortedData = (data || []) as SnapshotRow[];
-    console.log("[api/kpi/snapshots] companyId", companyId, "rows", sortedData.length);
+    // Take last 12 snapshots for charts (or all if less than 12)
+    const allData = (data || []) as SnapshotRow[];
+    const sortedData = allData.length > 12 ? allData.slice(-12) : allData;
+    console.log("[api/kpi/snapshots] companyId", companyId, "total rows", allData.length, "returning", sortedData.length);
     console.log("[api/kpi/snapshots] sample", sortedData.slice(0, 2));
 
     // Build chart series directly from database rows (not generating months)
@@ -146,11 +148,19 @@ export async function GET(req: Request) {
       burnSeriesLength: burnSeries.length,
     });
 
+    // Get latest snapshot (last item in sortedData)
+    const latest = sortedData.length > 0 ? sortedData[sortedData.length - 1] : null;
+
     return NextResponse.json(
       {
         ok: true,
         companyId,
-        rows: sortedData.length,
+        rows: sortedData, // Return full rows array for backward compatibility with dashboard
+        rowsCount: sortedData.length, // Return count
+        latest: latest ? {
+          period_date: latest.period_date,
+          kpis: latest.kpis,
+        } : null,
         arrSeries,
         mrrSeries,
         burnSeries,

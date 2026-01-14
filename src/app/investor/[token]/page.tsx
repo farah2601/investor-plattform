@@ -21,6 +21,7 @@ import {
   Tooltip,
   XAxis,
   YAxis,
+  CartesianGrid,
 } from "recharts";
 
 type TeamMember = {
@@ -63,80 +64,16 @@ type InvestorLinkMeta = {
   company_id?: string | null;
 };
 
-const kpiCards = [
-  {
-    id: "mrr",
-    label: "MRR",
-    value: "€82,400",
-    trend: "+8.2% last 30d",
-    trendPositive: true,
-    helper: "vs previous 30 days",
-  },
-  {
-    id: "arr",
-    label: "ARR",
-    value: "€988,800",
-    trend: "+26.4% YoY",
-    trendPositive: true,
-    helper: "run-rate based on current MRR",
-  },
-  {
-    id: "burn",
-    label: "Monthly burn",
-    value: "€-74,000",
-    trend: "-6.1% last 90d",
-    trendPositive: true,
-    helper: "including headcount & infra",
-  },
-  {
-    id: "runway",
-    label: "Runway",
-    value: "14 months",
-    trend: "at current burn",
-    trendPositive: true,
-    helper: "cash / net burn",
-  },
-  {
-    id: "churn",
-    label: "Net revenue churn",
-    value: "2.7%",
-    trend: "-0.4pp last 30d",
-    trendPositive: true,
-    helper: "logo + expansion combined",
-  },
-  {
-    id: "growth",
-    label: "Customer growth",
-    value: "+6.3% MoM",
-    trend: "last 3 months",
-    trendPositive: true,
-    helper: "paying customers",
-  },
-];
+type ChartDataPoint = {
+  date: string;
+  label: string;
+  value: number | null;
+};
 
-const mrrChartData = [
-  { month: "Jan", value: 42000 },
-  { month: "Feb", value: 46000 },
-  { month: "Mar", value: 51000 },
-  { month: "Apr", value: 56000 },
-  { month: "May", value: 62000 },
-  { month: "Jun", value: 69000 },
-  { month: "Jul", value: 75000 },
-  { month: "Aug", value: 80400 },
-  { month: "Sep", value: 82400 },
-];
-
-const burnChartData = [
-  { month: "Jan", value: -82000 },
-  { month: "Feb", value: -81000 },
-  { month: "Mar", value: -79000 },
-  { month: "Apr", value: -78000 },
-  { month: "May", value: -76000 },
-  { month: "Jun", value: -74000 },
-  { month: "Jul", value: -73000 },
-  { month: "Aug", value: -72000 },
-  { month: "Sep", value: -71000 },
-];
+type ChartData = {
+  month: string;
+  value: number | null;
+};
 
 function formatDateLabel(dateString?: string | null): string {
   if (!dateString) return "Unknown";
@@ -149,6 +86,128 @@ function formatDateLabel(dateString?: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatMoney(value: number | null) {
+  if (value == null) return "—";
+  if (value >= 1000000) {
+    return `$${(value / 1000000).toFixed(2)}M`;
+  }
+  if (value >= 1000) {
+    return `$${(value / 1000).toFixed(0)}k`;
+  }
+  return "$" + value.toLocaleString("en-US");
+}
+
+function formatPercent(value: number | null) {
+  if (value == null) return "—";
+  return value.toFixed(1) + "%";
+}
+
+function formatRunway(value: number | null) {
+  if (value == null) return "—";
+  return `${value.toFixed(1)} months`;
+}
+
+function formatMonthLabel(dateStr: string): string {
+  try {
+    const date = new Date(dateStr);
+    return new Intl.DateTimeFormat("en-US", { month: "short" }).format(date);
+  } catch {
+    return dateStr.slice(0, 7);
+  }
+}
+
+/**
+ * Normalize burn_rate: if value < 1000, treat as "thousands" and multiply by 1000.
+ * This handles the case where burn_rate is stored as 92 (meaning 92k) instead of 92000.
+ */
+function normalizeBurnRate(value: number | null): number | null {
+  if (value == null) return null;
+  const num = Number(value);
+  if (isNaN(num)) return null;
+  // If value is less than 1000, assume it's in thousands and multiply by 1000
+  if (num < 1000 && num > 0) {
+    return num * 1000;
+  }
+  return num;
+}
+
+/**
+ * Format currency for axis ticks (short format)
+ * - < 1,000 => "$920"
+ * - < 1,000,000 => "$92k" (round, no decimals)
+ * - >= 1,000,000 => "$7.1M" (1 decimal max)
+ * - 0 => "0" (never "Ok")
+ */
+function formatCurrencyShort(value: number | null): string {
+  if (value == null || isNaN(value)) return "—";
+  const num = Math.abs(value);
+  
+  if (num === 0) return "0";
+  if (num < 1000) return `$${Math.round(num).toLocaleString("en-US")}`;
+  if (num < 1000000) return `$${Math.round(num / 1000)}k`;
+  return `$${(num / 1000000).toFixed(1)}M`;
+}
+
+/**
+ * Format currency for tooltips (long format with commas)
+ * e.g., "$92,000" or "$7,060,000"
+ */
+function formatCurrencyLong(value: number | null): string {
+  if (value == null || isNaN(value)) return "—";
+  return `$${Math.round(value).toLocaleString("en-US")}`;
+}
+
+/**
+ * Format month label for tooltip (e.g., "Dec 2026")
+ */
+function formatMonthYearLabel(dateStr: string): string {
+  try {
+    const date = new Date(dateStr);
+    return new Intl.DateTimeFormat("en-US", { 
+      month: "short", 
+      year: "numeric" 
+    }).format(date);
+  } catch {
+    return dateStr.slice(0, 7);
+  }
+}
+
+/**
+ * Custom Stripe-like tooltip component
+ */
+function CustomTooltip({ 
+  active, 
+  payload, 
+  label, 
+  seriesName,
+  dateKey = "date"
+}: { 
+  active?: boolean; 
+  payload?: any[]; 
+  label?: string;
+  seriesName: string;
+  dateKey?: string;
+}) {
+  if (!active || !payload || !payload[0]) return null;
+  
+  const data = payload[0].payload;
+  const value = payload[0].value;
+  const date = data?.[dateKey] || label || "";
+  const formattedDate = date ? formatMonthYearLabel(date) : (label || "");
+  const formattedValue = value != null ? formatCurrencyLong(value) : "—";
+
+  return (
+    <div className="bg-slate-900/95 border border-slate-700/50 rounded-lg px-3 py-2 shadow-lg backdrop-blur-sm">
+      <div className="text-xs text-slate-300 font-medium mb-1">
+        {formattedDate}
+      </div>
+      <div className="text-sm text-white font-semibold">
+        {seriesName} • {formattedValue}
+      </div>
+    </div>
+  );
 }
 
 export default function InvestorCompanyPage() {
@@ -166,6 +225,24 @@ export default function InvestorCompanyPage() {
 
   const [company, setCompany] = useState<CompanyProfile | null>(null);
   const [linkMeta, setLinkMeta] = useState<InvestorLinkMeta | null>(null);
+  
+  // KPI history from snapshots
+  const [arrSeries, setArrSeries] = useState<ChartDataPoint[]>([]);
+  const [mrrSeries, setMrrSeries] = useState<ChartDataPoint[]>([]);
+  const [burnSeries, setBurnSeries] = useState<ChartDataPoint[]>([]);
+  const [loadingKpiHistory, setLoadingKpiHistory] = useState(false);
+  // Latest snapshot's full kpis object - single source of truth for all KPI card values
+  const [latestKpis, setLatestKpis] = useState<{
+    mrr?: number | null;
+    arr?: number | null;
+    burn_rate?: number | null;
+    churn?: number | null;
+    growth_percent?: number | null;
+    runway_months?: number | null;
+    cash_balance?: number | null;
+    customers?: number | null;
+  } | null>(null);
+  const [latestSnapshotDate, setLatestSnapshotDate] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -300,6 +377,11 @@ export default function InvestorCompanyPage() {
 
         setCompany(companyRow as unknown as CompanyProfile);
         setLoading(false);
+        
+        // Load KPI history after company is loaded
+        if (!cancelled && companyId) {
+          loadKpiHistory(companyId);
+        }
       } catch (err: any) {
         if (cancelled) return;
         setError(
@@ -318,6 +400,64 @@ export default function InvestorCompanyPage() {
     };
   }, [token]);
 
+  async function loadKpiHistory(companyId: string) {
+    setLoadingKpiHistory(true);
+    try {
+      const res = await fetch(`/api/kpi/snapshots?companyId=${companyId}`, {
+        cache: "no-store",
+      });
+      const json = await res.json();
+      
+      if (json?.ok && Array.isArray(json.arrSeries) && Array.isArray(json.mrrSeries) && Array.isArray(json.burnSeries)) {
+        setArrSeries(json.arrSeries);
+        setMrrSeries(json.mrrSeries);
+        // Normalize burn_rate values in series: if < 1000, treat as thousands and multiply by 1000
+        const normalizedBurnSeries = json.burnSeries.map((point: ChartDataPoint) => ({
+          ...point,
+          value: normalizeBurnRate(point.value),
+        }));
+        setBurnSeries(normalizedBurnSeries);
+        
+        // Get latest snapshot's full kpis object - single source of truth for all KPI values
+        // The API returns latest snapshot directly
+        if (json.latest?.kpis) {
+          // Extract ALL KPI values from the latest snapshot's kpis JSONB object
+          // Normalize burn_rate: if < 1000, treat as thousands and multiply by 1000
+          const rawBurnRate = json.latest.kpis.burn_rate !== undefined && json.latest.kpis.burn_rate !== null ? Number(json.latest.kpis.burn_rate) : null;
+          setLatestKpis({
+            mrr: json.latest.kpis.mrr !== undefined && json.latest.kpis.mrr !== null ? Number(json.latest.kpis.mrr) : null,
+            arr: json.latest.kpis.arr !== undefined && json.latest.kpis.arr !== null ? Number(json.latest.kpis.arr) : null,
+            burn_rate: normalizeBurnRate(rawBurnRate),
+            churn: json.latest.kpis.churn !== undefined && json.latest.kpis.churn !== null ? Number(json.latest.kpis.churn) : null,
+            growth_percent: json.latest.kpis.growth_percent !== undefined && json.latest.kpis.growth_percent !== null ? Number(json.latest.kpis.growth_percent) : null,
+            runway_months: json.latest.kpis.runway_months !== undefined && json.latest.kpis.runway_months !== null ? Number(json.latest.kpis.runway_months) : null,
+            cash_balance: json.latest.kpis.cash_balance !== undefined && json.latest.kpis.cash_balance !== null ? Number(json.latest.kpis.cash_balance) : null,
+            customers: json.latest.kpis.customers !== undefined && json.latest.kpis.customers !== null ? Number(json.latest.kpis.customers) : null,
+          });
+          setLatestSnapshotDate(json.latest.period_date || null);
+        } else {
+          setLatestKpis(null);
+          setLatestSnapshotDate(null);
+        }
+      } else {
+        setArrSeries([]);
+        setMrrSeries([]);
+        setBurnSeries([]);
+        setLatestKpis(null);
+        setLatestSnapshotDate(null);
+      }
+    } catch (e) {
+      console.error("Failed to load KPI history", e);
+      setArrSeries([]);
+      setMrrSeries([]);
+      setBurnSeries([]);
+      setLatestKpis(null);
+      setLatestSnapshotDate(null);
+    } finally {
+      setLoadingKpiHistory(false);
+    }
+  }
+
   const expiresAt = linkMeta?.expires_at ?? null;
   const isExpired =
     !!expiresAt && new Date(expiresAt).getTime() < Date.now();
@@ -334,6 +474,46 @@ export default function InvestorCompanyPage() {
     () => (Array.isArray(company?.latest_insights) ? company!.latest_insights! : []),
     [company]
   );
+
+  // Get ALL KPI values from the latest snapshot's kpis object - single source of truth
+  // This ensures we always use the most recent snapshot data from kpi_snapshots table
+  const latestMrr = latestKpis?.mrr ?? null;
+  const latestArr = latestKpis?.arr ?? null;
+  const latestBurn = latestKpis?.burn_rate ?? null;
+  const latestChurn = latestKpis?.churn ?? null;
+  const latestGrowth = latestKpis?.growth_percent ?? null;
+  const latestRunway = latestKpis?.runway_months ?? null;
+
+  // Transform series data to chart format (include date for tooltip)
+  const mrrChartData = mrrSeries.map((point) => ({
+    month: point.label || formatMonthLabel(point.date),
+    date: point.date, // Include date for tooltip formatting
+    value: point.value != null && !isNaN(Number(point.value)) ? Number(point.value) : null,
+  }));
+
+  // burnSeries values are already normalized when set, so just map to chart format
+  const burnChartData = burnSeries.map((point) => ({
+    month: point.label || formatMonthLabel(point.date),
+    date: point.date, // Include date for tooltip formatting
+    value: point.value != null && !isNaN(Number(point.value)) ? Number(point.value) : null,
+  }));
+
+  // Calculate trends (simple: compare last two values)
+  const getTrend = (series: ChartDataPoint[]) => {
+    if (series.length < 2) return { text: "", positive: true };
+    const last = series[series.length - 1]?.value ?? 0;
+    const prev = series[series.length - 2]?.value ?? 0;
+    if (prev === 0) return { text: "", positive: true };
+    const change = ((last - prev) / prev) * 100;
+    const positive = change >= 0;
+    return {
+      text: `${positive ? "+" : ""}${change.toFixed(1)}%`,
+      positive,
+    };
+  };
+
+  const mrrTrend = getTrend(mrrSeries);
+  const burnTrend = getTrend(burnSeries);
 
   if (loading) {
     return (
@@ -553,39 +733,106 @@ export default function InvestorCompanyPage() {
                   Accounting-grade KPIs maintained by the Valyxo Agent.
                 </p>
               </div>
-              <p className="text-[11px] text-slate-500">
-                Numbers are static demo values in the current version.
-              </p>
+              {latestSnapshotDate && (
+                <p className="text-[11px] text-slate-500">
+                  Last updated: {new Date(latestSnapshotDate).toLocaleDateString("en-US", {
+                    month: "short",
+                    year: "numeric"
+                  })}
+                </p>
+              )}
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {kpiCards.map((kpi) => (
-                <Card
-                  key={kpi.id}
-                  className="rounded-xl border border-white/10 bg-slate-950/60 p-4"
-                >
-                  <p className="text-xs text-slate-400">{kpi.label}</p>
-                  <p className="mt-1 text-xl font-semibold text-white">
-                    {kpi.value}
-                  </p>
-                  <div className="mt-1 flex items-center gap-2 text-xs">
+              {/* MRR */}
+              <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                <p className="text-xs text-slate-400">MRR</p>
+                <p className="mt-1 text-xl font-semibold text-white">
+                  {formatMoney(latestMrr)}
+                </p>
+                <div className="mt-1 flex items-center gap-2 text-xs">
+                  {mrrTrend.text && (
                     <Badge
                       className={cn(
                         "border-none px-2 py-0.5",
-                        kpi.trendPositive
+                        mrrTrend.positive
                           ? "bg-emerald-900/60 text-emerald-300"
                           : "bg-red-900/60 text-red-300"
                       )}
                     >
-                      {kpi.trend}
+                      {mrrTrend.text}
                     </Badge>
-                    <span className="text-slate-500">{kpi.helper}</span>
-                  </div>
-                  <p className="mt-2 text-[11px] text-slate-500">
-                    Valyxo Agent will keep this metric continuously updated from accounting/CRM systems.
-                  </p>
-                </Card>
-              ))}
+                  )}
+                  <span className="text-slate-500">vs previous period</span>
+                </div>
+              </Card>
+
+              {/* ARR */}
+              <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                <p className="text-xs text-slate-400">ARR</p>
+                <p className="mt-1 text-xl font-semibold text-white">
+                  {formatMoney(latestArr)}
+                </p>
+                <div className="mt-1 flex items-center gap-2 text-xs">
+                  <span className="text-slate-500">run-rate based on current MRR</span>
+                </div>
+              </Card>
+
+              {/* Monthly burn */}
+              <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                <p className="text-xs text-slate-400">Monthly burn</p>
+                <p className="mt-1 text-xl font-semibold text-white">
+                  {formatMoney(latestBurn)}
+                </p>
+                <div className="mt-1 flex items-center gap-2 text-xs">
+                  {burnTrend.text && (
+                    <Badge
+                      className={cn(
+                        "border-none px-2 py-0.5",
+                        burnTrend.positive
+                          ? "bg-emerald-900/60 text-emerald-300"
+                          : "bg-red-900/60 text-red-300"
+                      )}
+                    >
+                      {burnTrend.text}
+                    </Badge>
+                  )}
+                  <span className="text-slate-500">including headcount & infra</span>
+                </div>
+              </Card>
+
+              {/* Runway */}
+              <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                <p className="text-xs text-slate-400">Runway</p>
+                <p className="mt-1 text-xl font-semibold text-white">
+                  {formatRunway(latestRunway)}
+                </p>
+                <div className="mt-1 flex items-center gap-2 text-xs">
+                  <span className="text-slate-500">cash / net burn</span>
+                </div>
+              </Card>
+
+              {/* Churn */}
+              <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                <p className="text-xs text-slate-400">Net revenue churn</p>
+                <p className="mt-1 text-xl font-semibold text-white">
+                  {formatPercent(latestChurn)}
+                </p>
+                <div className="mt-1 flex items-center gap-2 text-xs">
+                  <span className="text-slate-500">logo + expansion combined</span>
+                </div>
+              </Card>
+
+              {/* Growth */}
+              <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                <p className="text-xs text-slate-400">Customer growth</p>
+                <p className="mt-1 text-xl font-semibold text-white">
+                  {formatPercent(latestGrowth)}
+                </p>
+                <div className="mt-1 flex items-center gap-2 text-xs">
+                  <span className="text-slate-500">paying customers</span>
+                </div>
+              </Card>
             </div>
           </Card>
 
@@ -598,34 +845,43 @@ export default function InvestorCompanyPage() {
             <div className="grid gap-6 lg:grid-cols-2">
               {/* MRR chart */}
               <div className="space-y-2">
-                <p className="text-xs text-slate-400">MRR last 9 months</p>
+                <p className="text-xs text-slate-400">
+                  MRR {mrrChartData.length > 0 ? `(${mrrChartData.length} periods)` : ""}
+                </p>
                 <div className="h-48 w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={mrrChartData}>
+                    <AreaChart 
+                      data={mrrChartData}
+                      margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                    >
+                      <CartesianGrid 
+                        strokeDasharray="3 3" 
+                        stroke="#334155" 
+                        opacity={0.2}
+                        horizontal={true}
+                        vertical={false}
+                      />
                       <XAxis
                         dataKey="month"
                         tickLine={false}
                         axisLine={false}
-                        tick={{ fontSize: 10, fill: "#94a3b8" }}
+                        tick={{ fontSize: 11, fill: "#94a3b8" }}
+                        padding={{ left: 8, right: 8 }}
                       />
                       <YAxis
                         tickLine={false}
                         axisLine={false}
-                        tick={{ fontSize: 10, fill: "#94a3b8" }}
-                        tickFormatter={(v) => `${Math.round(v / 1000)}k`}
+                        tick={{ fontSize: 11, fill: "#94a3b8" }}
+                        tickFormatter={(v) => formatCurrencyShort(v)}
+                        width={60}
                       />
                       <Tooltip
-                        contentStyle={{
-                          backgroundColor: "#020617",
-                          borderRadius: 8,
-                          border: "1px solid rgba(148,163,184,0.4)",
-                        }}
-                        labelStyle={{ fontSize: 12, color: "#e2e8f0" }}
-                        itemStyle={{ fontSize: 12, color: "#e2e8f0" }}
+                        content={<CustomTooltip seriesName="MRR" />}
+                        cursor={{ stroke: "#64748b", strokeWidth: 1, strokeDasharray: "3 3" }}
                       />
                       <defs>
                         <linearGradient id="mrrGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.4} />
+                          <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3} />
                           <stop offset="95%" stopColor="#38bdf8" stopOpacity={0} />
                         </linearGradient>
                       </defs>
@@ -635,6 +891,8 @@ export default function InvestorCompanyPage() {
                         stroke="#38bdf8"
                         fill="url(#mrrGradient)"
                         strokeWidth={2}
+                        dot={{ fill: "#38bdf8", r: 3, strokeWidth: 2, stroke: "#0f172a" }}
+                        activeDot={{ r: 5, strokeWidth: 2, stroke: "#0f172a" }}
                       />
                     </AreaChart>
                   </ResponsiveContainer>
@@ -643,34 +901,43 @@ export default function InvestorCompanyPage() {
 
               {/* Burn chart */}
               <div className="space-y-2">
-                <p className="text-xs text-slate-400">Burn last 9 months</p>
+                <p className="text-xs text-slate-400">
+                  Burn {burnChartData.length > 0 ? `(${burnChartData.length} periods)` : ""}
+                </p>
                 <div className="h-48 w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={burnChartData}>
+                    <AreaChart 
+                      data={burnChartData}
+                      margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                    >
+                      <CartesianGrid 
+                        strokeDasharray="3 3" 
+                        stroke="#334155" 
+                        opacity={0.2}
+                        horizontal={true}
+                        vertical={false}
+                      />
                       <XAxis
                         dataKey="month"
                         tickLine={false}
                         axisLine={false}
-                        tick={{ fontSize: 10, fill: "#94a3b8" }}
+                        tick={{ fontSize: 11, fill: "#94a3b8" }}
+                        padding={{ left: 8, right: 8 }}
                       />
                       <YAxis
                         tickLine={false}
                         axisLine={false}
-                        tick={{ fontSize: 10, fill: "#94a3b8" }}
-                        tickFormatter={(v) => `${Math.round(v / 1000)}k`}
+                        tick={{ fontSize: 11, fill: "#94a3b8" }}
+                        tickFormatter={(v) => formatCurrencyShort(v)}
+                        width={60}
                       />
                       <Tooltip
-                        contentStyle={{
-                          backgroundColor: "#020617",
-                          borderRadius: 8,
-                          border: "1px solid rgba(148,163,184,0.4)",
-                        }}
-                        labelStyle={{ fontSize: 12, color: "#e2e8f0" }}
-                        itemStyle={{ fontSize: 12, color: "#e2e8f0" }}
+                        content={<CustomTooltip seriesName="Burn" />}
+                        cursor={{ stroke: "#64748b", strokeWidth: 1, strokeDasharray: "3 3" }}
                       />
                       <defs>
                         <linearGradient id="burnGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4} />
+                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
                           <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
                         </linearGradient>
                       </defs>
@@ -680,6 +947,8 @@ export default function InvestorCompanyPage() {
                         stroke="#f97373"
                         fill="url(#burnGradient)"
                         strokeWidth={2}
+                        dot={{ fill: "#f97373", r: 3, strokeWidth: 2, stroke: "#0f172a" }}
+                        activeDot={{ r: 5, strokeWidth: 2, stroke: "#0f172a" }}
                       />
                     </AreaChart>
                   </ResponsiveContainer>
