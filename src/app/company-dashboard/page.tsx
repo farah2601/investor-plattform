@@ -469,10 +469,33 @@ function CompanyDashboardContent() {
   async function loadData(companyIdParam?: string | null) {
     setError(null);
 
-    // 1) access_requests + company name
+    // 3) Require explicit companyId - no fallback
+    const targetCompanyId = companyIdParam || currentCompanyId;
+    
+    // If no companyId provided, don't fetch requests or KPIs
+    if (!targetCompanyId) {
+      setRequests([]);
+      setCompany(null);
+      setInsights([]);
+      setAgentLogs([]);
+      setKpiForm({
+        mrr: "",
+        arr: "",
+        burn_rate: "",
+        runway_months: "",
+        churn: "",
+        growth_percent: "",
+        kpi_currency: "USD",
+        kpi_scale: "unit",
+      });
+      return;
+    }
+
+    // 1) access_requests + company name - filter by company_id
     const { data: reqs, error: reqError } = await supabase
       .from("access_requests")
       .select("*, companies(name)")
+      .eq("company_id", targetCompanyId)
       .order("created_at", { ascending: false });
 
     if (reqError) {
@@ -481,10 +504,11 @@ function CompanyDashboardContent() {
       return;
     }
 
-    // 2) investor_links
+    // 2) investor_links - filter by company_id
     const { data: links, error: linkError } = await supabase
       .from("investor_links")
-      .select("*");
+      .select("*")
+      .eq("company_id", targetCompanyId);
 
     if (linkError) {
       console.error("Error fetching investor_links", linkError);
@@ -499,9 +523,6 @@ function CompanyDashboardContent() {
       })) ?? [];
 
     setRequests(withLinks);
-
-    // 3) Require explicit companyId - no fallback
-    const targetCompanyId = companyIdParam || currentCompanyId;
     
     // If no companyId provided, don't fetch KPIs
     if (!targetCompanyId) {
@@ -1171,7 +1192,7 @@ function CompanyDashboardContent() {
           </section>
 
           {/* Investor Access */}
-          <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 space-y-4">
+          <section id="investor-access" className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 space-y-4">
             <div>
               <h2 className="text-sm sm:text-base font-medium text-slate-200">Investor Access</h2>
               <p className="text-xs text-slate-500 mt-1">

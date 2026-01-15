@@ -41,19 +41,24 @@ export function FoundersInvestorsToggle() {
           >
             <div className="vx-ffis-inner">
               <div className="vx-ffis-kicker">For Founders</div>
-              <div className="vx-ffis-title">Runway, burn, and MRR—always current.</div>
+              <div className="vx-ffis-title">Always know your runway, burn, and MRR.</div>
               <div className="vx-ffis-copy">
-                Auto-sync core metrics and share a live dashboard with investors. Keep one source of truth and cut down follow-up questions.
+                Your financials update automatically from your tools. No spreadsheets. No guesswork. No investor stress.
               </div>
+              <ul className="vx-ffis-bullets">
+                <li>Auto-sync from Stripe, Xero, HubSpot</li>
+                <li>Real-time runway & burn</li>
+                <li>Share one live dashboard with investors</li>
+              </ul>
               <div className="vx-ffis-ctaRow">
                 <Link className="vx-ffis-cta" href="/sign-up" onClick={(e) => e.stopPropagation()}>
                   Get Valyxo Free
+                  <span className="vx-ffis-cta-hint">No credit card required</span>
                 </Link>
-                <div className="vx-ffis-ctaHint">Click anywhere</div>
               </div>
             </div>
             <div className="vx-ffis-visual" aria-hidden="true">
-              <svg viewBox="0 0 720 420" xmlns="http://www.w3.org/2000/svg" fill="none">
+              <svg viewBox="0 0 720 420" xmlns="http://www.w3.org/2000/svg" fill="none" className="vx-ffis-chart">
                 <defs>
                   <linearGradient id="vxFbg" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0" stopColor="rgba(255,255,255,.08)" />
@@ -83,6 +88,7 @@ export function FoundersInvestorsToggle() {
                 <text x="486" y="106" fontFamily="ui-sans-serif, system-ui" fontSize="26" fill="rgba(255,255,255,.92)">$168k</text>
                 <rect x="34" y="146" width="652" height="232" rx="14" fill="rgba(0,0,0,.28)" stroke="rgba(255,255,255,.08)" />
                 <path
+                  className="vx-ffis-chart-line"
                   d="M58 340 C 120 298, 170 286, 220 268 S 330 250, 382 224 S 492 200, 560 190 S 640 176, 664 158"
                   stroke="url(#vxFline)"
                   strokeWidth="3.2"
@@ -91,6 +97,7 @@ export function FoundersInvestorsToggle() {
                   filter="url(#vxFglow)"
                 />
                 <path
+                  className="vx-ffis-chart-area"
                   d="M58 340 C 120 298, 170 286, 220 268 S 330 250, 382 224 S 492 200, 560 190 S 640 176, 664 158 L 664 362 L 58 362 Z"
                   fill="rgba(47,107,255,.10)"
                 />
@@ -121,19 +128,23 @@ export function FoundersInvestorsToggle() {
           >
             <div className="vx-ffis-inner">
               <div className="vx-ffis-kicker">For Investors</div>
-              <div className="vx-ffis-title">Standardized KPIs across your portfolio.</div>
+              <div className="vx-ffis-title">Standardized KPIs across your entire portfolio.</div>
               <div className="vx-ffis-copy">
-                See comparable, up-to-date metrics without chasing founders. Review changes and drill into a company when something moves.
+                Compare companies, track changes, and spot risk early – without chasing founders for updates.
               </div>
+              <ul className="vx-ffis-bullets">
+                <li>Live MRR, burn & runway</li>
+                <li>Consistent metrics across companies</li>
+                <li>Instant portfolio overview</li>
+              </ul>
               <div className="vx-ffis-ctaRow">
                 <Link className="vx-ffis-cta" href="/login" onClick={(e) => e.stopPropagation()}>
                   Request a Demo
                 </Link>
-                <div className="vx-ffis-ctaHint">Click anywhere</div>
               </div>
             </div>
             <div className="vx-ffis-visual" aria-hidden="true">
-              <svg viewBox="0 0 720 420" xmlns="http://www.w3.org/2000/svg" fill="none">
+              <svg viewBox="0 0 720 420" xmlns="http://www.w3.org/2000/svg" fill="none" className="vx-ffis-chart">
                 <defs>
                   <linearGradient id="vxIbg" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0" stopColor="rgba(255,255,255,.08)" />
@@ -189,6 +200,7 @@ export function FoundersInvestorsToggle() {
                   <text x="530" y="322">15 mo</text>
                 </g>
                 <path
+                  className="vx-ffis-chart-line"
                   d="M410 356 C 455 344, 494 338, 544 320 S 620 300, 668 272"
                   stroke="url(#vxIline)"
                   strokeWidth="3"
