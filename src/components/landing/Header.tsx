@@ -237,14 +237,14 @@ export function Header() {
     {/* Mobile menu checkbox, labels and overlay (outside header for proper z-index) */}
     <div className="lg:hidden">
       <input type="checkbox" id="hamburger" className="peer hidden" />
-      <label htmlFor="hamburger" className="fixed top-0 right-0 z-[200] flex h-10 w-14 cursor-pointer items-center justify-center peer-checked:hidden">
+      <label htmlFor="hamburger" className="fixed top-1.5 right-0 z-[200] flex h-10 w-14 cursor-pointer items-center justify-center peer-checked:hidden">
         <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 16" className="inline-flex shrink-0 h-4 w-5 text-gray-50">
           <rect width="20" height="2" rx="1" />
           <rect width="20" height="2" y="7" rx="1" />
           <rect width="20" height="2" y="14" rx="1" />
         </svg>
       </label>
-      <label htmlFor="hamburger" className="fixed top-0 right-0 z-[200] hidden h-10 w-14 cursor-pointer items-center justify-center peer-checked:flex">
+      <label htmlFor="hamburger" className="fixed top-1.5 right-0 z-[200] hidden h-10 w-14 cursor-pointer items-center justify-center peer-checked:flex">
         <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32" className="inline-flex shrink-0 size-8 text-gray-50">
           <path d="M17.414 16 24 9.414 22.586 8 16 14.586 9.414 8 8 9.414 14.586 16 8 22.586 9.414 24 16 17.414 22.586 24 24 22.586 17.414 16z" />
           <path d="M0 0h32v32H0z" fill="none" />
@@ -412,7 +412,7 @@ export function Header() {
               <Link href="/login" className="px-3 py-2 text-white border rounded text-base hover:bg-gray-700 transition-colors ease-in text-sm">
                 Sign In
               </Link>
-              <Link href="/sign-up" className="px-3 py-2 text-dark bg-white border rounded text-lg hover:bg-transparent hover:text-white transition-colors ease-in text-sm">
+              <Link href="/sign-up" className="px-3 py-2 bg-brand-green text-white border border-brand-green/40 rounded text-lg hover:bg-[#248d70] transition-colors ease-in text-sm shadow-lg shadow-brand-green/25">
                 Get Valyxo Free
               </Link>
             </div>
