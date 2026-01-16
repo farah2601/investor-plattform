@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { supabase } from "@/app/lib/supabaseClient";
 import { Header } from "@/components/landing/Header";
 import { CompanyOverviewPreview } from "@/components/company/CompanyOverviewPreview";
 import "../landing-styles.css";
 
-export default function CompanyPerformancePage() {
+function CompanyPerformanceContent() {
   const searchParams = useSearchParams();
   const [companyId, setCompanyId] = useState<string | null>(null);
 
@@ -439,5 +439,24 @@ export default function CompanyPerformancePage() {
         <div className="h-16"></div>
       </main>
     </div>
+  );
+}
+
+export default function CompanyPerformancePage() {
+  return (
+    <Suspense fallback={
+      <div className="relative bg-dark text-white min-h-screen">
+        <Header />
+        <main className="pt-[68px]">
+          <div className="flex items-center justify-center min-h-screen">
+            <div className="text-center">
+              <p className="text-slate-400">Loading...</p>
+            </div>
+          </div>
+        </main>
+      </div>
+    }>
+      <CompanyPerformanceContent />
+    </Suspense>
   );
 }
