@@ -47,9 +47,7 @@ export function MrrChart({ data = [] }: MrrChartProps) {
 
   return (
     <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3">
-      <h3 className="text-sm font-medium text-slate-200 mb-2">
-        MRR over time
-      </h3>
+      <div className="h-6 mb-2"></div>
       <div className="w-full h-[85%]">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart

@@ -83,6 +83,7 @@ export default function OverviewPage() {
   const [arrSeries, setArrSeries] = useState<ChartDataPoint[]>([]);
   const [mrrSeries, setMrrSeries] = useState<ChartDataPoint[]>([]);
   const [loadingKpiHistory, setLoadingKpiHistory] = useState(false);
+  const [activeChart, setActiveChart] = useState<"arr" | "mrr">("arr");
 
   // Use shared hook to fetch company data - same source as dashboard
   const { company, investorRequests, investorLinks, loading, error } = useCompanyData(companyId);
@@ -415,31 +416,125 @@ export default function OverviewPage() {
                 </div>
               </div>
 
-              {/* Chart Section - At least one chart */}
+              {/* Chart Section - Carousel style */}
               {!loadingKpiHistory && (arrSeries.length > 0 || mrrSeries.length > 0) && (
                 <div className="mb-8">
-                  {/* Show ARR chart if available, otherwise MRR */}
-                  {arrSeries.length > 0 ? (
-                    <div className="bg-slate-900/40 rounded-xl p-5 border border-slate-700/30">
-                      <h3 className="text-sm font-medium text-white mb-4">ARR Over Time</h3>
-                      <ArrChart
-                        data={arrSeries.map((point) => ({
-                          month: point.label || point.date,
-                          arr: point.value != null && !isNaN(Number(point.value)) ? Number(point.value) : null,
-                        }))}
-                      />
+                  <div className="relative bg-slate-900/40 rounded-xl p-5 border border-slate-700/30">
+                    {/* Arrow navigation - only show if both charts available */}
+                    {arrSeries.length > 0 && mrrSeries.length > 0 && (
+                      <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+                          <button
+                            onClick={() => setActiveChart("arr")}
+                            disabled={activeChart === "arr"}
+                            className={`p-2 rounded-md transition-all ${
+                              activeChart === "arr"
+                                ? "opacity-40 cursor-not-allowed"
+                                : "hover:bg-slate-800/50 text-slate-400 hover:text-white"
+                            }`}
+                            aria-label="Previous chart"
+                          >
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M15 19l-7-7 7-7"
+                              />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => setActiveChart("mrr")}
+                            disabled={activeChart === "mrr"}
+                            className={`p-2 rounded-md transition-all ${
+                              activeChart === "mrr"
+                                ? "opacity-40 cursor-not-allowed"
+                                : "hover:bg-slate-800/50 text-slate-400 hover:text-white"
+                            }`}
+                            aria-label="Next chart"
+                          >
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9 5l7 7-7 7"
+                              />
+                            </svg>
+                          </button>
+                      </div>
+                    )}
+
+                    {/* Chart content */}
+                    <div className="relative min-h-[280px]">
+                      {/* ARR Chart */}
+                      {arrSeries.length > 0 && (
+                        <div
+                          className={`transition-opacity duration-300 ${
+                            activeChart === "arr" || (arrSeries.length > 0 && mrrSeries.length === 0)
+                              ? "opacity-100 relative"
+                              : "opacity-0 absolute inset-0 pointer-events-none"
+                          }`}
+                        >
+                          <h3 className="text-sm font-medium text-white mb-4">ARR Over Time</h3>
+                          <ArrChart
+                            data={arrSeries.map((point) => ({
+                              month: point.label || point.date,
+                              arr: point.value != null && !isNaN(Number(point.value)) ? Number(point.value) : null,
+                            }))}
+                          />
+                        </div>
+                      )}
+
+                      {/* MRR Chart */}
+                      {mrrSeries.length > 0 && (
+                        <div
+                          className={`transition-opacity duration-300 ${
+                            activeChart === "mrr" || (mrrSeries.length > 0 && arrSeries.length === 0)
+                              ? "opacity-100 relative"
+                              : "opacity-0 absolute inset-0 pointer-events-none"
+                          }`}
+                        >
+                          <h3 className="text-sm font-medium text-white mb-4">MRR Over Time</h3>
+                          <MrrChart
+                            data={mrrSeries.map((point) => ({
+                              month: point.label || point.date,
+                              mrr: point.value != null && !isNaN(Number(point.value)) ? Number(point.value) : null,
+                            }))}
+                          />
+                        </div>
+                      )}
                     </div>
-                  ) : mrrSeries.length > 0 ? (
-                    <div className="bg-slate-900/40 rounded-xl p-5 border border-slate-700/30">
-                      <h3 className="text-sm font-medium text-white mb-4">MRR Over Time</h3>
-                      <MrrChart
-                        data={mrrSeries.map((point) => ({
-                          month: point.label || point.date,
-                          mrr: point.value != null && !isNaN(Number(point.value)) ? Number(point.value) : null,
-                        }))}
-                      />
-                    </div>
-                  ) : null}
+
+                    {/* Dot indicators - only if both charts */}
+                    {arrSeries.length > 0 && mrrSeries.length > 0 && (
+                      <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t border-slate-700/30">
+                        <button
+                          onClick={() => setActiveChart("arr")}
+                          className={`h-2 rounded-full transition-all ${
+                            activeChart === "arr" ? "w-8 bg-[#2B74FF]" : "w-2 bg-slate-600 hover:bg-slate-500"
+                          }`}
+                          aria-label="Show ARR chart"
+                        />
+                        <button
+                          onClick={() => setActiveChart("mrr")}
+                          className={`h-2 rounded-full transition-all ${
+                            activeChart === "mrr" ? "w-8 bg-[#2B74FF]" : "w-2 bg-slate-600 hover:bg-slate-500"
+                          }`}
+                          aria-label="Show MRR chart"
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
