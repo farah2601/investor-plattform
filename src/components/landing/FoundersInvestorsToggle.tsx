@@ -115,8 +115,8 @@ export function FoundersInvestorsToggle() {
           <div
             className="vx-ffis-panel vx-ffis-investor"
             data-vx-ffis-panel
-            data-vx-href="/login"
-            onClick={handlePanelClick("investor", "/login")}
+            data-vx-href="/investors/portfolio-alerts"
+            onClick={handlePanelClick("investor", "/investors/portfolio-alerts")}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 handlePanelClick("investor", "/login")(e as any);

@@ -91,6 +91,15 @@ export function Header() {
               </button>
               <div className="absolute left-1/2 z-10 hidden -translate-x-1/2 rounded-lg bg-gradient-to-l from-dark/70 to-neutral-900 shadow-lg backdrop-blur-[2px] group-hover:block w-[800px]" role="menu">
                 <div className="grid auto-cols-fr grid-flow-col gap-x-8 gap-y-2 px-10 py-8 grid-rows-1" role="none">
+                  <Link href="/investors/portfolio-alerts" className="group flex gap-2 rounded-md hover:bg-gray-700 p-3" role="menuitem">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="inline-flex shrink-0 mt-0.5 size-5 text-gray-400">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                    <div>
+                      <div className="text-sm text-white">Portfolio Alerts</div>
+                      <div className="mt-2 text-sm text-gray-50">Get notified when metrics change</div>
+                    </div>
+                  </Link>
                   <Link href="/company-dashboard?role=investor" className="group flex gap-2 rounded-md hover:bg-gray-700 p-3" role="menuitem">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32" className="inline-flex shrink-0 mt-0.5 size-5 text-gray-400">
                       <path d="M30 3.414 28.586 2 15.293 15.293a1 1 0 0 0 1.414 1.414l4.18-4.18A5.996 5.996 0 1 1 16 10V8a8.011 8.011 0 1 0 6.316 3.098l2.847-2.847A11.881 11.881 0 0 1 28 16 12 12 0 1 1 16 4V2a14 14 0 1 0 14 14 13.857 13.857 0 0 0-3.422-9.164Z" />
@@ -113,15 +122,6 @@ export function Header() {
                     <div>
                       <div className="text-sm text-white">Portfolio Insights</div>
                       <div className="mt-2 text-sm text-gray-50">Uncover insights</div>
-                    </div>
-                  </Link>
-                  <Link href="/login" className="group flex gap-2 rounded-md hover:bg-gray-700 p-3" role="menuitem">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32" className="inline-flex shrink-0 mt-0.5 size-5 text-gray-400">
-                      <path d="M25.708 1.5H6.292c-.99 0-1.792.845-1.792 1.886v25.228c0 1.041.802 1.886 1.792 1.886h19.416c.99 0 1.792-.845 1.792-1.886V3.386c0-1.042-.802-1.886-1.792-1.886zm0 13.551V28.69H6.292V3.314h19.416V15.05zM22 13v2H10v-2h12zm-2-2V9H10v2h10zm2 10v2H10v-2h12zm-2-2v-2H10v2h10z" />
-                    </svg>
-                    <div>
-                      <div className="text-sm text-white">LP Reporting</div>
-                      <div className="mt-2 text-sm text-gray-50">Scale LP reporting</div>
                     </div>
                   </Link>
                 </div>
@@ -314,6 +314,12 @@ export function Header() {
               <div className="hidden peer-checked:block" role="menu" tabIndex={-1}>
                 <hr className="mt-4" />
                 <div className="mt-4 space-y-2" role="none">
+                  <Link href="/investors/portfolio-alerts" className="flex gap-3 items-center text-white text-base font-normal hover:font-medium py-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="inline-flex shrink-0 mt-0.5 size-5 text-gray-400">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                    <span>Portfolio Alerts</span>
+                  </Link>
                   <Link href="/company-dashboard?role=investor" className="flex gap-3 items-center text-white text-base font-normal hover:font-medium py-2">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32" className="inline-flex shrink-0 mt-0.5 size-5 text-gray-400">
                       <path d="M30 3.414 28.586 2 15.293 15.293a1 1 0 0 0 1.414 1.414l4.18-4.18A5.996 5.996 0 1 1 16 10V8a8.011 8.011 0 1 0 6.316 3.098l2.847-2.847A11.881 11.881 0 0 1 28 16 12 12 0 1 1 16 4V2a14 14 0 1 0 14 14 13.857 13.857 0 0 0-3.422-9.164Z" />
@@ -331,12 +337,6 @@ export function Header() {
                       </g>
                     </svg>
                     <span>Portfolio Insights</span>
-                  </Link>
-                  <Link href="/login" className="flex gap-3 items-center text-white text-base font-normal hover:font-medium py-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32" className="inline-flex shrink-0 mt-0.5 size-5 text-gray-400">
-                      <path d="M25.708 1.5H6.292c-.99 0-1.792.845-1.792 1.886v25.228c0 1.041.802 1.886 1.792 1.886h19.416c.99 0 1.792-.845 1.792-1.886V3.386c0-1.042-.802-1.886-1.792-1.886zm0 13.551V28.69H6.292V3.314h19.416V15.05zM22 13v2H10v-2h12zm-2-2V9H10v2h10zm2 10v2H10v-2h12zm-2-2v-2H10v2h10z" />
-                    </svg>
-                    <span>LP Reporting</span>
                   </Link>
                 </div>
               </div>
