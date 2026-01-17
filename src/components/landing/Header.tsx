@@ -51,7 +51,7 @@ export function Header() {
                       <div className="mt-2 text-sm text-gray-50">Track how your business is doing</div>
                     </div>
                   </Link>
-                  <Link href="/login" className="group flex gap-2 rounded-md hover:bg-gray-700 p-3" role="menuitem">
+                  <Link href="/fundraising" className="group flex gap-2 rounded-md hover:bg-gray-700 p-3" role="menuitem">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32" className="inline-flex shrink-0 mt-0.5 size-5 text-gray-400">
                       <path d="M21 12v-2h-4V7h-2v3h-2a2.002 2.002 0 0 0-2 2v3a2.002 2.002 0 0 0 2 2h6v3h-8v2h4v3h2v-3h2a2.002 2.002 0 0 0 2-2v-3a2.002 2.002 0 0 0-2-2h-6v-3Z" />
                       <path d="M16 4A12 12 0 1 1 4 16 12.035 12.035 0 0 1 16 4m0-2a14 14 0 1 0 14 14A14.041 14.041 0 0 0 16 2Z" />
@@ -59,10 +59,10 @@ export function Header() {
                     </svg>
                     <div>
                       <div className="text-sm text-white">Fundraising</div>
-                      <div className="mt-2 text-sm text-gray-50">Manage a capital raise</div>
+                      <div className="mt-2 text-sm text-gray-50">Attract investors with a live financial overview</div>
                     </div>
                   </Link>
-                  <Link href="/login" className="group flex gap-2 rounded-md hover:bg-gray-700 p-3" role="menuitem">
+                  <Link href="/investor-updates" className="group flex gap-2 rounded-md hover:bg-gray-700 p-3" role="menuitem">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32" className="inline-flex shrink-0 mt-0.5 size-5 text-gray-400">
                       <g>
                         <path d="M9.376 7.031H21.75v1.814H9.376V7.03zM9.191 10.383h11.846v1.814H9.19v-1.814zM9.227 24.96l-1.045-1.1 5.227-5.503 5.227 4.402 3.137-4.402 1.045 1.1-4.182 5.503-5.227-4.402-4.182 4.402zM18.674 13.738H8.809v1.813h9.865v-1.813z" />
@@ -71,7 +71,7 @@ export function Header() {
                     </svg>
                     <div>
                       <div className="text-sm text-white">Investor Updates</div>
-                      <div className="mt-2 text-sm text-gray-50">Report to investors</div>
+                      <div className="mt-2 text-sm text-gray-50">Share data-driven investor updates</div>
                     </div>
                   </Link>
                 </div>
@@ -282,22 +282,28 @@ export function Header() {
                     </svg>
                     <span>Company Performance</span>
                   </Link>
-                  <Link href="/login" className="flex gap-3 items-center text-white text-base font-normal hover:font-medium py-2">
+                  <Link href="/fundraising" className="flex gap-3 items-center text-white text-base font-normal hover:font-medium py-2">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32" className="inline-flex shrink-0 mt-0.5 size-5 text-gray-400">
                       <path d="M21 12v-2h-4V7h-2v3h-2a2.002 2.002 0 0 0-2 2v3a2.002 2.002 0 0 0 2 2h6v3h-8v2h4v3h2v-3h2a2.002 2.002 0 0 0 2-2v-3a2.002 2.002 0 0 0-2-2h-6v-3Z" />
                       <path d="M16 4A12 12 0 1 1 4 16 12.035 12.035 0 0 1 16 4m0-2a14 14 0 1 0 14 14A14.041 14.041 0 0 0 16 2Z" />
                       <path d="M0 0h32v32H0z" fill="none" />
                     </svg>
-                    <span>Fundraising</span>
+                    <div className="flex flex-col">
+                      <span>Fundraising</span>
+                      <span className="text-sm text-gray-400 mt-0.5">Attract investors with a live financial overview</span>
+                    </div>
                   </Link>
-                  <Link href="/login" className="flex gap-3 items-center text-white text-base font-normal hover:font-medium py-2">
+                  <Link href="/investor-updates" className="flex gap-3 items-center text-white text-base font-normal hover:font-medium py-2">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 32 32" className="inline-flex shrink-0 mt-0.5 size-5 text-gray-400">
                       <g>
                         <path d="M9.376 7.031H21.75v1.814H9.376V7.03zM9.191 10.383h11.846v1.814H9.19v-1.814zM9.227 24.96l-1.045-1.1 5.227-5.503 5.227 4.402 3.137-4.402 1.045 1.1-4.182 5.503-5.227-4.402-4.182 4.402zM18.674 13.738H8.809v1.813h9.865v-1.813z" />
                         <path d="M25.208 2H5.792C4.802 2 4 2.845 4 3.886v25.228C4 30.155 4.802 31 5.792 31h19.416c.99 0 1.792-.845 1.792-1.886V15.55h-1.792V29.19H5.792V3.814h19.416V15.55H27V3.886C27 2.844 26.198 2 25.208 2z" />
                       </g>
                     </svg>
-                    <span>Investor Updates</span>
+                    <div className="flex flex-col">
+                      <span>Investor Updates</span>
+                      <span className="text-sm text-gray-400 mt-0.5">Share data-driven investor updates</span>
+                    </div>
                   </Link>
                 </div>
               </div>

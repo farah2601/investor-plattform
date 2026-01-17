@@ -251,7 +251,23 @@ export default function HelpCenterPage() {
   };
 
   const toggleCategory = (categoryId: string) => {
+    // Expand the category
     setExpandedCategory(expandedCategory === categoryId ? null : categoryId);
+    
+    // Scroll to the category section
+    setTimeout(() => {
+      const element = document.getElementById(`category-${categoryId}`);
+      if (element) {
+        const headerOffset = 100; // Offset for fixed header
+        const elementPosition = element.getBoundingClientRect().top;
+        const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+        
+        window.scrollTo({
+          top: offsetPosition,
+          behavior: "smooth"
+        });
+      }
+    }, 100); // Small delay to ensure state updates first
   };
 
   const toggleFAQ = (categoryId: string, question: string) => {
@@ -328,6 +344,7 @@ export default function HelpCenterPage() {
             {filteredCategories.map((category) => (
               <div
                 key={category.id}
+                id={`category-${category.id}`}
                 className="bg-gradient-to-b from-black/50 to-black/30 border border-white/10 rounded-lg p-6 lg:p-8"
               >
                 <h2 className="text-2xl font-medium mb-6">{category.name}</h2>
