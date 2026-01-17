@@ -18,9 +18,13 @@ function getStoredTheme(): Theme {
 }
 
 function resolveTheme(theme: Theme): "light" | "dark" {
-  if (theme === "system" && typeof window !== "undefined") {
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  if (theme === "system") {
+    if (typeof window !== "undefined") {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    return "dark"; // Default for SSR
   }
+  // At this point TypeScript knows theme is "light" | "dark"
   return theme;
 }
 
