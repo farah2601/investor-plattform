@@ -1,7 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:is([data-theme="dark"] *));
+@custom-variant light (&:is(#app-shell[data-theme="light"] *));
 
 @theme inline {
   --color-background: var(--background);
@@ -48,11 +49,14 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-:root {
+:root,
+[data-theme="light"] {
   --valyxo: #2B74FF;
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
+  
+  /* Light mode - soft off-white backgrounds, dark text */
+  --background: oklch(0.98 0.005 270); /* Soft off-white, not pure white */
+  --foreground: oklch(0.15 0.02 270); /* Near-black text */
   
   /* Brand colors */
   --color-brand-blue: #2B74FF;
@@ -94,11 +98,25 @@
   --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
   --sidebar-accent: oklch(0.968 0.007 247.896);
   --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
-  --sidebar-border: oklch(0.929 0.013 255.508);
-  --sidebar-ring: oklch(0.704 0.04 256.788);
+  --sidebar-border: oklch(0.88 0.02 270);
+  --sidebar-ring: oklch(0.5 0.15 260);
+  
+  /* Semantic tokens for app UI - Light mode */
+  --bg: var(--background);
+  --panel: oklch(1 0 0); /* Pure white for cards */
+  --panel-2: oklch(0.96 0.01 270); /* Slightly off-white for elevated surfaces */
+  --text: var(--foreground);
+  --text-2: oklch(0.45 0.02 270); /* Muted text */
+  --muted: var(--muted-foreground);
+  --border: var(--border);
+  --primary: oklch(0.45 0.15 260); /* Adjusted blue for light mode */
+  --ring: var(--ring);
+  --shadow: oklch(0 0 0 / 0.08);
 }
 
+[data-theme="dark"],
 .dark {
+  /* Dark mode base colors */
   --background: oklch(0.129 0.042 264.695);
   --foreground: oklch(0.984 0.003 247.858);
   --card: oklch(0.208 0.042 265.755);
@@ -130,6 +148,18 @@
   --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
+  
+  /* Semantic tokens for app UI - Dark mode */
+  --bg: var(--background);
+  --panel: var(--card);
+  --panel-2: var(--secondary);
+  --text: var(--foreground);
+  --text-2: var(--muted-foreground);
+  --muted: var(--muted-foreground);
+  --border: var(--border);
+  --primary: var(--primary);
+  --ring: var(--ring);
+  --shadow: oklch(0 0 0 / 0.3);
 }
 
 @layer base {
@@ -140,10 +170,25 @@
     @apply bg-background text-foreground;
   }
 }
+html {
+  color-scheme: dark light;
+  /* Default to dark if no theme set */
+  data-theme: dark;
+}
+
 html,
 body {
-  background: #020617; /* slate-950 */
   overscroll-behavior: none;
+}
+
+/* Background based on theme */
+html[data-theme="dark"],
+html:not([data-theme]) {
+  background: var(--bg);
+}
+
+html[data-theme="light"] {
+  background: var(--bg);
 }
 
 body {

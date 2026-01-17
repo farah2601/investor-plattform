@@ -787,7 +787,7 @@ function CompanyDashboardContent() {
                     {runningAgent ? "Running" : company.last_agent_run_at ? "Up to date" : "Needs attention"}
                   </span>
                   {company.last_agent_run_at && (
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-slate-500 light:text-slate-600">
                       Last updated · <FormattedDate 
                         date={company.last_agent_run_at}
                         options={{
@@ -829,11 +829,11 @@ function CompanyDashboardContent() {
                   href={investorUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-sm text-slate-300 hover:text-slate-100 transition-colors flex items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-md border border-slate-700/50 bg-slate-800/30 hover:bg-slate-800/50 h-10 sm:h-9"
+                  className="text-sm text-slate-300 hover:text-slate-100 transition-colors flex items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-md border border-slate-700/50 bg-slate-800/30 hover:bg-slate-800/50 h-10 sm:h-9 light:text-slate-700 light:hover:text-slate-950 light:border-slate-200 light:bg-white light:hover:bg-slate-100"
                 >
                   <span className="hidden sm:inline">Preview investor view</span>
                   <span className="sm:hidden">Preview</span>
-                  <span className="text-slate-500">→</span>
+                  <span className="text-slate-500 light:text-slate-600">→</span>
                 </a>
               )}
               <Link href="/logout">
@@ -850,11 +850,11 @@ function CompanyDashboardContent() {
 
           {/* KPI - mobile: 2 cols, tablet: 3 cols, desktop: 5 cols */}
           {company && (
-            <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 shadow-xl space-y-4 sm:space-y-6">
+            <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 shadow-xl space-y-4 sm:space-y-6 light:border-slate-200 light:bg-white light:shadow-sm">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div>
-                  <h2 className="text-sm sm:text-base font-medium text-slate-200">Key Metrics</h2>
-                  <p className="text-xs text-slate-500 mt-1">
+                  <h2 className="text-sm sm:text-base font-medium text-slate-200 light:text-slate-950">Key Metrics</h2>
+                  <p className="text-xs text-slate-500 mt-1 light:text-slate-600">
                   {company.last_agent_run_at ? (
                     <>
                         Last updated · <FormattedDate 
@@ -874,8 +874,8 @@ function CompanyDashboardContent() {
                 </p>
                 </div>
                 <div className="text-left sm:text-right">
-                  <p className="text-xs text-slate-500">
-                    Powered by <span className="font-medium text-slate-300">Valyxo Agent</span>
+                  <p className="text-xs text-slate-500 light:text-slate-600">
+                    Powered by <span className="font-medium text-slate-300 light:text-slate-900">Valyxo Agent</span>
                   </p>
                 </div>
               </div>
@@ -902,10 +902,10 @@ function CompanyDashboardContent() {
 
           {/* CHARTS SECTION - mobile: stack, desktop: 2 columns */}
           {company && (
-            <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 shadow-xl space-y-4 sm:space-y-6">
+            <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 shadow-xl space-y-4 sm:space-y-6 light:border-slate-200 light:bg-white light:shadow-sm">
               <div>
-                <h2 className="text-sm sm:text-base font-medium text-slate-200">Trends</h2>
-                <p className="text-xs text-slate-500 mt-1">
+                <h2 className="text-sm sm:text-base font-medium text-slate-200 light:text-slate-950">Trends</h2>
+                <p className="text-xs text-slate-500 mt-1 light:text-slate-600">
                   Revenue and burn metrics over time
                 </p>
               </div>
@@ -973,7 +973,7 @@ function CompanyDashboardContent() {
             {(loadingInsights || runningAgent) && (
               <div className="flex items-center gap-2 py-4">
                 <div className="h-4 w-4 border-2 border-[#2B74FF] border-t-transparent rounded-full animate-spin" />
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-slate-400 light:text-slate-600">
                   {runningAgent ? "Agent running…" : "Analyzing data…"}
               </p>
               </div>
@@ -1005,7 +1005,7 @@ function CompanyDashboardContent() {
               <div className="space-y-3">
                 <ul className="space-y-2.5">
               {insights.map((insight, i) => (
-                    <li key={i} className="text-sm text-slate-200 leading-relaxed pl-4 border-l-2 border-[#2B74FF]/30">
+                    <li key={i} className="text-sm text-slate-200 leading-relaxed pl-4 border-l-2 border-[#2B74FF]/30 light:text-slate-900">
                       {insight}
                 </li>
               ))}
@@ -1015,18 +1015,18 @@ function CompanyDashboardContent() {
           </section>
 
           {/* AGENT ACTIVITY / LOGS - System level, moved lower */}
-          <section className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-5 space-y-3">
+          <section className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-5 space-y-3 light:border-slate-200 light:bg-white">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-xs font-medium text-slate-400 uppercase tracking-wide">Agent Activity</h2>
-                <p className="text-xs text-slate-500 mt-0.5">System logs and execution history</p>
+                <h2 className="text-xs font-medium text-slate-400 uppercase tracking-wide light:text-slate-700">Agent Activity</h2>
+                <p className="text-xs text-slate-500 mt-0.5 light:text-slate-600">System logs and execution history</p>
               </div>
 
               {company?.id && (
                 <button
                   type="button"
                   onClick={() => loadAgentLogs(company.id)}
-                  className="text-xs px-2.5 py-1 rounded-md bg-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-300 disabled:opacity-60"
+                  className="text-xs px-2.5 py-1 rounded-md bg-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-300 disabled:opacity-60 light:bg-slate-100 light:hover:bg-slate-200 light:text-slate-700 light:hover:text-slate-900"
                   disabled={loadingLogs}
                 >
                   {loadingLogs ? "Loading…" : "Refresh"}
@@ -1034,10 +1034,10 @@ function CompanyDashboardContent() {
               )}
             </div>
 
-            {loadingLogs && <p className="text-xs text-slate-500">Loading logs…</p>}
+            {loadingLogs && <p className="text-xs text-slate-500 light:text-slate-600">Loading logs…</p>}
 
             {!loadingLogs && agentLogs.length === 0 && (
-              <p className="text-xs text-slate-500">No logs yet.</p>
+              <p className="text-xs text-slate-500 light:text-slate-600">No logs yet.</p>
             )}
 
             {agentLogs.length > 0 && (
@@ -1082,10 +1082,10 @@ function CompanyDashboardContent() {
           {/* Investor Access Link + Update KPIs - mobile: stack, desktop: side-by-side */}
           <section className="grid grid-cols-1 lg:grid-cols-[2fr,1fr] gap-4 sm:gap-6">
             {/* Shareable investor link */}
-            <div className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-4 sm:p-5 space-y-3">
+            <div className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-4 sm:p-5 space-y-3 light:border-slate-200 light:bg-white">
               <div>
-                <h2 className="text-xs sm:text-sm font-medium text-slate-300">Investor Access Link</h2>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <h2 className="text-xs sm:text-sm font-medium text-slate-300 light:text-slate-950">Investor Access Link</h2>
+                <p className="text-xs text-slate-500 mt-0.5 light:text-slate-600">
                   Private link to share with approved investors
                 </p>
               </div>
@@ -1124,10 +1124,10 @@ function CompanyDashboardContent() {
             </div>
 
             {/* Update KPIs */}
-            <div className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-4 sm:p-5 space-y-3">
+            <div className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-4 sm:p-5 space-y-3 light:border-slate-200 light:bg-white">
               <div>
-                <h2 className="text-xs sm:text-sm font-medium text-slate-300">Update KPIs</h2>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <h2 className="text-xs sm:text-sm font-medium text-slate-300 light:text-slate-950">Update KPIs</h2>
+                <p className="text-xs text-slate-500 mt-0.5 light:text-slate-600">
                   Manual entry
                 </p>
             </div>
@@ -1143,10 +1143,10 @@ function CompanyDashboardContent() {
           </section>
 
           {/* Data Sources */}
-          <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 space-y-4">
+          <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 space-y-4 light:border-slate-200 light:bg-white">
                   <div>
-              <h2 className="text-sm sm:text-base font-medium text-slate-200">Data Sources</h2>
-              <p className="text-xs text-slate-500 mt-1">
+              <h2 className="text-sm sm:text-base font-medium text-slate-200 light:text-slate-950">Data Sources</h2>
+              <p className="text-xs text-slate-500 mt-1 light:text-slate-600">
                 Automatically keeps your metrics up to date.
                     </p>
                   </div>
@@ -1192,10 +1192,10 @@ function CompanyDashboardContent() {
           </section>
 
           {/* Investor Access */}
-          <section id="investor-access" className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 space-y-4">
+          <section id="investor-access" className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 space-y-4 light:border-slate-200 light:bg-white">
             <div>
-              <h2 className="text-sm sm:text-base font-medium text-slate-200">Investor Access</h2>
-              <p className="text-xs text-slate-500 mt-1">
+              <h2 className="text-sm sm:text-base font-medium text-slate-200 light:text-slate-950">Investor Access</h2>
+              <p className="text-xs text-slate-500 mt-1 light:text-slate-600">
                 Approve access requests to generate private investor links.
               </p>
             </div>
@@ -1211,13 +1211,13 @@ function CompanyDashboardContent() {
                     {/* mobile: stack, desktop: side-by-side */}
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-100 break-words">{req.investor_name}</p>
-                        <p className="text-xs text-slate-400 mt-0.5 break-all">
+                        <p className="text-sm font-medium text-slate-100 break-words light:text-slate-950">{req.investor_name}</p>
+                        <p className="text-xs text-slate-400 mt-0.5 break-all light:text-slate-600">
                           {req.investor_email}
                           {req.investor_company && ` · ${req.investor_company}`}
                   </p>
                         {req.message && (
-                          <p className="text-xs text-slate-300 mt-1.5 italic break-words">"{req.message}"</p>
+                          <p className="text-xs text-slate-300 mt-1.5 italic break-words light:text-slate-700">"{req.message}"</p>
                         )}
                         {req.status === "approved" && req.link && (
                           <p className="text-xs text-slate-500 mt-2">

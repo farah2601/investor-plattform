@@ -306,11 +306,11 @@ export default function OverviewPage() {
     >
       <div className="mx-auto max-w-[1000px] px-6 space-y-6">
         {/* Welcome Section */}
-        <div className="bg-gradient-to-br from-slate-800/50 to-slate-700/30 border border-slate-700/50 rounded-xl p-6 sm:p-7 shadow-lg">
-          <h1 className="text-2xl sm:text-3xl font-semibold text-white mb-2">
+        <div className="bg-gradient-to-br from-slate-800/50 to-slate-700/30 border border-slate-700/50 rounded-xl p-6 sm:p-7 shadow-lg light:bg-white light:border-slate-200">
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white mb-2 light:text-slate-950">
             Welcome back, {company.name}
           </h1>
-          <p className="text-slate-400 text-sm">
+          <p className="text-slate-400 text-sm light:text-slate-700">
             Manage your company data, investor access, and settings
           </p>
         </div>
@@ -319,32 +319,32 @@ export default function OverviewPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {/* Connected Systems Count - Real data from company.google_sheets_url && company.google_sheets_tab */}
           <Link href={`/integration?companyId=${company.id}`}>
-            <div className="bg-gradient-to-br from-slate-800/50 to-slate-700/30 border border-slate-700/40 rounded-lg px-4 py-4 transition-all hover:border-slate-600/60 hover:bg-slate-800/60 cursor-pointer group">
+            <div className="bg-gradient-to-br from-slate-800/50 to-slate-700/30 border border-slate-700/40 rounded-lg px-4 py-4 transition-all hover:border-slate-600/60 hover:bg-slate-800/60 cursor-pointer group light:bg-white light:border-slate-200 light:hover:border-slate-300">
               <div className="flex items-center gap-2 mb-2">
-                <svg className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-400 transition-colors light:text-slate-600 light:group-hover:text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                 </svg>
-                <div className="text-xs text-slate-500 uppercase tracking-wider group-hover:text-slate-400 transition-colors">Connected Systems</div>
+                <div className="text-xs text-slate-500 uppercase tracking-wider group-hover:text-slate-400 transition-colors light:text-slate-600 light:group-hover:text-slate-800">Connected Systems</div>
               </div>
-              <div className="text-xl font-bold text-white group-hover:text-slate-100 transition-colors">
+              <div className="text-xl font-bold text-white group-hover:text-slate-100 transition-colors light:text-slate-950">
                 {connectedCount} {connectedCount === 1 ? "system" : "systems"}
               </div>
             </div>
           </Link>
 
           {/* Status - Real data from company.google_sheets_last_sync_at and company.last_agent_run_at */}
-          <div className={`bg-gradient-to-br ${
+          <div className={`border rounded-lg px-4 py-4 ${
             dataStatus.status === "Up to date" 
-              ? "from-slate-800/50 to-slate-700/30 border-[#2B74FF]/30" 
-              : "from-slate-800/50 to-slate-700/30 border-slate-700/40"
-          } border rounded-lg px-4 py-4`}>
+              ? "bg-gradient-to-br from-slate-800/50 to-slate-700/30 border-[#2B74FF]/30 light:bg-white light:border-[#2B74FF]/30" 
+              : "bg-gradient-to-br from-slate-800/50 to-slate-700/30 border-slate-700/40 light:bg-white light:border-slate-200"
+          }`}>
             <div className="flex items-center gap-2 mb-2">
               <div className={`w-2 h-2 rounded-full ${
                 dataStatus.status === "Up to date" ? "bg-[#2B74FF] shadow-[0_0_8px_rgba(43,116,255,0.5)]" :
                 dataStatus.status === "Recent" ? "bg-amber-400" :
                 "bg-rose-400"
               }`}></div>
-              <div className="text-xs text-slate-500 uppercase tracking-wider">Status</div>
+              <div className="text-xs text-slate-500 uppercase tracking-wider light:text-slate-600">Status</div>
             </div>
             <div className={`text-xl font-bold ${
               dataStatus.status === "Up to date" ? "text-[#2B74FF]" : dataStatus.color
@@ -355,17 +355,17 @@ export default function OverviewPage() {
 
           {/* Investor Requests - Link to Investor Access section */}
           <Link href={`/company-dashboard?companyId=${company.id}#investor-access`}>
-            <div className="bg-gradient-to-br from-slate-800/50 to-slate-700/30 border border-slate-700/40 rounded-lg px-4 py-4 transition-all hover:border-slate-600/60 hover:bg-slate-800/60 cursor-pointer group">
+            <div className="bg-gradient-to-br from-slate-800/50 to-slate-700/30 border border-slate-700/40 rounded-lg px-4 py-4 transition-all hover:border-slate-600/60 hover:bg-slate-800/60 cursor-pointer group light:bg-white light:border-slate-200 light:hover:border-slate-300">
               <div className="flex items-center gap-2 mb-2">
-                <svg className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-400 transition-colors light:text-slate-600 light:group-hover:text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                 </svg>
-                <div className="text-xs text-slate-500 uppercase tracking-wider group-hover:text-slate-400 transition-colors">Investor Requests</div>
+                <div className="text-xs text-slate-500 uppercase tracking-wider group-hover:text-slate-400 transition-colors light:text-slate-600 light:group-hover:text-slate-800">Investor Requests</div>
               </div>
-              <div className="text-xl font-bold text-white">
+              <div className="text-xl font-bold text-white light:text-slate-950">
                 <span>{pendingRequestsCount} pending</span>
                 {approvedWithAccess > 0 && (
-                  <span className="text-slate-400 text-base font-normal"> · {approvedWithAccess} have access</span>
+                  <span className="text-slate-400 text-base font-normal light:text-slate-600"> · {approvedWithAccess} have access</span>
                 )}
               </div>
             </div>
@@ -373,11 +373,11 @@ export default function OverviewPage() {
         </div>
 
         {/* Dashboard Preview - Full Width */}
-        <div className="bg-gradient-to-br from-slate-800/60 to-slate-700/40 border border-slate-700/50 rounded-2xl p-6 sm:p-8 lg:p-10 shadow-xl shadow-[#2B74FF]/5 ring-1 ring-slate-700/30">
+        <div className="bg-gradient-to-br from-slate-800/60 to-slate-700/40 border border-slate-700/50 rounded-2xl p-6 sm:p-8 lg:p-10 shadow-xl shadow-[#2B74FF]/5 ring-1 ring-slate-700/30 light:bg-white light:border-slate-200 light:shadow-sm light:ring-slate-200/30">
               {/* Header */}
               <div className="mb-6">
-                <h2 className="text-2xl sm:text-3xl font-semibold text-white mb-3">Dashboard Preview</h2>
-                <p className="text-sm text-slate-400">
+                <h2 className="text-2xl sm:text-3xl font-semibold text-white mb-3 light:text-slate-950">Dashboard Preview</h2>
+                <p className="text-sm text-slate-400 light:text-slate-700">
                   This is a live preview of your company's performance.
                 </p>
               </div>
@@ -419,7 +419,7 @@ export default function OverviewPage() {
               {/* Chart Section - Carousel style */}
               {!loadingKpiHistory && (arrSeries.length > 0 || mrrSeries.length > 0) && (
                 <div className="mb-8">
-                  <div className="relative bg-slate-900/40 rounded-xl p-5 border border-slate-700/30">
+                  <div className="relative bg-slate-900/40 rounded-xl p-5 border border-slate-700/30 light:bg-white light:border-slate-200">
                     {/* Arrow navigation - only show if both charts available */}
                     {arrSeries.length > 0 && mrrSeries.length > 0 && (
                       <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
@@ -504,7 +504,7 @@ export default function OverviewPage() {
                               : "opacity-0 absolute inset-0 pointer-events-none"
                           }`}
                         >
-                          <h3 className="text-sm font-medium text-white mb-4">MRR Over Time</h3>
+                          <h3 className="text-sm font-medium text-white mb-4 light:text-slate-950">MRR Over Time</h3>
                           <MrrChart
                             data={mrrSeries.map((point) => ({
                               month: point.label || point.date,
@@ -575,8 +575,8 @@ export default function OverviewPage() {
         ) : null}
 
         {/* Quick Actions - Lighter section for contrast */}
-        <div className="bg-gradient-to-br from-slate-800/50 to-slate-700/30 border border-slate-700/40 rounded-xl p-6 sm:p-7 shadow-lg">
-          <h2 className="text-base font-semibold text-white mb-6">Quick Actions</h2>
+        <div className="bg-gradient-to-br from-slate-800/50 to-slate-700/30 border border-slate-700/40 rounded-xl p-6 sm:p-7 shadow-lg light:bg-white light:border-slate-200">
+          <h2 className="text-base font-semibold text-white mb-6 light:text-slate-950">Quick Actions</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* View Dashboard - Primary (BLUE, dominant) */}
             <div className="flex flex-col">
@@ -590,12 +590,12 @@ export default function OverviewPage() {
                   <span className="text-sm font-semibold">View dashboard</span>
                 </Button>
               </Link>
-              <p className="text-xs text-slate-300 mt-2 text-center">See metrics and trends</p>
+              <p className="text-xs text-slate-300 mt-2 text-center light:text-slate-700">See metrics and trends</p>
             </div>
 
             {/* Company Settings - Control/Management (Neutral) */}
             <div className="flex flex-col">
-              <Link href={`/company-profile?companyId=${company.id}`} className="flex-1">
+              <Link href={`/company-settings?companyId=${company.id}`} className="flex-1">
                 <Button
                   className="w-full bg-slate-800/40 hover:bg-slate-700/50 border border-slate-600/40 text-slate-200 font-medium h-auto py-4 flex flex-col items-center gap-2"
                 >
@@ -606,7 +606,7 @@ export default function OverviewPage() {
                   <span className="text-sm">Company settings</span>
                 </Button>
               </Link>
-              <p className="text-xs text-slate-400 mt-2 text-center">Info, access, security, billing</p>
+              <p className="text-xs text-slate-400 mt-2 text-center light:text-slate-600">Info, access, security, billing</p>
             </div>
 
             {/* Investor Requests - Control/Management (Neutral) */}
@@ -626,7 +626,7 @@ export default function OverviewPage() {
                   <span className="text-sm">Investor requests</span>
                 </Button>
               </Link>
-              <p className="text-xs text-slate-400 mt-2 text-center">Pending access, shared dashboards</p>
+              <p className="text-xs text-slate-400 mt-2 text-center light:text-slate-600">Pending access, shared dashboards</p>
             </div>
 
             {/* Refresh Company Data - Secondary (Neutral) */}
@@ -663,7 +663,7 @@ export default function OverviewPage() {
               <Link href="/companies">
                 <Button
                   variant="outline"
-                  className="border-slate-600/40 text-slate-400 bg-slate-800/20 hover:bg-slate-700/30 text-sm"
+                  className="border-slate-600/40 text-slate-400 bg-slate-800/20 hover:bg-slate-700/30 text-sm light:border-slate-300 light:text-slate-700 light:bg-slate-100 light:hover:bg-slate-200"
                 >
                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

@@ -344,65 +344,79 @@ function CompanyPerformanceContent() {
 
         {/* The Process & What You Get - Two Column Layout */}
         <section id="how-it-works" className="relative mx-auto max-w-6xl px-4 py-16 lg:py-20">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-24">
-            {/* Left Column: The Process */}
-            <div className="bg-slate-900/30 border border-slate-700/30 rounded-xl p-8">
-              <h2 className="text-2xl lg:text-3xl font-semibold text-white mb-3">The process</h2>
-              <div className="w-16 h-px bg-slate-700/50 mb-8"></div>
+          {/* Unified Glass Container */}
+          <div className="relative rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900/50 via-slate-900/40 to-slate-800/40 backdrop-blur-sm shadow-xl shadow-black/20 p-8 lg:p-12 overflow-hidden">
+            {/* Subtle inner highlight */}
+            <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-transparent pointer-events-none rounded-2xl"></div>
+            
+            {/* Two Column Grid */}
+            <div className="relative grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16">
+              {/* Left Column: The Process */}
               <div className="space-y-8">
-                {/* Step 1 */}
                 <div>
-                  <h3 className="text-base font-medium text-white mb-2">Connect your systems</h3>
-                  <p className="text-sm text-slate-300 leading-relaxed">
-                    The AI agent is granted secure, read-only access to your data. Nothing can be edited or changed.
-                  </p>
+                  <h2 className="text-2xl lg:text-3xl font-semibold text-white mb-3">The process</h2>
+                  <div className="w-16 h-px bg-slate-600/60 mb-8"></div>
                 </div>
+                <div className="space-y-8">
+                  {/* Step 1 */}
+                  <div>
+                    <h3 className="text-base font-medium text-white mb-2">Connect your systems</h3>
+                    <p className="text-sm text-slate-300 leading-relaxed">
+                      The AI agent is granted secure, read-only access to your data. Nothing can be edited or changed.
+                    </p>
+                  </div>
 
-                {/* Step 2 */}
-                <div>
-                  <h3 className="text-base font-medium text-white mb-2">Continuous analysis</h3>
-                  <p className="text-sm text-slate-300 leading-relaxed">
-                    The agent continuously reads and standardizes your data across systems in real time.
-                  </p>
-                </div>
+                  {/* Step 2 */}
+                  <div>
+                    <h3 className="text-base font-medium text-white mb-2">Continuous analysis</h3>
+                    <p className="text-sm text-slate-300 leading-relaxed">
+                      The agent continuously reads and standardizes your data across systems in real time.
+                    </p>
+                  </div>
 
-                {/* Step 3 */}
-                <div>
-                  <h3 className="text-base font-medium text-white mb-2">View your company performance</h3>
-                  <p className="text-sm text-slate-300 leading-relaxed">
-                    Your dashboard updates automatically with accurate, standardized metrics and trends.
-                  </p>
+                  {/* Step 3 */}
+                  <div>
+                    <h3 className="text-base font-medium text-white mb-2">View your company performance</h3>
+                    <p className="text-sm text-slate-300 leading-relaxed">
+                      Your dashboard updates automatically with accurate, standardized metrics and trends.
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Right Column: What You Get */}
-            <div className="bg-slate-900/30 border border-slate-700/30 rounded-xl p-8">
-              <h2 className="text-2xl lg:text-3xl font-semibold text-white mb-3">What you get</h2>
-              <div className="w-16 h-px bg-slate-700/50 mb-8"></div>
+              {/* Vertical Divider - Desktop Only */}
+              <div className="hidden lg:block absolute left-1/2 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-slate-700/40 to-transparent -translate-x-1/2"></div>
+
+              {/* Right Column: What You Get */}
               <div className="space-y-8">
-                {/* Item 1 */}
                 <div>
-                  <h3 className="text-base font-medium text-white mb-2">Clear financial visibility</h3>
-                  <p className="text-sm text-slate-300 leading-relaxed">
-                    Always understand how your company is performing — without spreadsheets.
-                  </p>
+                  <h2 className="text-2xl lg:text-3xl font-semibold text-white mb-3">What you get</h2>
+                  <div className="w-16 h-px bg-slate-600/60 mb-8"></div>
                 </div>
+                <div className="space-y-8">
+                  {/* Item 1 */}
+                  <div>
+                    <h3 className="text-base font-medium text-white mb-2">Clear financial visibility</h3>
+                    <p className="text-sm text-slate-300 leading-relaxed">
+                      Always understand how your company is performing — without spreadsheets.
+                    </p>
+                  </div>
 
-                {/* Item 2 */}
-                <div>
-                  <h3 className="text-base font-medium text-white mb-2">One reliable overview</h3>
-                  <p className="text-sm text-slate-300 leading-relaxed">
-                    All your financial data is unified in one consistent view.
-                  </p>
-                </div>
+                  {/* Item 2 */}
+                  <div>
+                    <h3 className="text-base font-medium text-white mb-2">One reliable overview</h3>
+                    <p className="text-sm text-slate-300 leading-relaxed">
+                      All your financial data is unified in one consistent view.
+                    </p>
+                  </div>
 
-                {/* Item 3 */}
-                <div>
-                  <h3 className="text-base font-medium text-white mb-2">Investor-ready access</h3>
-                  <p className="text-sm text-slate-300 leading-relaxed">
-                    Share a secure, read-only dashboard with stakeholders — no reports, no exports.
-                  </p>
+                  {/* Item 3 */}
+                  <div>
+                    <h3 className="text-base font-medium text-white mb-2">Investor-ready access</h3>
+                    <p className="text-sm text-slate-300 leading-relaxed">
+                      Share a secure, read-only dashboard with stakeholders — no reports, no exports.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -411,26 +425,33 @@ function CompanyPerformanceContent() {
 
         {/* Final CTA */}
         <section className="relative mx-auto max-w-5xl px-4 py-16 lg:py-24">
-          <div className="text-center bg-gradient-to-br from-slate-900/60 to-slate-800/40 border border-slate-700/50 rounded-xl p-12 lg:p-16">
-            <h2 className="text-3xl lg:text-4xl font-semibold text-white mb-4">
-              Always know your numbers.
-            </h2>
-            <p className="text-lg lg:text-xl text-slate-300 mb-8 max-w-2xl mx-auto">
-              Start with your Company Performance dashboard today.
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link
-                href="/sign-up"
-                className="inline-flex items-center justify-center px-8 py-3.5 rounded-lg bg-gradient-to-r from-[#2B74FF] to-[#4D9FFF] hover:from-[#2563EB] hover:to-[#3B82F6] text-white font-medium text-base shadow-lg shadow-[#2B74FF]/20 hover:shadow-[#4D9FFF]/30 transition-all"
-              >
-                Get Valyxo Free
-              </Link>
-              <Link
-                href="/login"
-                className="inline-flex items-center justify-center px-8 py-3.5 rounded-lg border border-slate-700/50 bg-slate-900/30 hover:bg-slate-800/50 text-slate-200 font-medium text-base transition-all"
-              >
-                Sign In
-              </Link>
+          <div className="relative text-center rounded-3xl border border-slate-700/60 bg-gradient-to-br from-slate-900/70 via-slate-900/50 to-slate-800/50 backdrop-blur-sm shadow-2xl shadow-black/40 p-12 lg:p-16 overflow-hidden">
+            {/* Subtle inner highlight for premium glass effect */}
+            <div className="absolute inset-0 bg-gradient-to-br from-white/[0.08] via-transparent to-transparent pointer-events-none rounded-3xl"></div>
+            {/* Subtle border glow */}
+            <div className="absolute inset-0 rounded-3xl border border-white/5 pointer-events-none"></div>
+            
+            <div className="relative z-10">
+              <h2 className="text-3xl lg:text-4xl font-semibold text-white mb-4">
+                Always know your numbers.
+              </h2>
+              <p className="text-lg lg:text-xl text-slate-300 mb-10 max-w-2xl mx-auto">
+                Start with your Company Performance dashboard today.
+              </p>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <Link
+                  href="/sign-up"
+                  className="inline-flex items-center justify-center px-8 py-3.5 rounded-xl bg-gradient-to-b from-[#2B74FF] to-[#2563EB] hover:from-[#4D9FFF] hover:to-[#2B74FF] text-white font-medium text-base shadow-lg shadow-[#2B74FF]/30 hover:shadow-[#4D9FFF]/40 hover:shadow-xl transition-all duration-300 hover:scale-105"
+                >
+                  Get Valyxo Free
+                </Link>
+                <Link
+                  href="/login"
+                  className="inline-flex items-center justify-center px-8 py-3.5 rounded-xl border border-slate-600/40 bg-slate-900/40 hover:bg-slate-800/60 hover:border-slate-500/50 text-slate-200 font-medium text-base transition-all duration-300 hover:scale-105"
+                >
+                  Sign In
+                </Link>
+              </div>
             </div>
           </div>
         </section>
