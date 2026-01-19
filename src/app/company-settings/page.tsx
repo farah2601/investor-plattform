@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabaseClient";
 import { AppShell } from "@/components/shell/AppShell";
+import { useCompany } from "@/lib/company-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -106,12 +107,21 @@ function CompanySettingsContent() {
   const sectionParam = searchParams.get("section") as SettingsSection | null;
   const { theme, setTheme } = useTheme();
   
+  // Try to get companyId from Company Context
+  let contextCompanyId: string | null = null;
+  try {
+    const { activeCompany } = useCompany();
+    contextCompanyId = activeCompany?.id || null;
+  } catch {
+    // Not in CompanyProvider context - that's ok
+  }
+  
   const [activeSection, setActiveSection] = useState<SettingsSection>(
     sectionParam || "appearance"
   );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [companyId, setCompanyId] = useState<string | null>(null);
+  const [companyId, setCompanyId] = useState<string | null>(contextCompanyId);
 
   // Settings state
   const [appearance, setAppearance] = useState<AppearanceSettings>({
@@ -160,7 +170,11 @@ function CompanySettingsContent() {
     headcountRules: "Include all full-time employees",
   });
 
-  // Load company ID and team members
+  // Logo upload state
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
+
+  // Load company ID, branding, and team members
   useEffect(() => {
     async function loadCompanyId() {
       try {
@@ -170,16 +184,58 @@ function CompanySettingsContent() {
           return;
         }
 
-        const { data: companyData } = await supabase
-          .from("companies")
-          .select("id")
-          .eq("owner_id", session.user.id)
-          .maybeSingle();
+        // First check URL params for companyId
+        const companyIdFromUrl = searchParams.get("companyId");
+        
+        let targetCompanyId: string | null = null;
+        let companyData: any = null;
 
-        if (companyData?.id) {
-          setCompanyId(companyData.id);
+        if (companyIdFromUrl) {
+          // If companyId is in URL, fetch that specific company
+          const { data, error } = await supabase
+            .from("companies")
+            .select("id, logo_url, header_style, brand_color, owner_id")
+            .eq("id", companyIdFromUrl)
+            .maybeSingle();
+          
+          if (!error && data && data.owner_id === session.user.id) {
+            companyData = data;
+            targetCompanyId = data.id;
+          }
+        }
+
+        // If no companyId from URL or URL company not found, get user's first company
+        if (!targetCompanyId) {
+          const { data } = await supabase
+            .from("companies")
+            .select("id, logo_url, header_style, brand_color")
+            .eq("owner_id", session.user.id)
+            .maybeSingle();
+
+          if (data?.id) {
+            companyData = data;
+            targetCompanyId = data.id;
+          }
+        }
+
+        if (targetCompanyId && companyData) {
+          setCompanyId(targetCompanyId);
+          // Load branding data
+          setBranding({
+            logoUrl: companyData.logo_url || null,
+            primaryColor: companyData.brand_color || "#2B74FF",
+            headerStyle: (companyData.header_style || "minimal") as "minimal" | "branded",
+          });
           // Load team members after company ID is set
-          loadTeamMembers(companyData.id);
+          loadTeamMembers(targetCompanyId);
+        } else if (contextCompanyId) {
+          // Fallback to context companyId if database fetch failed
+          setCompanyId(contextCompanyId);
+          console.log("Using company ID from context:", contextCompanyId);
+        } else {
+          // Don't set error immediately - user might be redirected to onboarding
+          console.warn("No company found for user. User may need to create a company first.");
+          // Don't set logoError here as it shows immediately - let it show only if user tries to upload
         }
       } catch (err) {
         console.error("Error loading company:", err);
@@ -189,7 +245,7 @@ function CompanySettingsContent() {
     }
 
     loadCompanyId();
-  }, [router]);
+  }, [router, searchParams]);
 
   // Load team members from API
   const loadTeamMembers = async (id?: string) => {
@@ -280,14 +336,162 @@ function CompanySettingsContent() {
     
     setSaving(true);
     try {
-      // In a real implementation, save to database
-      // For now, just simulate save
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      console.log("Settings saved");
+      // Save branding settings
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+
+      const { error } = await supabase
+        .from("companies")
+        .update({
+          header_style: branding.headerStyle,
+          brand_color: branding.primaryColor,
+        })
+        .eq("id", companyId)
+        .eq("owner_id", session.user.id);
+
+      if (error) {
+        console.error("Error saving branding:", error);
+        alert("Failed to save branding settings");
+      } else {
+        console.log("Settings saved");
+        // Trigger refresh in company context if available
+        if (typeof window !== "undefined" && (window as any).refreshActiveCompany) {
+          (window as any).refreshActiveCompany();
+        }
+      }
     } catch (err) {
       console.error("Error saving settings:", err);
+      alert("Failed to save settings");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    
+    if (!file) {
+      console.log("No file selected");
+      setLogoError("No file selected");
+      return;
+    }
+    
+    if (!companyId) {
+      setLogoError("No company found. Please create a company first or refresh the page.");
+      console.error("No company ID found - user needs to create a company");
+      // Optionally redirect to onboarding
+      setTimeout(() => {
+        if (confirm("No company found. Would you like to create one?")) {
+          router.push("/onboarding");
+        }
+      }, 100);
+      return;
+    }
+
+    // Validate file size (2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      setLogoError("File size exceeds 2MB limit");
+      return;
+    }
+
+    // Validate file type
+    const validTypes = ["image/png", "image/jpeg", "image/jpg", "image/svg+xml"];
+    if (!validTypes.includes(file.type)) {
+      setLogoError("Invalid file type. Only PNG, JPG, or SVG are allowed.");
+      return;
+    }
+
+    console.log("Starting upload:", { companyId, fileName: file.name, fileSize: file.size, fileType: file.type });
+
+    setUploadingLogo(true);
+    setLogoError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        setLogoError("Not authenticated");
+        return;
+      }
+
+      const response = await fetch(`/api/companies/${companyId}/logo`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        const errorMessage = errorData.error || errorData.details || `HTTP ${response.status}`;
+        console.error("Upload failed:", errorMessage);
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+
+      // Update local state
+      setBranding(prev => ({ ...prev, logoUrl: data.logoUrl }));
+      console.log("Logo uploaded successfully:", data.logoUrl);
+      
+      // Trigger refresh in company context
+      if (typeof window !== "undefined" && (window as any).refreshActiveCompany) {
+        await (window as any).refreshActiveCompany();
+      }
+    } catch (err) {
+      console.error("Error uploading logo:", err);
+      const errorMessage = err instanceof Error ? err.message : "Failed to upload logo";
+      setLogoError(errorMessage);
+      alert(`Failed to upload logo: ${errorMessage}. Please check the browser console for details.`);
+    } finally {
+      setUploadingLogo(false);
+      // Reset file input
+      e.target.value = "";
+    }
+  };
+
+  const handleLogoRemove = async () => {
+    if (!companyId || !branding.logoUrl) return;
+
+    if (!confirm("Are you sure you want to remove the logo?")) return;
+
+    setUploadingLogo(true);
+    setLogoError(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        setLogoError("Not authenticated");
+        return;
+      }
+
+      const response = await fetch(`/api/companies/${companyId}/logo`, {
+        method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to remove logo");
+      }
+
+      // Update local state
+      setBranding(prev => ({ ...prev, logoUrl: null }));
+      
+      // Trigger refresh in company context
+      if (typeof window !== "undefined" && (window as any).refreshActiveCompany) {
+        (window as any).refreshActiveCompany();
+      }
+    } catch (err) {
+      console.error("Error removing logo:", err);
+      setLogoError(err instanceof Error ? err.message : "Failed to remove logo");
+    } finally {
+      setUploadingLogo(false);
     }
   };
 
@@ -614,31 +818,56 @@ function CompanySettingsContent() {
                           <img
                             src={branding.logoUrl}
                             alt="Company logo"
-                            className="w-16 h-16 object-contain border rounded"
+                            className="w-16 h-16 object-contain border rounded bg-white p-1"
                             style={{ borderColor: 'var(--border)' }}
+                            onError={(e) => {
+                              // Fallback if image fails to load
+                              e.currentTarget.style.display = 'none';
+                            }}
                           />
                         ) : (
-                          <div className="w-16 h-16 border border-dashed border-slate-700 rounded flex items-center justify-center">
+                          <div className="w-16 h-16 border border-dashed border-slate-700 rounded flex items-center justify-center bg-slate-800/30">
                             <span className="text-xs text-slate-500">No logo</span>
                           </div>
                         )}
                         <div className="flex gap-2">
+                          <input
+                            id="logo-upload"
+                            type="file"
+                            accept="image/png,image/jpeg,image/jpg,image/svg+xml"
+                            onChange={handleLogoUpload}
+                            className="hidden"
+                            disabled={uploadingLogo}
+                          />
                           <Button
                             variant="outline"
+                            disabled={uploadingLogo}
+                            type="button"
+                            onClick={() => {
+                              const input = document.getElementById("logo-upload") as HTMLInputElement;
+                              if (input) {
+                                input.click();
+                              }
+                            }}
                           >
-                            Upload
+                            {uploadingLogo ? "Uploading..." : "Upload"}
                           </Button>
                           {branding.logoUrl && (
                             <Button
                               variant="outline"
+                              onClick={handleLogoRemove}
+                              disabled={uploadingLogo}
                             >
                               Remove
                             </Button>
                           )}
                         </div>
                       </div>
+                      {logoError && (
+                        <p className="text-xs text-red-400 mt-2">{logoError}</p>
+                      )}
                       <p className="text-xs text-slate-500 mt-2">
-                        Used for investor views, shared dashboards, and reports
+                        Used in the app header, investor views, shared dashboards, and reports. Max 2MB. PNG, JPG, or SVG.
                       </p>
                     </div>
 

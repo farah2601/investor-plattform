@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Menu, X } from "lucide-react";
+import { Menu, X, ChevronDown } from "lucide-react";
+import { useCompany } from "@/lib/company-context";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 type LogoSize = "sm" | "md" | "lg" | "xl";
 
@@ -58,7 +60,71 @@ export function AppShell({
   rightSlot?: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [companySwitcherOpen, setCompanySwitcherOpen] = useState(false);
+  const companySwitcherRef = useRef<HTMLDivElement>(null);
+  
+  // Get company context (optional - will be null if not in CompanyProvider)
+  let activeCompany: { id: string; name: string; logoUrl: string | null } | null = null;
+  let companies: Array<{ id: string; name: string; logoUrl: string | null }> = [];
+  let refreshActiveCompany: (() => Promise<void>) | null = null;
+  let setActiveCompanyFromContext: ((company: { id: string; name: string; logoUrl: string | null } | null) => void) | null = null;
+  
+  try {
+    const companyContext = useCompany();
+    activeCompany = companyContext.activeCompany;
+    companies = companyContext.companies;
+    refreshActiveCompany = companyContext.refreshActiveCompany;
+    setActiveCompanyFromContext = companyContext.setActiveCompany;
+  } catch {
+    // Not in CompanyProvider context - that's ok for some pages
+  }
+  
+  // Expose refresh function globally for settings page to call after logo upload
+  useEffect(() => {
+    if (typeof window !== "undefined" && refreshActiveCompany) {
+      (window as any).refreshActiveCompany = refreshActiveCompany;
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        delete (window as any).refreshActiveCompany;
+      }
+    };
+  }, [refreshActiveCompany]);
+  
+  // Update active company when URL changes
+  useEffect(() => {
+    if (!refreshActiveCompany || !setActiveCompanyFromContext) return;
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const companyIdFromUrl = urlParams.get("companyId") || urlParams.get("company");
+    
+    if (companyIdFromUrl && activeCompany && activeCompany.id !== companyIdFromUrl) {
+      // Company ID in URL changed - refresh or switch
+      const company = companies.find(c => c.id === companyIdFromUrl);
+      if (company) {
+        setActiveCompanyFromContext(company);
+      } else {
+        // Company not in list, refresh from server
+        refreshActiveCompany();
+      }
+    }
+  }, [pathname, companies, activeCompany, refreshActiveCompany, setActiveCompanyFromContext]);
+  
+  // Close company switcher when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (companySwitcherRef.current && !companySwitcherRef.current.contains(event.target as Node)) {
+        setCompanySwitcherOpen(false);
+      }
+    }
+    
+    if (companySwitcherOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [companySwitcherOpen]);
 
   // Close menu on route change
   useEffect(() => {
@@ -111,9 +177,127 @@ export function AppShell({
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-4 sm:gap-6">
             <div className="flex items-center gap-4 sm:gap-10 shrink-0">
-              <Link href="/" className="shrink-0" onClick={() => setMobileMenuOpen(false)}>
-                <Logo size={logoSize} />
-              </Link>
+              {/* Company Logo/Name or Valyxo Logo */}
+              <div ref={companySwitcherRef} className="relative shrink-0">
+                {activeCompany ? (
+                  <button
+                    onClick={() => setCompanySwitcherOpen(!companySwitcherOpen)}
+                    className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-opacity group"
+                  >
+                    <div className="relative flex items-center gap-2">
+                      {activeCompany.logoUrl ? (
+                        <img
+                          src={activeCompany.logoUrl}
+                          alt={activeCompany.name}
+                          className="h-8 w-auto max-w-[120px] object-contain"
+                          onError={(e) => {
+                            // Hide image on error, show fallback
+                            e.currentTarget.style.display = 'none';
+                            const parent = e.currentTarget.parentElement;
+                            if (parent) {
+                              const fallback = parent.querySelector('.logo-fallback') as HTMLElement;
+                              if (fallback) fallback.style.display = 'flex';
+                            }
+                          }}
+                        />
+                      ) : null}
+                      <div 
+                        className={cn(
+                          "logo-fallback flex items-center justify-center rounded-full bg-[#2B74FF] text-white text-sm font-medium",
+                          activeCompany.logoUrl ? "h-8 w-8 hidden" : "h-8 px-3"
+                        )}
+                      >
+                        {activeCompany.name.charAt(0).toUpperCase()}
+                      </div>
+                    </div>
+                    <span className="hidden sm:inline-block text-sm font-medium text-slate-50 light:text-slate-950 truncate max-w-[200px]">
+                      {activeCompany.name}
+                    </span>
+                    <ChevronDown className="h-4 w-4 text-slate-400 group-hover:text-slate-300 transition-colors" />
+                  </button>
+                ) : (
+                  <Link href="/" className="shrink-0" onClick={() => setMobileMenuOpen(false)}>
+                    <Logo size={logoSize} />
+                  </Link>
+                )}
+                
+                {/* Company Switcher Dropdown */}
+                {companySwitcherOpen && activeCompany && (
+                  <div className="absolute top-full left-0 mt-2 w-64 rounded-lg border border-slate-700/50 bg-slate-900/95 backdrop-blur-sm shadow-xl z-50 light:bg-white light:border-slate-200">
+                    <div className="py-1">
+                      {/* Current Company */}
+                      <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider light:text-slate-600">
+                        Current Company
+                      </div>
+                      <div className="px-4 py-2 text-sm text-slate-200 light:text-slate-900 bg-slate-800/30 light:bg-slate-100">
+                        <div className="flex items-center gap-2">
+                          {activeCompany.logoUrl ? (
+                            <img
+                              src={activeCompany.logoUrl}
+                              alt={activeCompany.name}
+                              className="h-6 w-6 rounded object-contain"
+                            />
+                          ) : (
+                            <div className="h-6 w-6 rounded-full bg-[#2B74FF] flex items-center justify-center text-xs text-white font-medium">
+                              {activeCompany.name.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <span className="font-medium">{activeCompany.name}</span>
+                        </div>
+                      </div>
+                      
+                      {/* Divider */}
+                      <div className="my-1 border-t border-slate-700/50 light:border-slate-200" />
+                      
+                      {/* Other Companies */}
+                      {companies.length > 1 && (
+                        <>
+                          <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider light:text-slate-600">
+                            Switch Company
+                          </div>
+                          {companies
+                            .filter(c => c.id !== activeCompany!.id)
+                            .map((company) => (
+                              <button
+                                key={company.id}
+                                onClick={() => {
+                                  router.push(`/company-dashboard?companyId=${company.id}`);
+                                  setCompanySwitcherOpen(false);
+                                }}
+                                className="w-full px-4 py-2 text-sm text-slate-300 hover:bg-slate-800/50 hover:text-white transition-colors text-left light:text-slate-700 light:hover:bg-slate-100"
+                              >
+                                <div className="flex items-center gap-2">
+                                  {company.logoUrl ? (
+                                    <img
+                                      src={company.logoUrl}
+                                      alt={company.name}
+                                      className="h-6 w-6 rounded object-contain"
+                                    />
+                                  ) : (
+                                    <div className="h-6 w-6 rounded-full bg-[#2B74FF] flex items-center justify-center text-xs text-white font-medium">
+                                      {company.name.charAt(0).toUpperCase()}
+                                    </div>
+                                  )}
+                                  <span>{company.name}</span>
+                                </div>
+                              </button>
+                            ))}
+                          <div className="my-1 border-t border-slate-700/50 light:border-slate-200" />
+                        </>
+                      )}
+                      
+                      {/* Company Settings Link */}
+                      <Link
+                        href={activeCompany ? `/company-settings?companyId=${activeCompany.id}&section=branding` : "/company-settings"}
+                        onClick={() => setCompanySwitcherOpen(false)}
+                        className="block px-4 py-2 text-sm text-slate-300 hover:bg-slate-800/50 hover:text-white transition-colors light:text-slate-700 light:hover:bg-slate-100"
+                      >
+                        Company settings
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Desktop nav */}
               {showNav && (

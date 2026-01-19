@@ -22,6 +22,7 @@ import {
   DialogFooter,
 } from "../../../components/ui/dialog";
 import { FormattedDate } from "../../components/ui/FormattedDate";
+import { Avatar, AvatarFallback } from "../../../components/ui/avatar";
 
 type RequestItem = {
   id: string;
@@ -315,6 +316,10 @@ function CompanyDashboardContent() {
     lastVerifiedAt: string | null;
   }>({ connected: false, pending: false, status: null, masked: null, lastVerifiedAt: null });
 
+  // User dropdown
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
   useEffect(() => {
     async function checkAuthAndLoad() {
       const {
@@ -326,6 +331,7 @@ function CompanyDashboardContent() {
         return;
       }
 
+      setUserEmail(session.user.email || null);
       setAuthChecked(true);
       
       // Update currentCompanyId when URL changes
@@ -960,8 +966,20 @@ function CompanyDashboardContent() {
               )}
             </div>
 
-            {/* mobile: stack buttons, desktop: row */}
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {/* Navigation and User Menu */}
+            <div className="flex items-center gap-3 shrink-0">
+              {/* Overview Link */}
+              <Link href={company?.id ? `/overview?companyId=${company.id}` : "/overview"}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-slate-300 hover:text-white hover:bg-slate-800/50 h-10 sm:h-9 px-4"
+                >
+                  Overview
+                </Button>
+              </Link>
+
+              {/* Run Agent Button */}
               {company?.id && (
                 <Button
                   size="sm"
@@ -972,36 +990,68 @@ function CompanyDashboardContent() {
                   {runningAgent ? "Running…" : "Run Agent"}
                 </Button>
               )}
-              <Link href={company?.id ? `/company-profile?companyId=${company.id}` : "/company-profile"}>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-slate-700/50 text-slate-300 bg-slate-800/30 hover:bg-slate-800/50 h-10 sm:h-9 px-4"
+
+              {/* User Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                  className="flex items-center justify-center w-10 h-10 rounded-full border border-slate-700/50 bg-slate-800/30 hover:bg-slate-800/50 transition-colors focus:outline-none focus:ring-2 focus:ring-[#2B74FF]/50"
                 >
-                  Profile
-                </Button>
-              </Link>
-              {investorUrl && (
-                <a
-                  href={investorUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-slate-300 hover:text-slate-100 transition-colors flex items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-md border border-slate-700/50 bg-slate-800/30 hover:bg-slate-800/50 h-10 sm:h-9 light:text-slate-700 light:hover:text-slate-950 light:border-slate-200 light:bg-white light:hover:bg-slate-100"
-                >
-                  <span className="hidden sm:inline">Preview investor view</span>
-                  <span className="sm:hidden">Preview</span>
-                  <span className="text-slate-500 light:text-slate-600">→</span>
-                </a>
-              )}
-              <Link href="/logout">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/30 h-10 sm:h-9 px-4"
-                >
-                  Sign out
-                </Button>
-              </Link>
+                  <Avatar className="w-8 h-8">
+                    <AvatarFallback className="bg-[#2B74FF] text-white text-xs font-medium">
+                      {userEmail ? userEmail.charAt(0).toUpperCase() : "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                </button>
+
+                {/* Dropdown Menu */}
+                {userDropdownOpen && (
+                  <>
+                    {/* Overlay to close dropdown on click outside */}
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setUserDropdownOpen(false)}
+                    />
+                    <div className="absolute right-0 mt-2 w-56 rounded-lg border border-slate-700/50 bg-slate-900/95 backdrop-blur-sm shadow-xl z-20 light:bg-white light:border-slate-200">
+                      <div className="py-1">
+                        {/* Profile */}
+                        <Link
+                          href={company?.id ? `/company-profile?companyId=${company.id}` : "/company-profile"}
+                          onClick={() => setUserDropdownOpen(false)}
+                          className="block px-4 py-2 text-sm text-slate-300 hover:bg-slate-800/50 hover:text-white transition-colors light:text-slate-700 light:hover:bg-slate-100"
+                        >
+                          Profile
+                        </Link>
+
+                        {/* Preview investor view */}
+                        {investorUrl && (
+                          <a
+                            href={investorUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => setUserDropdownOpen(false)}
+                            className="block px-4 py-2 text-sm text-slate-300 hover:bg-slate-800/50 hover:text-white transition-colors light:text-slate-700 light:hover:bg-slate-100"
+                          >
+                            Preview investor view
+                          </a>
+                        )}
+
+                        {/* Divider */}
+                        <div className="my-1 border-t border-slate-700/50 light:border-slate-200" />
+
+                        {/* Sign out */}
+                        <Link
+                          href="/logout"
+                          onClick={() => setUserDropdownOpen(false)}
+                          className="block px-4 py-2 text-sm text-slate-300 hover:bg-slate-800/50 hover:text-white transition-colors light:text-slate-700 light:hover:bg-slate-100"
+                        >
+                          Sign out
+                        </Link>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </header>
 

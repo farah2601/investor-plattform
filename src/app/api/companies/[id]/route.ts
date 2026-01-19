@@ -29,7 +29,8 @@ export async function GET(
       );
     }
 
-    const { data: company, error: companyError } = await supabaseAdmin
+    // Try to fetch with branding columns first, fallback to without them if they don't exist
+    let { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
       .select(`
         id,
@@ -52,10 +53,55 @@ export async function GET(
         latest_insights,
         latest_insights_generated_at,
         latest_insights_generated_by,
-        based_on_snapshot_date
+        based_on_snapshot_date,
+        logo_url,
+        header_style,
+        brand_color
       `)
       .eq("id", companyId)
       .maybeSingle();
+
+    // If query fails due to missing columns (likely migration not run), try without branding columns
+    if (companyError && (companyError.message?.includes("column") || companyError.message?.includes("does not exist") || companyError.code === "42703")) {
+      console.warn("[api/companies/[id]] Branding columns not found, fetching without them. Run migration to enable branding features.");
+      const fallbackResult = await supabaseAdmin
+        .from("companies")
+        .select(`
+          id,
+          name,
+          industry,
+          google_sheets_url,
+          google_sheets_tab,
+          google_sheets_last_sync_at,
+          google_sheets_last_sync_by,
+          profile_published,
+          mrr,
+          arr,
+          burn_rate,
+          runway_months,
+          churn,
+          growth_percent,
+          lead_velocity,
+          last_agent_run_at,
+          last_agent_run_by,
+          latest_insights,
+          latest_insights_generated_at,
+          latest_insights_generated_by,
+          based_on_snapshot_date
+        `)
+        .eq("id", companyId)
+        .maybeSingle();
+      
+      company = fallbackResult.data;
+      companyError = fallbackResult.error;
+      
+      // Add default branding fields if they don't exist
+      if (company) {
+        (company as any).logo_url = null;
+        (company as any).header_style = "minimal";
+        (company as any).brand_color = null;
+      }
+    }
 
     if (companyError) {
       console.error("[api/companies/[id]] Database error:", companyError);
