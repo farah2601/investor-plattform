@@ -57,14 +57,31 @@ export async function GET(req: Request) {
       );
     }
 
-    // State: companyId + nonce for CSRF protection
-    const state = `${companyId}:${crypto.randomUUID()}`;
+    
 
-    // Save state in DB for CSRF check
+    // Generate cryptographically secure nonce and state
+    const nonce = crypto.randomUUID();
+    const state = `${companyId}:${nonce}`;
+
+    // State expires in 15 minutes
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const now = new Date().toISOString();
+
+    // Store OAuth state for CSRF protection
+    // DO NOT overwrite secret_encrypted or stripe_account_id (allow reconnect)
     await supabaseAdmin
       .from("integrations")
       .upsert(
-        { company_id: companyId, provider: "stripe", status: "pending" },
+        {
+          company_id: companyId,
+          provider: "stripe",
+          status: "pending",
+          oauth_state: state,
+          oauth_state_expires_at: expiresAt,
+          updated_at: now,
+          // Explicitly preserve existing fields on reconnect
+          // Note: Supabase upsert with onConflict will preserve existing columns not specified
+        },
         { onConflict: "company_id,provider" }
       );
 

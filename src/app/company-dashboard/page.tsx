@@ -309,12 +309,20 @@ function CompanyDashboardContent() {
   const [savingStripe, setSavingStripe] = useState(false);
   const [stripeError, setStripeError] = useState<string | null>(null);
   const [stripeStatus, setStripeStatus] = useState<{
-    connected: boolean;
-    pending?: boolean;
-    status: string | null;
-    masked: string | null;
+    status: "not_connected" | "pending" | "connected" | null;
+    stripeAccountId: string | null;
+    connectedAt: string | null;
     lastVerifiedAt: string | null;
-  }>({ connected: false, pending: false, status: null, masked: null, lastVerifiedAt: null });
+    masked: string | null;
+    pendingExpiresAt: string | null;
+  }>({
+    status: null,
+    stripeAccountId: null,
+    connectedAt: null,
+    lastVerifiedAt: null,
+    masked: null,
+    pendingExpiresAt: null,
+  });
 
   // User dropdown
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -340,16 +348,40 @@ function CompanyDashboardContent() {
       
       // Check for Stripe OAuth callback result
       const stripeCallback = searchParams.get("stripe");
-      if (stripeCallback && urlCompanyId) {
-        // Refetch Stripe status to get latest state
-        await loadStripeStatus(urlCompanyId);
-        // Clean URL by removing query param
-        const newUrl = new URL(window.location.href);
-        newUrl.searchParams.delete("stripe");
-        if (stripeCallback === "success") {
-          // Optional: show success toast/message here
+      if (stripeCallback) {
+        // Refetch Stripe status to get latest state (if companyId available)
+        if (urlCompanyId) {
+          await loadStripeStatus(urlCompanyId);
         }
-        window.history.replaceState({}, "", newUrl.toString());
+        
+        // Clean URL by removing query params (use router.replace for proper navigation)
+        const newSearchParams = new URLSearchParams(searchParams);
+        newSearchParams.delete("stripe");
+        newSearchParams.delete("msg"); // Also remove error message param
+        const cleanUrl = `${window.location.pathname}${newSearchParams.toString() ? `?${newSearchParams.toString()}` : ""}`;
+        
+        if (stripeCallback === "connected") {
+          // Success - show friendly message
+          // Using alert for now (can be replaced with toast component if available)
+          alert("Stripe connected successfully!");
+        } else if (stripeCallback === "error") {
+          // Show friendly error message - never show "Unauthorized" or raw errors
+          const errorMsg = searchParams.get("msg");
+          if (errorMsg) {
+            // Decode and show user-friendly message
+            try {
+              const decoded = decodeURIComponent(errorMsg);
+              alert(`Couldn't connect Stripe: ${decoded}. Try again.`);
+            } catch {
+              alert("Couldn't connect Stripe. Try again.");
+            }
+          } else {
+            alert("Couldn't connect Stripe. Try again.");
+          }
+        }
+        
+        // Use router.replace to clean URL without full reload
+        router.replace(cleanUrl);
       }
       
       await loadData(urlCompanyId);
@@ -690,16 +722,39 @@ function CompanyDashboardContent() {
       const data = await res.json();
       if (data?.ok) {
         setStripeStatus({
-          connected: data.connected || false,
-          pending: data.pending || false,
-          status: data.status || null,
-          masked: data.masked || null,
+          status: data.status || "not_connected",
+          stripeAccountId: data.stripeAccountId || null,
+          connectedAt: data.connectedAt || null,
           lastVerifiedAt: data.lastVerifiedAt || null,
+          masked: data.masked || null,
+          pendingExpiresAt: data.pendingExpiresAt || null,
+        });
+      } else {
+        // Handle error gracefully - set to not_connected
+        setStripeStatus({
+          status: "not_connected",
+          stripeAccountId: null,
+          connectedAt: null,
+          lastVerifiedAt: null,
+          masked: null,
+          pendingExpiresAt: null,
         });
       }
-    } catch (e) {
+    } catch (e: any) {
+      // Never show "Unauthorized" or raw errors to user
       console.error("Failed to load Stripe status", e);
-      setStripeStatus({ connected: false, pending: false, status: null, masked: null, lastVerifiedAt: null });
+      if (e?.message === "Not authenticated") {
+        // Silently fail - user will need to refresh/auth
+        return;
+      }
+      setStripeStatus({
+        status: "not_connected",
+        stripeAccountId: null,
+        connectedAt: null,
+        lastVerifiedAt: null,
+        masked: null,
+        pendingExpiresAt: null,
+      });
     }
   }
 
@@ -740,12 +795,14 @@ function CompanyDashboardContent() {
       // Re-fetch status to get latest state (including masked key)
       await loadStripeStatus(currentCompanyId);
     } catch (e: any) {
-      // Keep modal open on error, show error message
+      // Keep modal open on error, show friendly error message
+      // Never show "Unauthorized" or raw errors
       if (e?.message === "Not authenticated") {
-        setStripeError("You are not authenticated. Please sign in again.");
-      } else {
-        setStripeError(e?.message || "Failed to save Stripe key");
+        // Silently fail - user will need to refresh/auth
+        setStripeModalOpen(false);
+        return;
       }
+      setStripeError("Failed to save Stripe key. Please try again.");
     } finally {
       setSavingStripe(false);
     }
@@ -802,11 +859,12 @@ function CompanyDashboardContent() {
       window.location.assign(data.authorizeUrl);
     } catch (e: any) {
       console.error("Error connecting Stripe:", e);
+      // Never show "Unauthorized" or raw errors to user
       if (e?.message === "Not authenticated") {
-        alert("You are not authenticated. Please sign in again.");
-      } else {
-        alert("Error: " + (e?.message || "Failed to connect Stripe"));
+        // Silently fail - user will need to refresh/auth
+        return;
       }
+      alert("Failed to connect Stripe. Please try again.");
     }
   }
 
@@ -1369,7 +1427,7 @@ function CompanyDashboardContent() {
 
               {/* Status Display */}
               <div className="flex items-center gap-2">
-                {stripeStatus.connected ? (
+                {stripeStatus.status === "connected" ? (
                   <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-[#2B74FF]/10 text-[#2B74FF] border border-[#2B74FF]/20">
                     Connected
                   </span>
@@ -1391,7 +1449,7 @@ function CompanyDashboardContent() {
 
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                {stripeStatus.connected ? (
+                {stripeStatus.status === "connected" ? (
                   <>
                     <Button
                       size="sm"

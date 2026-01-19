@@ -38,7 +38,7 @@ export async function GET(req: Request) {
     // Only select safe fields - never return secret_encrypted or stripe_account_id value
     const { data, error } = await supabaseAdmin
       .from("integrations")
-      .select("status, secret_encrypted, masked, last_verified_at, stripe_account_id")
+      .select("status, secret_encrypted, masked, last_verified_at, stripe_account_id, connected_at, oauth_state_expires_at")
       .eq("company_id", companyId)
       .eq("provider", "stripe")
       .maybeSingle();
@@ -47,14 +47,16 @@ export async function GET(req: Request) {
       // Check if error is due to missing columns
       const errorMessage = error.message || "";
       if (errorMessage.includes("does not exist") || errorMessage.includes("column")) {
-        console.error("[api/stripe/status] Database schema error - columns may not exist yet");
+        console.error("[api/stripe/status] Database schema error - columns may not exist yet:", errorMessage);
         // Return not connected if schema is not ready
         return NextResponse.json({
           ok: true,
-          connected: false,
-          status: null,
-          masked: null,
+          status: "not_connected",
+          stripeAccountId: null,
+          connectedAt: null,
           lastVerifiedAt: null,
+          masked: null,
+          pendingExpiresAt: null,
         });
       }
       console.error("[api/stripe/status] Database error:", {
@@ -69,23 +71,94 @@ export async function GET(req: Request) {
       );
     }
 
-    // Determine connection status:
-    // - connected: status === "connected" AND (stripe_account_id exists OR secret_encrypted exists for OAuth vs manual)
-    // - pending: status === "pending" OR (status === "connected" but neither stripe_account_id nor secret_encrypted)
-    const hasOAuthConnection = !!data?.stripe_account_id;
-    const hasManualConnection = !!data?.secret_encrypted;
-    const connected = data?.status === "connected" && (hasOAuthConnection || hasManualConnection);
-    const pending = data?.status === "pending" || (data?.status === "connected" && !hasOAuthConnection && !hasManualConnection);
+    // If no row exists, return not_connected
+    if (!data) {
+      return NextResponse.json({
+        ok: true,
+        status: "not_connected",
+        stripeAccountId: null,
+        connectedAt: null,
+        lastVerifiedAt: null,
+        masked: null,
+        pendingExpiresAt: null,
+      });
+    }
 
-    // Return safe fields only - never include secret_encrypted or stripe_account_id value
+    // Deterministic pending cleanup: If status="pending" but state expired or missing, treat as not_connected
+    const isPendingStatus = data.status === "pending";
+    let shouldCleanupPending = false;
+
+    if (isPendingStatus) {
+      if (!data.oauth_state_expires_at) {
+        // Pending but no expiration - treat as not_connected
+        shouldCleanupPending = true;
+      } else {
+        const expiresAt = new Date(data.oauth_state_expires_at).getTime();
+        if (Number.isNaN(expiresAt) || Date.now() > expiresAt) {
+          // Pending but expired - treat as not_connected
+          shouldCleanupPending = true;
+        }
+      }
+    }
+
+    // Best-effort cleanup of expired pending state (fire and forget)
+    if (shouldCleanupPending) {
+      console.log("[api/stripe/status] Cleaning up expired pending state for companyId:", companyId);
+      // Use void to explicitly ignore the promise result
+      void (async () => {
+        try {
+          const { error: updateError } = await supabaseAdmin
+            .from("integrations")
+            .update({
+              status: "not_connected",
+              oauth_state: null,
+              oauth_state_expires_at: null,
+            })
+            .eq("company_id", companyId)
+            .eq("provider", "stripe");
+          if (updateError) {
+            console.error("[api/stripe/status] Failed to cleanup expired pending state:", updateError);
+          }
+        } catch (err: unknown) {
+          console.error("[api/stripe/status] Error during cleanup:", err);
+        }
+      })();
+    }
+
+    // Determine connection status from DB:
+    // - "connected": status === "connected" AND (stripe_account_id exists OR secret_encrypted exists)
+    // - "pending": status === "pending" AND state not expired
+    // - "not_connected": otherwise
+    const hasOAuthConnection = !!data?.stripe_account_id;
+    const hasManualConnection = !!data?.secret_encrypted && !hasOAuthConnection; // Manual if secret exists but no OAuth
+    const isConnected = data?.status === "connected" && (hasOAuthConnection || hasManualConnection);
+    const isPending = isPendingStatus && !shouldCleanupPending;
+
+    // Return explicit status string: "not_connected" | "pending" | "connected"
+    let statusString: "not_connected" | "pending" | "connected" = "not_connected";
+    if (isConnected) {
+      statusString = "connected";
+    } else if (isPending) {
+      statusString = "pending";
+    }
+
+    // Extract stripe account ID (only if OAuth connection exists)
+    // Return masked/placeholder, never the actual account ID
+    const stripeAccountId = hasOAuthConnection && data?.stripe_account_id
+      ? data.stripe_account_id.length > 8
+        ? `${data.stripe_account_id.slice(0, 5)}_****${data.stripe_account_id.slice(-4)}`
+        : "***"
+      : null;
+
+    // Return stable response shape
     return NextResponse.json({
       ok: true,
-      connected,
-      pending,
-      status: data?.status || null,
-      masked: data?.masked || null,
+      status: statusString,
+      stripeAccountId,
+      connectedAt: data?.connected_at || null,
       lastVerifiedAt: data?.last_verified_at || null,
-      hasOAuthConnection: hasOAuthConnection, // Boolean - indicates OAuth connection exists
+      masked: data?.masked || stripeAccountId || null, // Prefer stored masked, fallback to generated
+      pendingExpiresAt: isPending && data?.oauth_state_expires_at ? data.oauth_state_expires_at : null,
     });
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
