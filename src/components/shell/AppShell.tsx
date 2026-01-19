@@ -69,14 +69,15 @@ export function AppShell({
   let activeCompany: { id: string; name: string; logoUrl: string | null } | null = null;
   let companies: Array<{ id: string; name: string; logoUrl: string | null }> = [];
   let refreshActiveCompany: (() => Promise<void>) | null = null;
-  let setActiveCompanyFromContext: ((company: { id: string; name: string; logoUrl: string | null } | null) => void) | null = null;
+  let setActiveCompanyFromContext: ((company: { id: string; name: string; logoUrl: string | null; headerStyle?: "minimal" | "branded"; brandColor?: string | null } | null) => void) | null = null;
   
   try {
     const companyContext = useCompany();
     activeCompany = companyContext.activeCompany;
     companies = companyContext.companies;
     refreshActiveCompany = companyContext.refreshActiveCompany;
-    setActiveCompanyFromContext = companyContext.setActiveCompany;
+    // Type assertion needed because we're using a simplified type in AppShell
+    setActiveCompanyFromContext = companyContext.setActiveCompany as (company: { id: string; name: string; logoUrl: string | null } | null) => void;
   } catch {
     // Not in CompanyProvider context - that's ok for some pages
   }
