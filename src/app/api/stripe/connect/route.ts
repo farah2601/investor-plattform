@@ -57,16 +57,27 @@ export async function GET(req: Request) {
       );
     }
 
-    // State: companyId + nonce for CSRF protection
-    const state = `${companyId}:${crypto.randomUUID()}`;
+    
 
-    // Save state in DB for CSRF check
-    await supabaseAdmin
-      .from("integrations")
-      .upsert(
-        { company_id: companyId, provider: "stripe", status: "pending" },
-        { onConflict: "company_id,provider" }
-      );
+    const nonce = crypto.randomUUID();
+const state = `${companyId}:${nonce}`;
+
+const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
+await supabaseAdmin
+  .from("integrations")
+  .upsert(
+    {
+      company_id: companyId,
+      provider: "stripe",
+      status: "pending",
+      oauth_state: state,
+      oauth_state_expires_at: expiresAt,
+      last_error: null,
+      last_error_at: null,
+    },
+    { onConflict: "company_id,provider" }
+  );
 
     const stripeAuthorizeUrl =
       `https://connect.stripe.com/oauth/authorize` +

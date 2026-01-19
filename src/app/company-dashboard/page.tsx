@@ -340,8 +340,13 @@ function CompanyDashboardContent() {
         // Clean URL by removing query param
         const newUrl = new URL(window.location.href);
         newUrl.searchParams.delete("stripe");
-        if (stripeCallback === "success") {
-          // Optional: show success toast/message here
+        newUrl.searchParams.delete("reason"); // Also remove error reason if present
+        if (stripeCallback === "connected") {
+          // Success - status will show "Connected" after refetch
+        } else if (stripeCallback === "error") {
+          const reason = searchParams.get("reason");
+          // Show friendly error message
+          console.error("Stripe connection error:", reason || "Unknown error");
         }
         window.history.replaceState({}, "", newUrl.toString());
       }

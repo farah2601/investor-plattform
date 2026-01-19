@@ -38,7 +38,7 @@ export async function GET(req: Request) {
     // Only select safe fields - never return secret_encrypted or stripe_account_id value
     const { data, error } = await supabaseAdmin
       .from("integrations")
-      .select("status, secret_encrypted, masked, last_verified_at, stripe_account_id")
+      .select("status, secret_encrypted, masked, last_verified_at, stripe_account_id, connected_at")
       .eq("company_id", companyId)
       .eq("provider", "stripe")
       .maybeSingle();
@@ -85,6 +85,8 @@ export async function GET(req: Request) {
       status: data?.status || null,
       masked: data?.masked || null,
       lastVerifiedAt: data?.last_verified_at || null,
+      connectedAt: data?.connected_at || null,
+      stripeAccountId: hasOAuthConnection ? "***" : null, // Return placeholder, not actual ID
       hasOAuthConnection: hasOAuthConnection, // Boolean - indicates OAuth connection exists
     });
   } catch (error: unknown) {
