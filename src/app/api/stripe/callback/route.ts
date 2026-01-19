@@ -4,8 +4,9 @@ import { encryptText } from "@/lib/server/crypto";
 
 export const dynamic = "force-dynamic";
 
-function getBaseUrl(req: Request) {
-  const envBase = process.env.BASE_URL;
+function getBaseUrl(req: Request): string {
+  // Prefer BASE_URL env variable, fallback to request origin
+  const envBase = process.env.BASE_URL || process.env.NEXT_PUBLIC_BASE_URL;
   if (envBase) return envBase.replace(/\/$/, "");
   const url = new URL(req.url);
   return url.origin;
@@ -72,15 +73,13 @@ export async function GET(req: Request) {
 
     const exp = new Date(integration.oauth_state_expires_at).getTime();
     if (Number.isNaN(exp) || Date.now() > exp) {
-      // expire pending
+      // expire pending - clear state fields
       await supabaseAdmin
         .from("integrations")
         .update({
           status: "not_connected",
           oauth_state: null,
           oauth_state_expires_at: null,
-          last_error: "OAuth state expired",
-          last_error_at: new Date().toISOString(),
         })
         .eq("company_id", companyId)
         .eq("provider", "stripe");
@@ -134,11 +133,13 @@ export async function GET(req: Request) {
         tokenJson?.error ||
         `Stripe token exchange failed (${tokenRes.status})`;
 
+      // Update status to not_connected on error
       await supabaseAdmin
         .from("integrations")
         .update({
-          last_error: errMsg,
-          last_error_at: new Date().toISOString(),
+          status: "not_connected",
+          oauth_state: null,
+          oauth_state_expires_at: null,
         })
         .eq("company_id", companyId)
         .eq("provider", "stripe");
@@ -153,11 +154,13 @@ export async function GET(req: Request) {
 
     if (!stripeUserId || !accessToken) {
       const errMsg = "Stripe response missing stripe_user_id or access_token";
+      // Update status to not_connected on error
       await supabaseAdmin
         .from("integrations")
         .update({
-          last_error: errMsg,
-          last_error_at: new Date().toISOString(),
+          status: "not_connected",
+          oauth_state: null,
+          oauth_state_expires_at: null,
         })
         .eq("company_id", companyId)
         .eq("provider", "stripe");
@@ -177,19 +180,18 @@ export async function GET(req: Request) {
         : stripeUserId;
 
     // Persist connected status and clear oauth_state fields
+    // Store encrypted access token in secret_encrypted (used for both OAuth and manual keys)
     await supabaseAdmin
       .from("integrations")
       .update({
         status: "connected",
         stripe_account_id: stripeUserId,
-        oauth_access_token_encrypted: accessTokenEncrypted,
+        secret_encrypted: accessTokenEncrypted,
         connected_at: nowIso,
         last_verified_at: nowIso,
         oauth_state: null,
         oauth_state_expires_at: null,
-        masked: maskedAcct, // optional: reuse existing masked field
-        last_error: null,
-        last_error_at: null,
+        masked: maskedAcct, // Masked account ID for display
       })
       .eq("company_id", companyId)
       .eq("provider", "stripe");

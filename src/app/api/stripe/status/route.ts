@@ -69,25 +69,42 @@ export async function GET(req: Request) {
       );
     }
 
-    // Determine connection status:
-    // - connected: status === "connected" AND (stripe_account_id exists OR secret_encrypted exists for OAuth vs manual)
-    // - pending: status === "pending" OR (status === "connected" but neither stripe_account_id nor secret_encrypted)
+    // Determine connection status from DB:
+    // - "connected": status === "connected" AND (stripe_account_id exists OR secret_encrypted exists)
+    // - "pending": status === "pending"
+    // - "not_connected": status is null, "not_connected", or row doesn't exist
     const hasOAuthConnection = !!data?.stripe_account_id;
-    const hasManualConnection = !!data?.secret_encrypted;
-    const connected = data?.status === "connected" && (hasOAuthConnection || hasManualConnection);
-    const pending = data?.status === "pending" || (data?.status === "connected" && !hasOAuthConnection && !hasManualConnection);
+    const hasManualConnection = !!data?.secret_encrypted && !hasOAuthConnection; // Manual if secret exists but no OAuth
+    const isConnected = data?.status === "connected" && (hasOAuthConnection || hasManualConnection);
+    const isPending = data?.status === "pending";
 
-    // Return safe fields only - never include secret_encrypted or stripe_account_id value
+    // Return explicit status string: "not_connected" | "pending" | "connected"
+    let statusString: "not_connected" | "pending" | "connected" = "not_connected";
+    if (isConnected) {
+      statusString = "connected";
+    } else if (isPending) {
+      statusString = "pending";
+    }
+
+    // Extract stripe account ID (only if OAuth connection exists)
+    // Return masked/placeholder, never the actual account ID
+    const stripeAccountId = hasOAuthConnection && data?.stripe_account_id
+      ? data.stripe_account_id.length > 8
+        ? `${data.stripe_account_id.slice(0, 5)}_****${data.stripe_account_id.slice(-4)}`
+        : "***"
+      : null;
+
+    // Return safe fields only - never include secret_encrypted or actual stripe_account_id value
     return NextResponse.json({
       ok: true,
-      connected,
-      pending,
-      status: data?.status || null,
-      masked: data?.masked || null,
-      lastVerifiedAt: data?.last_verified_at || null,
+      status: statusString,
+      stripeAccountId,
       connectedAt: data?.connected_at || null,
-      stripeAccountId: hasOAuthConnection ? "***" : null, // Return placeholder, not actual ID
-      hasOAuthConnection: hasOAuthConnection, // Boolean - indicates OAuth connection exists
+      masked: data?.masked || stripeAccountId || null, // Prefer stored masked, fallback to generated
+      lastVerifiedAt: data?.last_verified_at || null,
+      // Legacy boolean fields for backward compatibility
+      connected: isConnected,
+      pending: isPending,
     });
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";

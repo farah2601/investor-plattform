@@ -337,16 +337,21 @@ function CompanyDashboardContent() {
       if (stripeCallback && urlCompanyId) {
         // Refetch Stripe status to get latest state
         await loadStripeStatus(urlCompanyId);
-        // Clean URL by removing query param
+        // Clean URL by removing query params
         const newUrl = new URL(window.location.href);
         newUrl.searchParams.delete("stripe");
-        newUrl.searchParams.delete("reason"); // Also remove error reason if present
+        newUrl.searchParams.delete("msg"); // Remove error message param if present
         if (stripeCallback === "connected") {
           // Success - status will show "Connected" after refetch
+          // Optional: show success toast here
         } else if (stripeCallback === "error") {
-          const reason = searchParams.get("reason");
-          // Show friendly error message
-          console.error("Stripe connection error:", reason || "Unknown error");
+          const msg = searchParams.get("msg");
+          // Show friendly error message to user
+          if (msg) {
+            alert(`Stripe connection error: ${decodeURIComponent(msg)}`);
+          } else {
+            alert("Stripe connection failed. Please try again.");
+          }
         }
         window.history.replaceState({}, "", newUrl.toString());
       }
