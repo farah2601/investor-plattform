@@ -342,20 +342,40 @@ function CompanyDashboardContent() {
       
       // Check for Stripe OAuth callback result
       const stripeCallback = searchParams.get("stripe");
-      if (stripeCallback && urlCompanyId) {
-        // Refetch Stripe status to get latest state
-        await loadStripeStatus(urlCompanyId);
-        // Clean URL by removing query params
-        const newUrl = new URL(window.location.href);
-        newUrl.searchParams.delete("stripe");
+      if (stripeCallback) {
+        // Refetch Stripe status to get latest state (if companyId available)
+        if (urlCompanyId) {
+          await loadStripeStatus(urlCompanyId);
+        }
+        
+        // Clean URL by removing query params (use router.replace for proper navigation)
+        const newSearchParams = new URLSearchParams(searchParams);
+        newSearchParams.delete("stripe");
+        newSearchParams.delete("msg"); // Also remove error message param
+        const cleanUrl = `${window.location.pathname}${newSearchParams.toString() ? `?${newSearchParams.toString()}` : ""}`;
+        
         if (stripeCallback === "connected") {
-          // Success - status will show "Connected" after refetch
-          // Optional: show success toast here
+          // Success - show friendly message
+          // Using alert for now (can be replaced with toast component if available)
+          alert("Stripe connected successfully!");
         } else if (stripeCallback === "error") {
           // Show friendly error message - never show "Unauthorized" or raw errors
-          alert("Stripe connection failed. Please try connecting again.");
+          const errorMsg = searchParams.get("msg");
+          if (errorMsg) {
+            // Decode and show user-friendly message
+            try {
+              const decoded = decodeURIComponent(errorMsg);
+              alert(`Couldn't connect Stripe: ${decoded}. Try again.`);
+            } catch {
+              alert("Couldn't connect Stripe. Try again.");
+            }
+          } else {
+            alert("Couldn't connect Stripe. Try again.");
+          }
         }
-        window.history.replaceState({}, "", newUrl.toString());
+        
+        // Use router.replace to clean URL without full reload
+        router.replace(cleanUrl);
       }
       
       await loadData(urlCompanyId);

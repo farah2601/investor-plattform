@@ -12,17 +12,16 @@ function getBaseUrl(req: Request): string {
   return url.origin;
 }
 
+/**
+ * Get dashboard path for redirects.
+ * IMPORTANT: This callback is called by Stripe (external redirect), so we cannot
+ * rely on Authorization headers. We must redirect to a known, existing route.
+ * The correct dashboard route is /company-dashboard (not /company).
+ */
 function getDashboardPath(): string {
-  // Determine dashboard path dynamically
-  // 1) Check DASHBOARD_BASE_PATH env
-  // 2) Fallback to /company
-  const envPath = process.env.DASHBOARD_BASE_PATH;
-  if (envPath) {
-    // Ensure it starts with /
-    return envPath.startsWith("/") ? envPath : `/${envPath}`;
-  }
-  // Default assumption: dashboard is at /company?companyId=...
-  return "/company";
+  // Always use /company-dashboard - this is the actual route that exists
+  // Do NOT use /company, /companies, or /dashboard as they may not exist
+  return "/company-dashboard";
 }
 
 function safeMsg(msg: string) {
@@ -42,8 +41,9 @@ export async function GET(req: Request) {
     // Validate query params
     if (!code || !state) {
       console.error("[api/stripe/callback] Missing code or state parameter");
+      // Cannot extract companyId without state, redirect without it
       return NextResponse.redirect(
-        `${baseUrl}${dashboardPath}?stripe=error`
+        `${baseUrl}${dashboardPath}?stripe=error&msg=${safeMsg("Invalid callback")}`
       );
     }
 
@@ -51,7 +51,7 @@ export async function GET(req: Request) {
     if (!state.includes(":")) {
       console.error("[api/stripe/callback] Invalid state format - missing colon");
       return NextResponse.redirect(
-        `${baseUrl}${dashboardPath}?stripe=error`
+        `${baseUrl}${dashboardPath}?stripe=error&msg=${safeMsg("Invalid callback")}`
       );
     }
 
@@ -60,7 +60,7 @@ export async function GET(req: Request) {
     if (!companyId || !nonce) {
       console.error("[api/stripe/callback] Invalid state format - missing companyId or nonce");
       return NextResponse.redirect(
-        `${baseUrl}${dashboardPath}?stripe=error`
+        `${baseUrl}${dashboardPath}?stripe=error&msg=${safeMsg("Invalid callback")}`
       );
     }
 
@@ -76,14 +76,14 @@ export async function GET(req: Request) {
     if (integErr) {
       console.error("[api/stripe/callback] Database error fetching integration:", integErr);
       return NextResponse.redirect(
-        `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error`
+        `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error&msg=${safeMsg("Database error")}`
       );
     }
 
     if (!integration) {
       console.error("[api/stripe/callback] Integration record not found for companyId:", companyId);
       return NextResponse.redirect(
-        `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error`
+        `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error&msg=${safeMsg("Connection not found")}`
       );
     }
 
@@ -91,7 +91,7 @@ export async function GET(req: Request) {
     if (integration.status !== "pending") {
       console.error("[api/stripe/callback] Integration status is not pending:", integration.status);
       return NextResponse.redirect(
-        `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error`
+        `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error&msg=${safeMsg("Connection not pending")}`
       );
     }
 
@@ -102,7 +102,7 @@ export async function GET(req: Request) {
         received: state,
       });
       return NextResponse.redirect(
-        `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error`
+        `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error&msg=${safeMsg("Security validation failed")}`
       );
     }
 
@@ -139,7 +139,7 @@ export async function GET(req: Request) {
         .eq("provider", "stripe");
 
       return NextResponse.redirect(
-        `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error`
+        `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error&msg=${safeMsg("Session expired")}`
       );
     }
 
@@ -160,7 +160,7 @@ export async function GET(req: Request) {
         .eq("company_id", companyId)
         .eq("provider", "stripe");
       return NextResponse.redirect(
-        `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error`
+        `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error&msg=${safeMsg("Server configuration error")}`
       );
     }
     if (!clientId || !clientId.startsWith("ca_")) {
@@ -175,7 +175,7 @@ export async function GET(req: Request) {
         .eq("company_id", companyId)
         .eq("provider", "stripe");
       return NextResponse.redirect(
-        `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error`
+        `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error&msg=${safeMsg("Server configuration error")}`
       );
     }
     if (!redirectUri) {
@@ -190,7 +190,7 @@ export async function GET(req: Request) {
         .eq("company_id", companyId)
         .eq("provider", "stripe");
       return NextResponse.redirect(
-        `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error`
+        `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error&msg=${safeMsg("Server configuration error")}`
       );
     }
 
@@ -232,7 +232,7 @@ export async function GET(req: Request) {
         .eq("provider", "stripe");
 
       return NextResponse.redirect(
-        `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error`
+        `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error&msg=${safeMsg("Token exchange failed")}`
       );
     }
 
@@ -259,7 +259,7 @@ export async function GET(req: Request) {
         .eq("provider", "stripe");
 
       return NextResponse.redirect(
-        `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error`
+        `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error&msg=${safeMsg("Invalid response from Stripe")}`
       );
     }
 
@@ -310,14 +310,15 @@ export async function GET(req: Request) {
       const companyId = state?.split(":")[0];
       if (companyId) {
         return NextResponse.redirect(
-          `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error`
+          `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error&msg=${safeMsg("Unexpected error")}`
         );
       }
     } catch {
       // Ignore
     }
+    // Final fallback: no companyId available
     return NextResponse.redirect(
-      `${baseUrl}${dashboardPath}?stripe=error`
+      `${baseUrl}${dashboardPath}?stripe=error&msg=${safeMsg("Invalid callback")}`
     );
   }
 }
