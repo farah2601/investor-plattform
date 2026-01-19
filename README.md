@@ -34,3 +34,25 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Data Sources
+
+**Stripe Integration**: Stripe is used only as a data source. All Stripe data flows through:
+- Stripe → compute → write to `kpi_snapshots` → UI reads only from `kpi_snapshots`
+- KPI snapshots remain the single source of truth for all UI displays.
+- No Stripe numbers go directly to the UI.
+
+## Environment Variables
+
+Required environment variables for Stripe Connect integration:
+
+```bash
+# Stripe Connect OAuth
+STRIPE_CLIENT_ID=ca_...                    # Connect Client ID from Stripe Dashboard > Settings > Connect
+STRIPE_CONNECT_REDIRECT_URI=http://localhost:3000/api/stripe/callback  # Full callback URL (must match Stripe Dashboard)
+STRIPE_SECRET_KEY=sk_live_...              # Stripe Secret Key (server-only, used for OAuth token exchange)
+```
+
+**Important**: The `STRIPE_CONNECT_REDIRECT_URI` must exactly match the redirect URI configured in your Stripe Connect settings. For local development, use `http://localhost:3000/api/stripe/callback`. For production, use your production domain.
+
+Check Stripe Connect health: `GET /api/stripe/health` returns which env vars are configured (boolean flags only).
