@@ -10,7 +10,7 @@
 import { supabase } from "@/app/lib/supabaseClient";
 
 export async function authedFetch(
-  input: RequestInfo,
+  input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<Response> {
   // Get current Supabase session
@@ -22,15 +22,18 @@ export async function authedFetch(
 
   const token = data.session.access_token;
 
-  // Build headers - preserve existing, add Authorization and Content-Type if needed
-  const headers: HeadersInit = {
-    ...(init?.headers || {}),
-    Authorization: `Bearer ${token}`,
-  };
+  // Normalize headers to a real Headers instance (safe for all HeadersInit shapes)
+  const headers = new Headers(init?.headers);
 
-  // Add Content-Type for requests with body
-  if (init?.body && !headers["Content-Type"] && !headers["content-type"]) {
-    headers["Content-Type"] = "application/json";
+  // Add Authorization header
+  headers.set("Authorization", `Bearer ${token}`);
+
+  // Add Content-Type for requests with body (if not already set)
+  const hasBody = init?.body !== undefined && init?.body !== null;
+  const hasContentType = headers.has("content-type");
+
+  if (hasBody && !hasContentType) {
+    headers.set("Content-Type", "application/json");
   }
 
   // Call fetch with credentials: "omit" (no cookies)
