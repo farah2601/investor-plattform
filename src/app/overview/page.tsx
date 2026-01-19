@@ -172,24 +172,24 @@ export default function OverviewPage() {
     setAgentError(null);
 
     try {
-      const res = await fetch("/api/agent/run", {
+      const res = await fetch("/api/agent/run-all", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ companyId: company.id }),
       });
 
       if (!res.ok) {
-        const errorData = await res.json();
+        const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData?.error || "Failed to run agent");
       }
 
-      // Refresh page data by reloading company ID (hook will refetch)
-      // The hook will automatically refetch when companyId changes
-      window.location.reload();
+      // Wait a bit for the agent to process, then reload
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
     } catch (err) {
       console.error("Error running agent:", err);
       setAgentError(err instanceof Error ? err.message : "Failed to run agent");
-    } finally {
       setRunningAgent(false);
     }
   }
@@ -609,24 +609,19 @@ export default function OverviewPage() {
               <p className="text-xs text-slate-400 mt-2 text-center light:text-slate-600">Info, access, security, billing</p>
             </div>
 
-            {/* Investor Requests - Control/Management (Neutral) */}
+            {/* Company Profile - Control/Management (Neutral) */}
             <div className="flex flex-col">
-              <Link href={`/company-dashboard?companyId=${company.id}`} className="flex-1">
+              <Link href={`/company-profile?companyId=${company.id}`} className="flex-1">
                 <Button
                   className="w-full bg-slate-800/40 hover:bg-slate-700/50 border border-slate-600/40 text-slate-200 font-medium h-auto py-4 flex flex-col items-center gap-2 relative"
                 >
-                  {investorRequests.filter(r => r.status === "pending").length > 0 && (
-                    <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white">
-                      {investorRequests.filter(r => r.status === "pending").length}
-                    </span>
-                  )}
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                   </svg>
-                  <span className="text-sm">Investor requests</span>
+                  <span className="text-sm">Company profile</span>
                 </Button>
               </Link>
-              <p className="text-xs text-slate-400 mt-2 text-center light:text-slate-600">Pending access, shared dashboards</p>
+              <p className="text-xs text-slate-400 mt-2 text-center light:text-slate-600">View and edit company profile</p>
             </div>
 
             {/* Refresh Company Data - Secondary (Neutral) */}

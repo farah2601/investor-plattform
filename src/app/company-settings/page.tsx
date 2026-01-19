@@ -55,10 +55,13 @@ type PreferencesSettings = {
 type TeamRole = {
   id: string;
   name: string;
+  email: string;
   role: "owner" | "admin" | "finance" | "viewer";
   canEditTemplates: boolean;
   canChangeBranding: boolean;
   canShareInvestorLinks: boolean;
+  canAccessDashboard: boolean;
+  canViewOverview: boolean;
 };
 
 type DataDefaultsSettings = {
@@ -141,6 +144,14 @@ function CompanySettingsContent() {
   });
 
   const [teamRoles, setTeamRoles] = useState<TeamRole[]>([]);
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [inviteForm, setInviteForm] = useState({
+    email: "",
+    role: "viewer" as "admin" | "finance" | "viewer",
+  });
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteSuccess, setInviteSuccess] = useState(false);
   const [dataDefaults, setDataDefaults] = useState<DataDefaultsSettings>({
     revenueDefinition: "All recurring revenue including subscriptions",
     burnCalculation: "Total monthly expenses minus revenue",
@@ -149,7 +160,7 @@ function CompanySettingsContent() {
     headcountRules: "Include all full-time employees",
   });
 
-  // Load company ID
+  // Load company ID and team members
   useEffect(() => {
     async function loadCompanyId() {
       try {
@@ -167,6 +178,8 @@ function CompanySettingsContent() {
 
         if (companyData?.id) {
           setCompanyId(companyData.id);
+          // Load team members after company ID is set
+          loadTeamMembers(companyData.id);
         }
       } catch (err) {
         console.error("Error loading company:", err);
@@ -177,6 +190,69 @@ function CompanySettingsContent() {
 
     loadCompanyId();
   }, [router]);
+
+  // Load team members from API
+  const loadTeamMembers = async (id?: string) => {
+    const companyIdToUse = id || companyId;
+    if (!companyIdToUse) return;
+
+    try {
+      const response = await fetch(`/api/companies/${companyIdToUse}/team-members`);
+      
+      if (!response.ok) {
+        let errorData: any = {};
+        try {
+          const text = await response.text();
+          if (text) {
+            errorData = JSON.parse(text);
+          }
+        } catch (parseError) {
+          // Response might not be JSON
+          console.warn("Failed to parse error response:", parseError);
+        }
+        
+        console.error("Failed to load team members:", {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData
+        });
+        
+        // If table doesn't exist, just return empty array (don't show error)
+        // User will see empty list and can still invite members (which will show migration error)
+        if (errorData.error === "Database table not found" || response.status === 500) {
+          console.warn("team_members table might not exist yet. Run migration first.");
+          setTeamRoles([]);
+          return;
+        }
+        
+        // For other errors, still set empty array to avoid UI issues
+        setTeamRoles([]);
+        return;
+      }
+
+      const data = await response.json();
+      if (data.teamMembers) {
+        // Map database format to TeamRole format
+        const mappedMembers: TeamRole[] = data.teamMembers.map((member: any) => ({
+          id: member.id,
+          name: member.name || member.email.split("@")[0],
+          email: member.email,
+          role: member.role,
+          canEditTemplates: member.can_edit_templates || false,
+          canChangeBranding: member.can_change_branding || false,
+          canShareInvestorLinks: member.can_share_investor_links || false,
+          canAccessDashboard: member.can_access_dashboard !== undefined ? member.can_access_dashboard : true,
+          canViewOverview: member.can_view_overview !== undefined ? member.can_view_overview : true,
+        }));
+        setTeamRoles(mappedMembers);
+      } else {
+        setTeamRoles([]);
+      }
+    } catch (err) {
+      console.error("Error loading team members:", err);
+      setTeamRoles([]);
+    }
+  };
 
   // Initialize templates on load
   useEffect(() => {
@@ -212,6 +288,102 @@ function CompanySettingsContent() {
       console.error("Error saving settings:", err);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleInviteTeamMember = async () => {
+    if (!inviteForm.email.trim()) {
+      setInviteError("Email is required");
+      return;
+    }
+
+    if (!companyId) {
+      setInviteError("Company not found");
+      return;
+    }
+
+    setInviteLoading(true);
+    setInviteError(null);
+
+    try {
+      // Get role permissions based on role type
+      const rolePermissions: Record<"admin" | "finance" | "viewer", {
+        canEditTemplates: boolean;
+        canChangeBranding: boolean;
+        canShareInvestorLinks: boolean;
+        canAccessDashboard: boolean;
+        canViewOverview: boolean;
+      }> = {
+        admin: {
+          canEditTemplates: true,
+          canChangeBranding: true,
+          canShareInvestorLinks: true,
+          canAccessDashboard: true,
+          canViewOverview: true,
+        },
+        finance: {
+          canEditTemplates: false,
+          canChangeBranding: false,
+          canShareInvestorLinks: true,
+          canAccessDashboard: true,
+          canViewOverview: true,
+        },
+        viewer: {
+          canEditTemplates: false,
+          canChangeBranding: false,
+          canShareInvestorLinks: false,
+          canAccessDashboard: true,
+          canViewOverview: true,
+        },
+      };
+
+      const permissions = rolePermissions[inviteForm.role];
+
+      // Get auth token for API call
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      // Call API to create team member and send invitation
+      const response = await fetch(`/api/companies/${companyId}/team-members`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          ...(token && { "Authorization": `Bearer ${token}` }),
+        },
+        body: JSON.stringify({
+          email: inviteForm.email,
+          role: inviteForm.role,
+          canEditTemplates: permissions.canEditTemplates,
+          canChangeBranding: permissions.canChangeBranding,
+          canShareInvestorLinks: permissions.canShareInvestorLinks,
+          canAccessDashboard: permissions.canAccessDashboard,
+          canViewOverview: permissions.canViewOverview,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setInviteError(data.error || "Failed to send invitation");
+        return;
+      }
+
+      // Load team members to refresh the list
+      await loadTeamMembers();
+
+      setInviteForm({ email: "", role: "viewer" });
+      setInviteModalOpen(false);
+      setInviteSuccess(true);
+      
+      // Hide success message after 3 seconds
+      setTimeout(() => setInviteSuccess(false), 3000);
+      //     ...permissions,
+      //   }),
+      // });
+    } catch (err: any) {
+      setInviteError(err?.message || "Failed to invite team member");
+    } finally {
+      setInviteLoading(false);
     }
   };
 
@@ -252,12 +424,16 @@ function CompanySettingsContent() {
                   key={section.id}
                   onClick={() => setActiveSection(section.id)}
                   className={cn(
-                    "w-full text-left px-4 py-2.5 rounded-md text-sm font-medium transition-colors",
+                    "w-full text-left px-4 py-2.5 rounded-md text-sm font-medium transition-all",
                     activeSection === section.id
-                      ? "text-foreground"
+                      ? "text-white font-semibold"
                       : "text-muted-foreground hover:text-foreground hover:bg-accent"
                   )}
-                  style={activeSection === section.id ? { backgroundColor: 'var(--accent)' } : {}}
+                  style={activeSection === section.id ? { 
+                    backgroundColor: 'rgba(43, 116, 255, 0.15)',
+                    border: '1px solid #2B74FF',
+                    boxShadow: '0 0 0 1px rgba(43, 116, 255, 0.3), 0 0 8px rgba(43, 116, 255, 0.2)'
+                  } : {}}
                 >
                   {section.label}
                 </button>
@@ -291,10 +467,14 @@ function CompanySettingsContent() {
                             className={cn(
                               "px-4 py-2 rounded-lg border text-sm font-medium transition-all",
                               theme === themeOption
-                                ? "bg-primary text-primary-foreground"
+                                ? "text-white font-semibold"
                                 : "bg-panel text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                             )}
-                            style={{ borderColor: 'var(--border)' }}
+                            style={theme === themeOption ? {
+                              borderColor: '#2B74FF',
+                              backgroundColor: 'rgba(43, 116, 255, 0.15)',
+                              boxShadow: '0 0 0 1px rgba(43, 116, 255, 0.3), 0 0 8px rgba(43, 116, 255, 0.2)'
+                            } : { borderColor: 'var(--border)' }}
                           >
                             {themeOption.charAt(0).toUpperCase() + themeOption.slice(1)}
                           </button>
@@ -316,9 +496,14 @@ function CompanySettingsContent() {
                             className={cn(
                               "px-4 py-2 rounded-lg border text-sm font-medium transition-all",
                               appearance.layoutDensity === density
-                                ? "bg-primary text-primary-foreground"
+                                ? "text-white font-semibold"
                                 : "bg-panel text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                             )}
+                            style={appearance.layoutDensity === density ? {
+                              borderColor: '#2B74FF',
+                              backgroundColor: 'rgba(43, 116, 255, 0.15)',
+                              boxShadow: '0 0 0 1px rgba(43, 116, 255, 0.3), 0 0 8px rgba(43, 116, 255, 0.2)'
+                            } : { borderColor: 'var(--border)' }}
                           >
                             {density.charAt(0).toUpperCase() + density.slice(1)}
                           </button>
@@ -337,9 +522,14 @@ function CompanySettingsContent() {
                             className={cn(
                               "px-4 py-2 rounded-lg border text-sm font-medium transition-all",
                               appearance.fontSize === size
-                                ? "bg-primary text-primary-foreground"
+                                ? "text-white font-semibold"
                                 : "bg-panel text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                             )}
+                            style={appearance.fontSize === size ? {
+                              borderColor: '#2B74FF',
+                              backgroundColor: 'rgba(43, 116, 255, 0.15)',
+                              boxShadow: '0 0 0 1px rgba(43, 116, 255, 0.3), 0 0 8px rgba(43, 116, 255, 0.2)'
+                            } : { borderColor: 'var(--border)' }}
                           >
                             {size.charAt(0).toUpperCase() + size.slice(1)}
                           </button>
@@ -483,9 +673,14 @@ function CompanySettingsContent() {
                             className={cn(
                               "px-4 py-2 rounded-lg border text-sm font-medium transition-all",
                               branding.headerStyle === style
-                                ? "bg-primary text-primary-foreground"
+                                ? "text-white font-semibold"
                                 : "bg-panel text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                             )}
+                            style={branding.headerStyle === style ? {
+                              borderColor: '#2B74FF',
+                              backgroundColor: 'rgba(43, 116, 255, 0.15)',
+                              boxShadow: '0 0 0 1px rgba(43, 116, 255, 0.3), 0 0 8px rgba(43, 116, 255, 0.2)'
+                            } : { borderColor: 'var(--border)' }}
                           >
                             {style.charAt(0).toUpperCase() + style.slice(1)}
                           </button>
@@ -531,9 +726,14 @@ function CompanySettingsContent() {
                             className={cn(
                               "px-4 py-2 rounded-lg border text-sm font-medium transition-all",
                               preferences.defaultTimeRange === range
-                                ? "bg-primary text-primary-foreground"
+                                ? "text-white font-semibold"
                                 : "bg-panel text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                             )}
+                            style={preferences.defaultTimeRange === range ? {
+                              borderColor: '#2B74FF',
+                              backgroundColor: 'rgba(43, 116, 255, 0.15)',
+                              boxShadow: '0 0 0 1px rgba(43, 116, 255, 0.3), 0 0 8px rgba(43, 116, 255, 0.2)'
+                            } : { borderColor: 'var(--border)' }}
                           >
                             {range === "ytd" ? "YTD" : range.toUpperCase()}
                           </button>
@@ -609,9 +809,14 @@ function CompanySettingsContent() {
                             className={cn(
                               "px-4 py-2 rounded-lg border text-sm font-medium transition-all",
                               preferences.growthDisplayStyle === style
-                                ? "bg-primary text-primary-foreground"
+                                ? "text-white font-semibold"
                                 : "bg-panel text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                             )}
+                            style={preferences.growthDisplayStyle === style ? {
+                              borderColor: '#2B74FF',
+                              backgroundColor: 'rgba(43, 116, 255, 0.15)',
+                              boxShadow: '0 0 0 1px rgba(43, 116, 255, 0.3), 0 0 8px rgba(43, 116, 255, 0.2)'
+                            } : { borderColor: 'var(--border)' }}
                           >
                             {style === "mom" ? "MoM" : style === "qoq" ? "QoQ" : "YoY"}
                           </button>
@@ -645,41 +850,112 @@ function CompanySettingsContent() {
 
                     <div className="space-y-2">
                       <Label className="text-sm font-medium block">Role Permissions</Label>
-                      <div className="text-xs space-y-1 border rounded-lg p-3" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--panel-2)', color: 'var(--text-2)' }}>
-                        <div className="grid grid-cols-4 gap-4 mb-2 pb-2 border-b" style={{ borderColor: 'var(--border)', opacity: 0.7 }}>
+                      <div className="text-xs space-y-1 border rounded-lg p-3 overflow-x-auto" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--panel-2)', color: 'var(--text-2)' }}>
+                        <div className="grid grid-cols-6 gap-3 mb-2 pb-2 border-b min-w-[600px]" style={{ borderColor: 'var(--border)', opacity: 0.7 }}>
                           <div>Role</div>
                           <div>Edit Templates</div>
                           <div>Change Branding</div>
                           <div>Share Investor Links</div>
+                          <div>Dashboard Access</div>
+                          <div>Dashboard Overview</div>
                         </div>
-                        <div className="grid grid-cols-4 gap-4">
+                        <div className="grid grid-cols-6 gap-3 min-w-[600px]">
                           <div className="text-white">Owner</div>
                           <div className="text-green-400">✓</div>
                           <div className="text-green-400">✓</div>
                           <div className="text-green-400">✓</div>
+                          <div className="text-green-400">✓</div>
+                          <div className="text-green-400">✓</div>
                         </div>
-                        <div className="grid grid-cols-4 gap-4">
+                        <div className="grid grid-cols-6 gap-3 min-w-[600px]">
                           <div className="text-white">Admin</div>
                           <div className="text-green-400">✓</div>
                           <div className="text-green-400">✓</div>
                           <div className="text-green-400">✓</div>
+                          <div className="text-green-400">✓</div>
+                          <div className="text-green-400">✓</div>
                         </div>
-                        <div className="grid grid-cols-4 gap-4">
+                        <div className="grid grid-cols-6 gap-3 min-w-[600px]">
                           <div className="text-white">Finance</div>
                           <div className="text-slate-500">—</div>
                           <div className="text-slate-500">—</div>
                           <div className="text-green-400">✓</div>
+                          <div className="text-green-400">✓</div>
+                          <div className="text-green-400">✓</div>
                         </div>
-                        <div className="grid grid-cols-4 gap-4">
+                        <div className="grid grid-cols-6 gap-3 min-w-[600px]">
                           <div className="text-white">Viewer</div>
                           <div className="text-slate-500">—</div>
                           <div className="text-slate-500">—</div>
                           <div className="text-slate-500">—</div>
+                          <div className="text-green-400">✓</div>
+                          <div className="text-green-400">✓</div>
                         </div>
                       </div>
                     </div>
 
-                    <button className="w-full py-3 border border-dashed rounded-lg hover:bg-accent text-sm transition-colors" style={{ borderColor: 'var(--border)', color: 'var(--text-2)' }}>
+                    {/* Team Members List */}
+                    {teamRoles.length > 0 && (
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium block">Team Members</Label>
+                        <div className="space-y-2">
+                          {teamRoles.map((member) => {
+                            // Check if this is a pending invitation (no name or name is email prefix)
+                            const isPending = !member.name || member.name === member.email.split("@")[0];
+                            
+                            return (
+                            <div key={member.id} className="border border-slate-700/50 rounded-lg p-4 bg-slate-900/30 flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <div className="font-medium text-white">{member.name || member.email.split("@")[0]}</div>
+                                  {isPending && (
+                                    <span className="px-2 py-0.5 text-xs bg-yellow-500/20 text-yellow-400 rounded border border-yellow-500/30">
+                                      Pending
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-slate-400 mt-1">{member.email}</div>
+                                <div className="text-xs text-slate-500 mt-1 capitalize">{member.role}</div>
+                              </div>
+                              <button
+                                onClick={async () => {
+                                  if (!companyId) return;
+                                  if (!confirm(`Are you sure you want to remove ${member.email}?`)) return;
+                                  
+                                  try {
+                                    const response = await fetch(`/api/companies/${companyId}/team-members?memberId=${member.id}`, {
+                                      method: "DELETE",
+                                    });
+                                    
+                                    if (!response.ok) {
+                                      const data = await response.json();
+                                      alert(data.error || "Failed to remove team member");
+                                      return;
+                                    }
+                                    
+                                    // Reload team members
+                                    await loadTeamMembers();
+                                  } catch (err) {
+                                    console.error("Error removing team member:", err);
+                                    alert("Failed to remove team member");
+                                  }
+                                }}
+                                className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => setInviteModalOpen(true)}
+                      className="w-full py-3 border border-dashed rounded-lg hover:bg-accent text-sm transition-colors"
+                      style={{ borderColor: 'var(--border)', color: 'var(--text-2)' }}
+                    >
                       + Invite Team Member
                     </button>
                   </div>
@@ -788,6 +1064,94 @@ function CompanySettingsContent() {
           </main>
         </div>
       </div>
+
+      {/* Invite Team Member Modal */}
+      {inviteModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          onClick={() => setInviteModalOpen(false)}
+        >
+          <div
+            className="relative bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-md w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setInviteModalOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                className="w-5 h-5"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <h3 className="text-xl font-semibold text-white mb-4">Invite Team Member</h3>
+
+            {inviteSuccess && (
+              <div className="mb-4 p-3 bg-green-500/20 border border-green-500/30 rounded-lg text-sm text-green-400">
+                Invitation sent successfully!
+              </div>
+            )}
+
+            {inviteError && (
+              <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-sm text-red-400">
+                {inviteError}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium text-white mb-2 block">Email</Label>
+                <Input
+                  type="email"
+                  placeholder="team.member@example.com"
+                  value={inviteForm.email}
+                  onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
+                  className="w-full bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                />
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium text-white mb-2 block">Role</Label>
+                <select
+                  value={inviteForm.role}
+                  onChange={(e) => setInviteForm({ ...inviteForm, role: e.target.value as "admin" | "finance" | "viewer" })}
+                  className="w-full px-3 py-2 rounded-lg text-sm bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="viewer">Viewer - Dashboard access only</option>
+                  <option value="finance">Finance - Dashboard + Share investor links</option>
+                  <option value="admin">Admin - Full access except settings</option>
+                </select>
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <Button
+                  onClick={handleInviteTeamMember}
+                  disabled={inviteLoading || !inviteForm.email.trim()}
+                  className="flex-1 bg-[#2B74FF] hover:bg-[#2563EB] text-white border-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {inviteLoading ? "Sending..." : "Send Invitation"}
+                </Button>
+                <Button
+                  onClick={() => {
+                    setInviteModalOpen(false);
+                    setInviteForm({ email: "", role: "viewer" });
+                    setInviteError(null);
+                  }}
+                  className="flex-1 bg-slate-800 hover:bg-slate-700 text-white border border-slate-700"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }
