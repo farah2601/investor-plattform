@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { supabase } from "../../app/lib/supabaseClient";
+import { authedFetch } from "@/lib/authedFetch";
 import { cn } from "../../../lib/utils";
 import { KpiCard } from "../../components/ui/KpiCard";
 import { Button } from "../../components/ui/button";
@@ -245,7 +246,7 @@ function RemoveAccessButton({
 }
 
 const DATA_SOURCES = [
-  { id: "stripe", category: "Billing", name: "Stripe", status: "coming_soon" },
+  { id: "stripe", category: "Billing", name: "Stripe", status: "not_connected" },
   { id: "hubspot", category: "CRM", name: "HubSpot", status: "coming_soon" },
   { id: "pipedrive", category: "CRM", name: "Pipedrive", status: "coming_soon" },
   { id: "fiken", category: "Accounting", name: "Fiken", status: "coming_soon" },
@@ -301,6 +302,19 @@ function CompanyDashboardContent() {
   const [mrrSeries, setMrrSeries] = useState<Array<{ date: string; label: string; value: number | null }>>([]);
   const [burnSeries, setBurnSeries] = useState<Array<{ date: string; label: string; value: number | null }>>([]);
 
+  // Stripe integration
+  const [stripeModalOpen, setStripeModalOpen] = useState(false);
+  const [stripeKey, setStripeKey] = useState("");
+  const [savingStripe, setSavingStripe] = useState(false);
+  const [stripeError, setStripeError] = useState<string | null>(null);
+  const [stripeStatus, setStripeStatus] = useState<{
+    connected: boolean;
+    pending?: boolean;
+    status: string | null;
+    masked: string | null;
+    lastVerifiedAt: string | null;
+  }>({ connected: false, pending: false, status: null, masked: null, lastVerifiedAt: null });
+
   useEffect(() => {
     async function checkAuthAndLoad() {
       const {
@@ -317,6 +331,20 @@ function CompanyDashboardContent() {
       // Update currentCompanyId when URL changes
       const urlCompanyId = searchParams.get("companyId") || searchParams.get("company");
       setCurrentCompanyId(urlCompanyId);
+      
+      // Check for Stripe OAuth callback result
+      const stripeCallback = searchParams.get("stripe");
+      if (stripeCallback && urlCompanyId) {
+        // Refetch Stripe status to get latest state
+        await loadStripeStatus(urlCompanyId);
+        // Clean URL by removing query param
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.delete("stripe");
+        if (stripeCallback === "success") {
+          // Optional: show success toast/message here
+        }
+        window.history.replaceState({}, "", newUrl.toString());
+      }
       
       await loadData(urlCompanyId);
     }
@@ -396,7 +424,7 @@ function CompanyDashboardContent() {
         arr: json.arrSeries?.length,
         mrr: json.mrrSeries?.length,
         burn: json.burnSeries?.length,
-        rows: json.rows,
+        rows: json.rowsCount || (Array.isArray(json.rows) ? json.rows.length : json.rows),
       });
       console.log("[Dashboard] first 2 arr points", json.arrSeries?.slice(0, 2));
       
@@ -599,6 +627,7 @@ function CompanyDashboardContent() {
         loadInsights(selectedCompany.id), 
         loadAgentLogs(selectedCompany.id),
         loadKpiHistory(selectedCompany.id),
+        loadStripeStatus(selectedCompany.id),
       ]);
     } else {
       setInsights([]);
@@ -646,6 +675,134 @@ function CompanyDashboardContent() {
     mrrChartData: mrrChartData.length,
     burnChartData: burnChartData.length,
   });
+
+  async function loadStripeStatus(companyId: string) {
+    try {
+      const res = await authedFetch(`/api/stripe/status?companyId=${companyId}`, {
+        cache: "no-store",
+      });
+      const data = await res.json();
+      if (data?.ok) {
+        setStripeStatus({
+          connected: data.connected || false,
+          pending: data.pending || false,
+          status: data.status || null,
+          masked: data.masked || null,
+          lastVerifiedAt: data.lastVerifiedAt || null,
+        });
+      }
+    } catch (e) {
+      console.error("Failed to load Stripe status", e);
+      setStripeStatus({ connected: false, pending: false, status: null, masked: null, lastVerifiedAt: null });
+    }
+  }
+
+  async function handleSaveStripeKey() {
+    if (!currentCompanyId) {
+      alert("No company selected");
+      return;
+    }
+
+    if (!stripeKey.trim()) {
+      setStripeError("Please enter a Stripe secret key");
+      return;
+    }
+
+    setSavingStripe(true);
+    setStripeError(null);
+
+    try {
+      const res = await authedFetch("/api/stripe/save-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: currentCompanyId,
+          secretKey: stripeKey.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Failed to save Stripe key");
+      }
+
+      // Close modal and clear input immediately (never show secret key)
+      setStripeModalOpen(false);
+      setStripeKey("");
+      setStripeError(null);
+
+      // Re-fetch status to get latest state (including masked key)
+      await loadStripeStatus(currentCompanyId);
+    } catch (e: any) {
+      // Keep modal open on error, show error message
+      if (e?.message === "Not authenticated") {
+        setStripeError("You are not authenticated. Please sign in again.");
+      } else {
+        setStripeError(e?.message || "Failed to save Stripe key");
+      }
+    } finally {
+      setSavingStripe(false);
+    }
+  }
+
+  async function handleDisconnectStripe() {
+    if (!currentCompanyId) {
+      alert("No company selected");
+      return;
+    }
+
+    if (!confirm("Are you sure you want to disconnect Stripe? This will remove your Stripe key.")) {
+      return;
+    }
+
+    try {
+      const res = await authedFetch("/api/stripe/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: currentCompanyId }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Failed to disconnect Stripe");
+      }
+
+      // Re-fetch status to get latest state
+      await loadStripeStatus(currentCompanyId);
+    } catch (e: any) {
+      console.error("Error disconnecting Stripe:", e);
+      alert("Error: " + (e?.message || "Failed to disconnect Stripe"));
+    }
+  }
+
+  async function handleConnectStripe() {
+    if (!currentCompanyId) {
+      alert("No company selected");
+      return;
+    }
+
+    try {
+      // Fetch authorizeUrl with Authorization header
+      const res = await authedFetch(`/api/stripe/connect?companyId=${currentCompanyId}`, {
+        cache: "no-store",
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data?.ok || !data?.authorizeUrl) {
+        throw new Error(data?.error || "Failed to get Stripe authorization URL");
+      }
+
+      // Redirect browser to Stripe OAuth page
+      window.location.assign(data.authorizeUrl);
+    } catch (e: any) {
+      console.error("Error connecting Stripe:", e);
+      if (e?.message === "Not authenticated") {
+        alert("You are not authenticated. Please sign in again.");
+      } else {
+        alert("Error: " + (e?.message || "Failed to connect Stripe"));
+      }
+    }
+  }
 
   async function copyLink() {
     if (!investorUrl) return;
@@ -1144,15 +1301,98 @@ function CompanyDashboardContent() {
 
           {/* Data Sources */}
           <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 space-y-4 light:border-slate-200 light:bg-white">
-                  <div>
+            <div>
               <h2 className="text-sm sm:text-base font-medium text-slate-200 light:text-slate-950">Data Sources</h2>
               <p className="text-xs text-slate-500 mt-1 light:text-slate-600">
                 Automatically keeps your metrics up to date.
-                    </p>
-                  </div>
+              </p>
+            </div>
 
+            {/* Stripe Integration Card */}
+            <div className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-4 sm:p-5 space-y-4">
+              <div>
+                <h3 className="text-sm font-medium text-slate-100">Stripe</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Connect your Stripe account to automatically sync revenue and subscription metrics.
+                </p>
+              </div>
+
+              {/* Status Display */}
+              <div className="flex items-center gap-2">
+                {stripeStatus.connected ? (
+                  <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-[#2B74FF]/10 text-[#2B74FF] border border-[#2B74FF]/20">
+                    Connected
+                  </span>
+                ) : stripeStatus.status === "pending" ? (
+                  <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                    Pending — complete connection in Stripe
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-slate-800/60 text-slate-400 border border-slate-700/50">
+                    Not connected
+                  </span>
+                )}
+                {stripeStatus.masked && (
+                  <span className="text-xs text-slate-500 font-mono">
+                    {stripeStatus.masked}
+                  </span>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                {stripeStatus.connected ? (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleConnectStripe}
+                      className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white border-[#2B74FF]"
+                    >
+                      Reconnect Stripe
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleDisconnectStripe}
+                      className="border-red-500/30 text-red-400 bg-red-500/10 hover:bg-red-500/20"
+                    >
+                      Disconnect
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      size="sm"
+                      onClick={handleConnectStripe}
+                      className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white"
+                    >
+                      Connect Stripe
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (company?.id) {
+                          setStripeModalOpen(true);
+                        }
+                      }}
+                      className="text-xs text-slate-400 hover:text-slate-300 underline"
+                    >
+                      Enter key manually
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Trust Message */}
+              <p className="text-xs text-slate-500">
+                We never store your Stripe secret key unless you choose manual setup.
+              </p>
+            </div>
+
+            {/* Other Data Sources */}
             <div className="space-y-0 divide-y divide-slate-800/50">
-              {DATA_SOURCES.map((source) => (
+              {DATA_SOURCES.filter((source) => source.id !== "stripe").map((source) => (
                 <div
                   key={source.id}
                   className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
@@ -1163,7 +1403,7 @@ function CompanyDashboardContent() {
                       <p className="text-xs text-slate-400 mt-0.5">{source.category}</p>
                     </div>
                   </div>
-                  <div className="flex-shrink-0">
+                  <div className="flex-shrink-0 flex items-center gap-2">
                     {source.status === "connected" ? (
                       <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-[#2B74FF]/10 text-[#2B74FF] border border-[#2B74FF]/20">
                         Connected
@@ -1176,18 +1416,6 @@ function CompanyDashboardContent() {
                   </div>
                 </div>
               ))}
-            </div>
-
-            <div className="pt-2">
-              <Link href={company?.id ? `/integration?companyId=${company.id}` : "/integration"}>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                  className="w-full border-slate-700 text-slate-200 bg-slate-800/40 hover:bg-slate-700/50 h-10 sm:h-11 px-4"
-                  >
-                  Manage data sources
-                  </Button>
-              </Link>
             </div>
           </section>
 
@@ -1377,6 +1605,68 @@ function CompanyDashboardContent() {
               className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white w-full sm:w-auto h-10 sm:h-9 px-4"
             >
               {savingKpi ? "Saving..." : "Save KPIs"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Stripe Connect Modal */}
+      <Dialog open={stripeModalOpen} onOpenChange={setStripeModalOpen}>
+        <DialogContent className="bg-slate-950 border-slate-800 text-slate-50 w-[calc(100vw-2rem)] sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg sm:text-xl">Connect Stripe</DialogTitle>
+            <DialogDescription className="text-sm text-slate-400">
+              Advanced: only use this if you can't use Connect.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label htmlFor="stripe-key" className="text-sm text-slate-300">
+                Stripe Secret Key
+              </label>
+              <Input
+                id="stripe-key"
+                type="password"
+                value={stripeKey}
+                onChange={(e) => {
+                  setStripeKey(e.target.value);
+                  setStripeError(null);
+                }}
+                placeholder="sk_live_..."
+                className="bg-slate-900 border-slate-700 text-slate-50 font-mono text-sm"
+              />
+              <p className="text-xs text-slate-500">
+                We use this key only to read billing metrics. It is encrypted and never shown again.
+              </p>
+            </div>
+
+            {stripeError && (
+              <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3">
+                <p className="text-sm text-red-300">{stripeError}</p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              onClick={handleSaveStripeKey}
+              disabled={savingStripe || !stripeKey.trim() || !currentCompanyId}
+              className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white w-full sm:w-auto"
+            >
+              {savingStripe ? "Verifying..." : "Save & Verify"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setStripeModalOpen(false);
+                setStripeKey("");
+                setStripeError(null);
+              }}
+              disabled={savingStripe}
+              className="border-slate-700 text-slate-300 bg-slate-800/40 hover:bg-slate-700/50 w-full sm:w-auto"
+            >
+              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>
