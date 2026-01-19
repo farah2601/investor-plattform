@@ -426,8 +426,12 @@ function CompanySettingsContent() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
-        const errorMessage = errorData.error || errorData.details || `HTTP ${response.status}`;
-        console.error("Upload failed:", errorMessage);
+        // Combine error and details for more helpful message
+        let errorMessage = errorData.error || `HTTP ${response.status}`;
+        if (errorData.details) {
+          errorMessage += `: ${errorData.details}`;
+        }
+        console.error("Upload failed:", errorMessage, errorData);
         throw new Error(errorMessage);
       }
 
