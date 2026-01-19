@@ -54,7 +54,8 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
           .eq("owner_id", session.user.id)
           .order("created_at", { ascending: false });
         
-        companiesData = fallbackResult.data;
+        // Type assertion: fallback data doesn't have branding fields, but we'll add defaults in mapping
+        companiesData = fallbackResult.data as typeof companiesData;
         error = fallbackResult.error;
       }
 
@@ -128,7 +129,8 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
           .eq("id", activeCompany.id)
           .maybeSingle();
         
-        data = fallbackResult.data;
+        // Type assertion: fallback data doesn't have branding fields, but we'll add defaults
+        data = fallbackResult.data as typeof data;
         error = fallbackResult.error;
       }
 
