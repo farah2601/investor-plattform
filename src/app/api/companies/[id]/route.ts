@@ -92,7 +92,8 @@ export async function GET(
         .eq("id", companyId)
         .maybeSingle();
       
-      company = fallbackResult.data;
+      // Type assertion to handle missing branding fields
+      company = fallbackResult.data as typeof company;
       companyError = fallbackResult.error;
       
       // Add default branding fields if they don't exist
