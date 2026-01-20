@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/use-theme";
+import { useAppearance } from "@/lib/use-appearance";
 
 type SettingsSection = 
   | "appearance" 
@@ -106,6 +107,7 @@ function CompanySettingsContent() {
   const searchParams = useSearchParams();
   const sectionParam = searchParams.get("section") as SettingsSection | null;
   const { theme, setTheme } = useTheme();
+  const { density, fontSize, setDensity, setFontSize } = useAppearance();
   
   // Try to get companyId from Company Context
   let contextCompanyId: string | null = null;
@@ -126,14 +128,22 @@ function CompanySettingsContent() {
   // Settings state
   const [appearance, setAppearance] = useState<AppearanceSettings>({
     theme: theme,
-    layoutDensity: "comfortable",
-    fontSize: "default",
+    layoutDensity: density,
+    fontSize: fontSize,
   });
 
-  // Sync theme from hook to appearance state
+  // Sync theme, density, and fontSize from hooks to appearance state
   useEffect(() => {
     setAppearance(prev => ({ ...prev, theme }));
   }, [theme]);
+  
+  useEffect(() => {
+    setAppearance(prev => ({ ...prev, layoutDensity: density }));
+  }, [density]);
+  
+  useEffect(() => {
+    setAppearance(prev => ({ ...prev, fontSize }));
+  }, [fontSize]);
 
   const [templates, setTemplates] = useState<Template[]>([]);
   const [branding, setBranding] = useState<BrandingSettings>({
@@ -257,31 +267,67 @@ function CompanySettingsContent() {
       
       if (!response.ok) {
         let errorData: any = {};
+        let rawText = "";
+        
+        // Try to get error details from response
         try {
-          const text = await response.text();
-          if (text) {
-            errorData = JSON.parse(text);
+          // Clone response to avoid consuming the body
+          const clonedResponse = response.clone();
+          rawText = await clonedResponse.text();
+          
+          if (rawText && rawText.trim()) {
+            try {
+              errorData = JSON.parse(rawText);
+            } catch (parseError) {
+              // Response is not JSON, use raw text as error message
+              errorData = { 
+                error: rawText.substring(0, 200) || "Unknown error", 
+                raw: rawText.substring(0, 500),
+                parseError: String(parseError)
+              };
+            }
+          } else {
+            errorData = { 
+              error: `HTTP ${response.status}: ${response.statusText || "Unknown error"}`,
+              emptyResponse: true
+            };
           }
-        } catch (parseError) {
-          // Response might not be JSON
-          console.warn("Failed to parse error response:", parseError);
+        } catch (fetchError: any) {
+          // Couldn't even read response text
+          errorData = { 
+            error: `Failed to read error response: ${fetchError?.message || String(fetchError)}`,
+            fetchError: String(fetchError),
+            status: response.status,
+            statusText: response.statusText
+          };
         }
         
+        // Ensure we always have some error message
+        const errorMessage = errorData.error || errorData.message || `HTTP ${response.status}: ${response.statusText || "Unknown error"}`;
+        
+        // Log with all available details
         console.error("Failed to load team members:", {
           status: response.status,
           statusText: response.statusText,
-          error: errorData
+          error: errorMessage,
+          details: errorData.details || errorData.hint || null,
+          code: errorData.code || null,
+          fullError: errorData
         });
         
-        // If table doesn't exist, just return empty array (don't show error)
+        // If table doesn't exist, just return empty array (don't show error to user)
         // User will see empty list and can still invite members (which will show migration error)
-        if (errorData.error === "Database table not found" || response.status === 500) {
-          console.warn("team_members table might not exist yet. Run migration first.");
+        if (errorData.error === "Database table not found" || 
+            errorMessage.includes("does not exist") || 
+            errorData.code === "42P01" ||
+            (response.status === 500 && (errorData.error?.includes("table") || errorData.error?.includes("does not exist")))) {
+          console.warn("team_members table might not exist yet. Run migration first. Details:", errorData);
           setTeamRoles([]);
           return;
         }
         
         // For other errors, still set empty array to avoid UI issues
+        // Error is already logged to console for debugging
         setTeamRoles([]);
         return;
       }
@@ -728,23 +774,26 @@ function CompanySettingsContent() {
                     <div>
                       <Label className="text-sm font-medium text-white mb-3 block">Layout Density</Label>
                       <div className="flex gap-3">
-                        {(["compact", "comfortable"] as const).map((density) => (
+                        {(["compact", "comfortable"] as const).map((densityOption) => (
                           <button
-                            key={density}
-                            onClick={() => setAppearance({ ...appearance, layoutDensity: density })}
+                            key={densityOption}
+                            onClick={() => {
+                              setDensity(densityOption);
+                              setAppearance({ ...appearance, layoutDensity: densityOption });
+                            }}
                             className={cn(
                               "px-4 py-2 rounded-lg border text-sm font-medium transition-all",
-                              appearance.layoutDensity === density
+                              density === densityOption
                                 ? "text-white font-semibold"
                                 : "bg-panel text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                             )}
-                            style={appearance.layoutDensity === density ? {
+                            style={density === densityOption ? {
                               borderColor: '#2B74FF',
                               backgroundColor: 'rgba(43, 116, 255, 0.15)',
                               boxShadow: '0 0 0 1px rgba(43, 116, 255, 0.3), 0 0 8px rgba(43, 116, 255, 0.2)'
                             } : { borderColor: 'var(--border)' }}
                           >
-                            {density.charAt(0).toUpperCase() + density.slice(1)}
+                            {densityOption.charAt(0).toUpperCase() + densityOption.slice(1)}
                           </button>
                         ))}
                       </div>
@@ -754,23 +803,26 @@ function CompanySettingsContent() {
                     <div>
                       <Label className="text-sm font-medium mb-3 block">Font Size</Label>
                       <div className="flex gap-3">
-                        {(["small", "default", "large"] as const).map((size) => (
+                        {(["small", "default", "large"] as const).map((sizeOption) => (
                           <button
-                            key={size}
-                            onClick={() => setAppearance({ ...appearance, fontSize: size })}
+                            key={sizeOption}
+                            onClick={() => {
+                              setFontSize(sizeOption);
+                              setAppearance({ ...appearance, fontSize: sizeOption });
+                            }}
                             className={cn(
                               "px-4 py-2 rounded-lg border text-sm font-medium transition-all",
-                              appearance.fontSize === size
+                              fontSize === sizeOption
                                 ? "text-white font-semibold"
                                 : "bg-panel text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                             )}
-                            style={appearance.fontSize === size ? {
+                            style={fontSize === sizeOption ? {
                               borderColor: '#2B74FF',
                               backgroundColor: 'rgba(43, 116, 255, 0.15)',
                               boxShadow: '0 0 0 1px rgba(43, 116, 255, 0.3), 0 0 8px rgba(43, 116, 255, 0.2)'
                             } : { borderColor: 'var(--border)' }}
                           >
-                            {size.charAt(0).toUpperCase() + size.slice(1)}
+                            {sizeOption.charAt(0).toUpperCase() + sizeOption.slice(1)}
                           </button>
                         ))}
                       </div>

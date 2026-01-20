@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { Menu, X, ChevronDown } from "lucide-react";
 import { useCompany } from "@/lib/company-context";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useAppearance } from "@/lib/use-appearance";
 
 type LogoSize = "sm" | "md" | "lg" | "xl";
 
@@ -64,6 +65,9 @@ export function AppShell({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [companySwitcherOpen, setCompanySwitcherOpen] = useState(false);
   const companySwitcherRef = useRef<HTMLDivElement>(null);
+  
+  // Initialize appearance settings (applies data attributes to #app-shell)
+  useAppearance();
   
   // Get company context (optional - will be null if not in CompanyProvider)
   let activeCompany: { id: string; name: string; logoUrl: string | null; headerStyle?: "minimal" | "branded" } | null = null;
