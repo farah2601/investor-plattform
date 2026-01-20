@@ -308,15 +308,16 @@ function CompanyDashboardContent() {
   const [stripeKey, setStripeKey] = useState("");
   const [savingStripe, setSavingStripe] = useState(false);
   const [stripeError, setStripeError] = useState<string | null>(null);
+  const [connectingStripe, setConnectingStripe] = useState(false); // Prevent double-clicks
   const [stripeStatus, setStripeStatus] = useState<{
-    status: "not_connected" | "pending" | "connected" | null;
+    status: "not_connected" | "pending" | "connected";
     stripeAccountId: string | null;
     connectedAt: string | null;
     lastVerifiedAt: string | null;
     masked: string | null;
     pendingExpiresAt: string | null;
   }>({
-    status: null,
+    status: "not_connected",
     stripeAccountId: null,
     connectedAt: null,
     lastVerifiedAt: null,
@@ -413,6 +414,7 @@ function CompanyDashboardContent() {
         }
         
         // Use router.replace to clean URL without full reload
+        // This ensures query params are cleaned after processing
         router.replace(cleanUrl);
       }
       
@@ -876,6 +878,13 @@ function CompanyDashboardContent() {
       return;
     }
 
+    // Prevent double-click/connect spam
+    if (connectingStripe) {
+      return; // Already connecting, ignore additional clicks
+    }
+
+    setConnectingStripe(true);
+
     try {
       // Fetch authorizeUrl with Authorization header
       const res = await authedFetch(`/api/stripe/connect?companyId=${currentCompanyId}`, {
@@ -888,16 +897,20 @@ function CompanyDashboardContent() {
       }
 
       // Redirect browser to Stripe OAuth page
+      // Note: This navigation will leave the page, so connectingStripe state will reset
       window.location.assign(data.authorizeUrl);
     } catch (e: any) {
       console.error("Error connecting Stripe:", e);
       // Never show "Unauthorized" or raw errors to user
       if (e?.message === "Not authenticated") {
         // Silently fail - user will need to refresh/auth
+        setConnectingStripe(false);
         return;
       }
       alert("Failed to connect Stripe. Please try again.");
+      setConnectingStripe(false);
     }
+    // Note: If redirect succeeds, we won't reach here, but if it fails, reset state
   }
 
   async function copyLink() {
@@ -1487,9 +1500,10 @@ function CompanyDashboardContent() {
                       size="sm"
                       variant="outline"
                       onClick={handleConnectStripe}
-                      className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white border-[#2B74FF]"
+                      disabled={connectingStripe}
+                      className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white border-[#2B74FF] disabled:opacity-50"
                     >
-                      Reconnect Stripe
+                      {connectingStripe ? "Redirecting…" : "Reconnect Stripe"}
                     </Button>
                     <Button
                       size="sm"
@@ -1505,9 +1519,10 @@ function CompanyDashboardContent() {
                     <Button
                       size="sm"
                       onClick={handleConnectStripe}
-                      className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white"
+                      disabled={connectingStripe}
+                      className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white disabled:opacity-50"
                     >
-                      Connect Stripe
+                      {connectingStripe ? "Redirecting…" : "Connect Stripe"}
                     </Button>
                     <button
                       type="button"

@@ -204,10 +204,17 @@ async function handleOAuthCallback(
   }
 
   // Validate: oauth_state must match EXACTLY
+  // Enhanced logging for state mismatch debugging (no secrets)
   if (!integration.oauth_state || integration.oauth_state !== state) {
-    console.error("[api/stripe/callback] State mismatch - possible CSRF attack", {
-      stored: integration.oauth_state,
-      received: state,
+    console.error("[api/stripe/callback] State mismatch - possible CSRF attack or double-click", {
+      companyId,
+      receivedState: state,
+      storedState: integration.oauth_state,
+      storedStateLength: integration.oauth_state?.length || 0,
+      receivedStateLength: state.length,
+      integrationStatus: integration.status,
+      oauthStateExpiresAt: integration.oauth_state_expires_at,
+      statesMatch: integration.oauth_state === state,
     });
     return NextResponse.redirect(
       `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error&msg=${safeMsg("Security validation failed")}`
@@ -321,6 +328,7 @@ async function handleOAuthCallback(
     );
   }
 
+  // CRITICAL: redirect_uri must match EXACTLY what was used in /api/stripe/connect authorizeUrl
   // Log redirect_uri for debugging (safe - it's a URL, not a secret)
   console.log("[stripe oauth] redirect_uri:", redirectUri);
 
@@ -329,7 +337,8 @@ async function handleOAuthCallback(
   form.set("grant_type", "authorization_code");
   form.set("code", code);
   form.set("client_secret", stripeSecret);
-  // Including redirect_uri is often safer (must match the authorize call)
+  // CRITICAL: redirect_uri must match EXACTLY what was sent in authorizeUrl
+  // Stripe validates this string match, so any difference (trailing slash, encoding, etc.) will fail
   form.set("redirect_uri", redirectUri);
 
   const tokenRes = await fetch("https://connect.stripe.com/oauth/token", {
@@ -368,6 +377,8 @@ async function handleOAuthCallback(
     console.error("[stripe oauth token] raw_truncated:", truncate(raw));
     console.error("[stripe oauth token] env_mode:", envMode);
     console.error("[stripe oauth token] client_mode:", clientMode);
+    // Log redirect_uri used in token exchange for comparison with /connect
+    console.error("[stripe oauth token] redirect_uri used:", redirectUri);
 
     // Check for mode mismatch (live secret but test flow detected)
     // Note: We can't directly detect if user is in test connect flow from callback,
@@ -484,6 +495,10 @@ export async function GET(req: Request) {
     const stripeParam = url.searchParams.get("stripe");
     const companyIdFromQuery = url.searchParams.get("companyId");
 
+    // Validate query params - log all callback query keys for debugging
+    const allQueryKeys = Array.from(url.searchParams.keys());
+    console.log("[api/stripe/callback] query params:", allQueryKeys);
+
     // If this is an Account Links return (stripe=return or stripe=refresh)
     if (stripeParam === "return" || stripeParam === "refresh") {
       // Require companyId in query params for Account Links mode
@@ -507,7 +522,11 @@ export async function GET(req: Request) {
 
     // OAuth mode: require code and state
     if (!code || !state) {
-      console.error("[api/stripe/callback] Missing code or state parameter (OAuth mode)");
+      console.error("[api/stripe/callback] Missing code or state parameter (OAuth mode)", {
+        hasCode: !!code,
+        hasState: !!state,
+        allParams: allQueryKeys,
+      });
       // If companyId is available, include it in redirect
       if (companyIdFromQuery) {
         return NextResponse.redirect(

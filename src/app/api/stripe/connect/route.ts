@@ -78,6 +78,20 @@ export async function GET(req: Request) {
       });
     }
 
+    // TEST env consistency check: log mode without exposing secrets
+    const stripeSecret = process.env.STRIPE_SECRET_KEY;
+    const isTestSecret = stripeSecret?.startsWith("sk_test_") ?? false;
+    const isLiveSecret = stripeSecret?.startsWith("sk_live_") ?? false;
+    const envMode = isTestSecret ? "test" : isLiveSecret ? "live" : "unknown";
+    const clientId = process.env.STRIPE_CLIENT_ID;
+    const hasClientId = !!clientId;
+    console.log("[api/stripe/connect] env check:", {
+      envMode,
+      hasClientId,
+      clientIdPrefix: clientId?.substring(0, 3) || "missing", // Only log prefix, not full ID
+      mode,
+    });
+
     // Generate nonce and state for tracking (used in both modes)
     const nonce = crypto.randomUUID();
     const state = `${companyId}:${nonce}`;
@@ -126,6 +140,10 @@ export async function GET(req: Request) {
           },
           { onConflict: "company_id,provider" }
         );
+
+      // CRITICAL: redirect_uri must match EXACTLY what's used in /api/stripe/callback token exchange
+      // Log redirect_uri for debugging (safe - it's a URL, not a secret)
+      console.log("[api/stripe/connect] redirect_uri:", redirectUri);
 
       const stripeAuthorizeUrl =
         `https://connect.stripe.com/oauth/authorize` +
