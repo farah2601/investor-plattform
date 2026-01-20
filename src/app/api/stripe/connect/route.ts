@@ -153,6 +153,12 @@ export async function GET(req: Request) {
         `&redirect_uri=${encodeURIComponent(redirectUri)}` +
         `&state=${encodeURIComponent(state)}`;
 
+      // MIDLERTIDIG: Log authorizeUrl for verifisering
+      // Kopier URL-en og sjekk at:
+      // - client_id starter med "ca_" (test mode)
+      // - redirect_uri matcher 100% med STRIPE_CONNECT_REDIRECT_URI
+      console.log("[Stripe authorizeUrl]", stripeAuthorizeUrl);
+
       return NextResponse.json({
         ok: true,
         authorizeUrl: stripeAuthorizeUrl,
