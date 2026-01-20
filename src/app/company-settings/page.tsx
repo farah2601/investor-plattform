@@ -367,6 +367,37 @@ function CompanySettingsContent() {
     }
   };
 
+  const handleSaveHeaderStyle = async (style: "minimal" | "branded") => {
+    if (!companyId) return;
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+
+      const { error } = await supabase
+        .from("companies")
+        .update({ header_style: style })
+        .eq("id", companyId)
+        .eq("owner_id", session.user.id);
+
+      if (error) {
+        console.error("Error saving header style:", error);
+        // Revert UI state on error
+        setBranding(prev => ({ ...prev, headerStyle: prev.headerStyle }));
+      } else {
+        console.log("Header style saved:", style);
+        // Trigger refresh in company context to update header immediately
+        if (typeof window !== "undefined" && (window as any).refreshActiveCompany) {
+          await (window as any).refreshActiveCompany();
+        }
+      }
+    } catch (err) {
+      console.error("Error saving header style:", err);
+      // Revert UI state on error
+      setBranding(prev => ({ ...prev, headerStyle: prev.headerStyle }));
+    }
+  };
+
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     
@@ -902,7 +933,11 @@ function CompanySettingsContent() {
                         {(["minimal", "branded"] as const).map((style) => (
                           <button
                             key={style}
-                            onClick={() => setBranding({ ...branding, headerStyle: style })}
+                            onClick={() => {
+                              setBranding({ ...branding, headerStyle: style });
+                              // Auto-save when header style changes
+                              handleSaveHeaderStyle(style);
+                            }}
                             className={cn(
                               "px-4 py-2 rounded-lg border text-sm font-medium transition-all",
                               branding.headerStyle === style
@@ -919,6 +954,11 @@ function CompanySettingsContent() {
                           </button>
                         ))}
                       </div>
+                      <p className="text-xs text-slate-500 mt-2">
+                        {branding.headerStyle === "minimal" 
+                          ? "Minimal: Small logo with company name. Clean and compact." 
+                          : "Branded: Larger logo with company name. More prominent branding."}
+                      </p>
                     </div>
                   </div>
                 </div>

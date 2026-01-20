@@ -66,7 +66,7 @@ export function AppShell({
   const companySwitcherRef = useRef<HTMLDivElement>(null);
   
   // Get company context (optional - will be null if not in CompanyProvider)
-  let activeCompany: { id: string; name: string; logoUrl: string | null } | null = null;
+  let activeCompany: { id: string; name: string; logoUrl: string | null; headerStyle?: "minimal" | "branded" } | null = null;
   let companies: Array<{ id: string; name: string; logoUrl: string | null }> = [];
   let refreshActiveCompany: (() => Promise<void>) | null = null;
   let setActiveCompanyFromContext: ((company: { id: string; name: string; logoUrl: string | null; headerStyle?: "minimal" | "branded"; brandColor?: string | null } | null) => void) | null = null;
@@ -77,10 +77,14 @@ export function AppShell({
     companies = companyContext.companies;
     refreshActiveCompany = companyContext.refreshActiveCompany;
     // Type assertion needed because we're using a simplified type in AppShell
-    setActiveCompanyFromContext = companyContext.setActiveCompany as (company: { id: string; name: string; logoUrl: string | null } | null) => void;
+    setActiveCompanyFromContext = companyContext.setActiveCompany as (company: { id: string; name: string; logoUrl: string | null; headerStyle?: "minimal" | "branded" } | null) => void;
   } catch {
     // Not in CompanyProvider context - that's ok for some pages
   }
+  
+  // Determine header style (default to minimal if not set)
+  const headerStyle = activeCompany?.headerStyle || "minimal";
+  const isBranded = headerStyle === "branded";
   
   // Expose refresh function globally for settings page to call after logo upload
   useEffect(() => {
@@ -183,14 +187,22 @@ export function AppShell({
                 {activeCompany ? (
                   <button
                     onClick={() => setCompanySwitcherOpen(!companySwitcherOpen)}
-                    className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-opacity group"
+                    className={cn(
+                      "flex items-center hover:opacity-80 transition-opacity group",
+                      isBranded ? "gap-3 sm:gap-4" : "gap-2 sm:gap-3"
+                    )}
                   >
                     <div className="relative flex items-center gap-2">
                       {activeCompany.logoUrl ? (
                         <img
                           src={activeCompany.logoUrl}
                           alt={activeCompany.name}
-                          className="h-8 w-auto max-w-[120px] object-contain"
+                          className={cn(
+                            "w-auto object-contain",
+                            isBranded 
+                              ? "h-10 sm:h-12 max-w-[160px]" 
+                              : "h-8 max-w-[120px]"
+                          )}
                           onError={(e) => {
                             // Hide image on error, show fallback
                             e.currentTarget.style.display = 'none';
@@ -204,14 +216,22 @@ export function AppShell({
                       ) : null}
                       <div 
                         className={cn(
-                          "logo-fallback flex items-center justify-center rounded-full bg-[#2B74FF] text-white text-sm font-medium",
-                          activeCompany.logoUrl ? "h-8 w-8 hidden" : "h-8 px-3"
+                          "logo-fallback flex items-center justify-center rounded-full bg-[#2B74FF] text-white font-medium",
+                          activeCompany.logoUrl 
+                            ? isBranded ? "h-10 w-10 sm:h-12 sm:w-12 hidden" : "h-8 w-8 hidden"
+                            : isBranded ? "h-10 sm:h-12 px-4 text-base" : "h-8 px-3 text-sm"
                         )}
                       >
                         {activeCompany.name.charAt(0).toUpperCase()}
                       </div>
                     </div>
-                    <span className="hidden sm:inline-block text-sm font-medium text-slate-50 light:text-slate-950 truncate max-w-[200px]">
+                    {/* Show company name - always in branded mode, conditionally in minimal mode */}
+                    <span className={cn(
+                      "font-medium text-slate-50 light:text-slate-950 truncate",
+                      isBranded 
+                        ? "text-base sm:text-lg max-w-[240px]" 
+                        : "hidden sm:inline-block text-sm max-w-[200px]"
+                    )}>
                       {activeCompany.name}
                     </span>
                     <ChevronDown className="h-4 w-4 text-slate-400 group-hover:text-slate-300 transition-colors" />
