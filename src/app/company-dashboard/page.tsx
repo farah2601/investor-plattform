@@ -364,6 +364,38 @@ function CompanyDashboardContent() {
           // Success - show friendly message
           // Using alert for now (can be replaced with toast component if available)
           alert("Stripe connected successfully!");
+        } else if (stripeCallback === "pending") {
+          // Account Links: Onboarding incomplete
+          alert("Stripe account setup is incomplete. Please complete the onboarding process.");
+        } else if (stripeCallback === "refresh") {
+          // Account Links: Link expired
+          alert("The Stripe connection link has expired. Please connect again.");
+        } else if (stripeCallback === "return") {
+          // Account Links: User returned from onboarding - verify account status
+          if (urlCompanyId) {
+            try {
+              const verifyRes = await fetch("/api/stripe/verify-account", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ companyId: urlCompanyId }),
+              });
+              
+              const verifyData = await verifyRes.json();
+              
+              if (verifyData.ok && verifyData.connected) {
+                alert("Stripe connected successfully!");
+                // Reload status to reflect connected state
+                await loadStripeStatus(urlCompanyId);
+              } else {
+                // Account not fully onboarded yet
+                alert("Stripe account setup is incomplete. Please complete the onboarding process.");
+                await loadStripeStatus(urlCompanyId);
+              }
+            } catch (verifyError) {
+              console.error("Error verifying Stripe account:", verifyError);
+              alert("Stripe connection may be incomplete. Please check your Stripe status.");
+            }
+          }
         } else if (stripeCallback === "error") {
           // Show friendly error message - never show "Unauthorized" or raw errors
           const errorMsg = searchParams.get("msg");
