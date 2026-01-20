@@ -37,11 +37,6 @@ function truncate(s: string, n = 600) {
   return s.length > n ? s.slice(0, n) + "…" : s;
 }
 
-function truncate(s: string, n = 600) {
-  if (!s) return s;
-  return s.length > n ? s.slice(0, n) + "…" : s;
-}
-
 function safeMsg(msg: string) {
   // keep it short & URL safe (no secrets)
   return encodeURIComponent(msg.slice(0, 140));
