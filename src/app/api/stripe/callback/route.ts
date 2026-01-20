@@ -32,6 +32,16 @@ function getDashboardPath(): string {
   return "/company-dashboard";
 }
 
+function truncate(s: string, n = 600) {
+  if (!s) return s;
+  return s.length > n ? s.slice(0, n) + "…" : s;
+}
+
+function truncate(s: string, n = 600) {
+  if (!s) return s;
+  return s.length > n ? s.slice(0, n) + "…" : s;
+}
+
 function safeMsg(msg: string) {
   // keep it short & URL safe (no secrets)
   return encodeURIComponent(msg.slice(0, 140));
@@ -297,6 +307,28 @@ async function handleOAuthCallback(
     );
   }
 
+  // Mode mismatch guard: check test vs live
+  const isLiveSecret = stripeSecret.startsWith("sk_live_");
+  const isTestSecret = stripeSecret.startsWith("sk_test_");
+  if (!isTestSecret && !isLiveSecret) {
+    console.error("[api/stripe/callback] STRIPE_SECRET_KEY format invalid - must start with sk_test_ or sk_live_");
+    await supabaseAdmin
+      .from("integrations")
+      .update({
+        status: "not_connected",
+        oauth_state: null,
+        oauth_state_expires_at: null,
+      })
+      .eq("company_id", companyId)
+      .eq("provider", "stripe");
+    return NextResponse.redirect(
+      `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error&msg=${safeMsg("Stripe setup mismatch (test vs live). Switch keys or connect mode.")}`
+    );
+  }
+
+  // Log redirect_uri for debugging (safe - it's a URL, not a secret)
+  console.log("[stripe oauth] redirect_uri:", redirectUri);
+
   // Exchange code -> token
   const form = new URLSearchParams();
   form.set("grant_type", "authorization_code");
@@ -313,15 +345,41 @@ async function handleOAuthCallback(
     body: form.toString(),
   });
 
-  const tokenJson = (await tokenRes.json()) as any;
+  // Read raw response text first, then try JSON.parse
+  const raw = await tokenRes.text();
+  let tokenJson: any = null;
+  try {
+    tokenJson = JSON.parse(raw);
+  } catch {
+    tokenJson = { parse_error: true };
+  }
 
   if (!tokenRes.ok || tokenJson.error) {
-    const errMsg =
-      tokenJson?.error_description ||
-      tokenJson?.error ||
-      `Stripe token exchange failed (${tokenRes.status})`;
+    // Extract Stripe error details (safe - no secrets)
+    const stripeError = tokenJson?.error || null;
+    const stripeDesc = tokenJson?.error_description || null;
 
-    console.error("[api/stripe/callback] Token exchange failed:", errMsg);
+    // Determine mode for logging
+    const envMode = isTestSecret ? "test" : isLiveSecret ? "live" : "unknown";
+    const clientMode = clientId.startsWith("ca_") ? "connect" : "unknown";
+
+    // Log comprehensive error details (never log secrets)
+    console.error("[stripe oauth token] status:", tokenRes.status);
+    console.error("[stripe oauth token] tokenJson:", {
+      error: stripeError,
+      error_description: stripeDesc ? truncate(stripeDesc) : null,
+      parse_error: tokenJson.parse_error || false,
+    });
+    console.error("[stripe oauth token] raw_truncated:", truncate(raw));
+    console.error("[stripe oauth token] env_mode:", envMode);
+    console.error("[stripe oauth token] client_mode:", clientMode);
+
+    // Check for mode mismatch (live secret but test flow detected)
+    // Note: We can't directly detect if user is in test connect flow from callback,
+    // but we log the mode info above for diagnosis
+    if (isLiveSecret && stripeError === "invalid_grant") {
+      console.error("[stripe oauth] mode mismatch: live secret but token exchange failed - possible test/live mismatch");
+    }
 
     // Update status to not_connected on error and clear state
     await supabaseAdmin
@@ -334,8 +392,21 @@ async function handleOAuthCallback(
       .eq("company_id", companyId)
       .eq("provider", "stripe");
 
+    // Create user-friendly error message
+    let userMsg = "Token exchange failed";
+    if (stripeDesc) {
+      // Sanitize Stripe's error description for user display
+      const lowerDesc = stripeDesc.toLowerCase();
+      const sanitized = (lowerDesc.includes("test") || lowerDesc.includes("live"))
+        ? "Stripe auth failed. Check Stripe app keys (test vs live)."
+        : "Stripe auth failed. Try again.";
+      userMsg = sanitized;
+    } else if (stripeError) {
+      userMsg = "Stripe auth failed. Try again.";
+    }
+
     return NextResponse.redirect(
-      `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error&msg=${safeMsg("Token exchange failed")}`
+      `${baseUrl}${dashboardPath}?companyId=${encodeURIComponent(companyId)}&stripe=error&msg=${safeMsg(userMsg)}`
     );
   }
 
