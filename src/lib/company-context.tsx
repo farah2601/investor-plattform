@@ -54,9 +54,22 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
           .eq("owner_id", session.user.id)
           .order("created_at", { ascending: false });
         
-        // Type assertion: fallback data doesn't have branding fields, but we'll add defaults in mapping
-        companiesData = fallbackResult.data as typeof companiesData;
-        error = fallbackResult.error;
+        // Fix TypeScript error: map fallback data to include required fields with defaults
+        if (fallbackResult.error) {
+          console.error("Error fetching companies:", fallbackResult.error);
+          setLoading(false);
+          return;
+        }
+        
+        // Map fallback data to include required fields with null defaults
+        companiesData = (fallbackResult.data || []).map((item: { id: string; name: string }) => ({
+          id: item.id,
+          name: item.name,
+          logo_url: null,
+          header_style: null,
+          brand_color: null,
+        })) as typeof companiesData;
+        error = null;
       }
 
       if (error) {
@@ -129,9 +142,21 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
           .eq("id", activeCompany.id)
           .maybeSingle();
         
-        // Type assertion: fallback data doesn't have branding fields, but we'll add defaults
-        data = fallbackResult.data as typeof data;
-        error = fallbackResult.error;
+        // Fix TypeScript error: map fallback data to include required fields with defaults
+        if (fallbackResult.error || !fallbackResult.data) {
+          console.error("Error refreshing company:", fallbackResult.error);
+          return;
+        }
+        
+        // Map fallback data to include required fields with null defaults
+        data = {
+          id: fallbackResult.data.id,
+          name: fallbackResult.data.name,
+          logo_url: null,
+          header_style: null,
+          brand_color: null,
+        } as typeof data;
+        error = null;
       }
 
       if (error || !data) {
