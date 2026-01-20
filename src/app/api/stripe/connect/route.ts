@@ -59,8 +59,24 @@ export async function GET(req: Request) {
       return authRes || NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    // Determine mode (default to account_links)
-    const mode = (process.env.STRIPE_CONNECT_MODE || "account_links") as "account_links" | "oauth";
+    // Auto-detect mode based on available environment variables
+    // This ensures backward compatibility with existing OAuth setups
+    let mode: "account_links" | "oauth";
+    
+    if (process.env.STRIPE_CONNECT_MODE) {
+      // Explicit mode override
+      mode = process.env.STRIPE_CONNECT_MODE as "account_links" | "oauth";
+    } else {
+      // Auto-detect: prefer OAuth if CLIENT_ID is configured, otherwise use Account Links
+      const hasOAuthConfig = !!(process.env.STRIPE_CLIENT_ID && process.env.STRIPE_CONNECT_REDIRECT_URI);
+      mode = hasOAuthConfig ? "oauth" : "account_links";
+      
+      console.log("[api/stripe/connect] Auto-detected mode:", mode, {
+        hasClientId: !!process.env.STRIPE_CLIENT_ID,
+        hasRedirectUri: !!process.env.STRIPE_CONNECT_REDIRECT_URI,
+        hasSecretKey: !!process.env.STRIPE_SECRET_KEY,
+      });
+    }
 
     // Generate nonce and state for tracking (used in both modes)
     const nonce = crypto.randomUUID();
