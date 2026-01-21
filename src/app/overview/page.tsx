@@ -390,14 +390,31 @@ function OverviewPageContent() {
       });
 
       const data = await res.json();
+      
+      // Log full response for debugging
+      console.log("[handleConnectStripe] API response:", {
+        ok: res.ok,
+        status: res.status,
+        dataOk: data?.ok,
+        hasAuthorizeUrl: !!data?.authorizeUrl,
+        error: data?.error,
+        details: data?.details,
+        code: data?.code,
+      });
+
       if (!res.ok || !data?.ok || !data?.authorizeUrl) {
-        throw new Error(data?.error || "Failed to get Stripe authorization URL");
+        // Use the error message from API, or fallback to a generic message
+        const errorMsg = data?.error || "Failed to get Stripe authorization URL";
+        const detailsMsg = data?.details ? `\n\nDetails: ${data.details}` : "";
+        throw new Error(errorMsg + detailsMsg);
       }
 
       window.location.href = data.authorizeUrl;
     } catch (e: any) {
       console.error("Error connecting Stripe:", e);
-      alert("Error: " + (e?.message || "Failed to connect Stripe"));
+      // Show the actual error message from API
+      const errorMessage = e?.message || "Failed to connect Stripe. Please check your Stripe configuration.";
+      alert(errorMessage);
       setConnectingStripe(false);
     }
   }

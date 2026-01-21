@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { supabase } from "../../app/lib/supabaseClient";
-import { authedFetch } from "@/lib/authedFetch";
 import { cn } from "../../../lib/utils";
 import { KpiCard } from "../../components/ui/KpiCard";
 import { Button } from "../../components/ui/button";
@@ -246,15 +245,6 @@ function RemoveAccessButton({
   );
 }
 
-const DATA_SOURCES = [
-  { id: "stripe", category: "Billing", name: "Stripe", status: "not_connected" },
-  { id: "hubspot", category: "CRM", name: "HubSpot", status: "coming_soon" },
-  { id: "pipedrive", category: "CRM", name: "Pipedrive", status: "coming_soon" },
-  { id: "fiken", category: "Accounting", name: "Fiken", status: "coming_soon" },
-  { id: "tripletex", category: "Accounting", name: "Tripletex", status: "coming_soon" },
-  { id: "sheets", category: "Manual input", name: "Google Sheets", status: "connected" },
-];
-
 function CompanyDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -303,28 +293,6 @@ function CompanyDashboardContent() {
   const [mrrSeries, setMrrSeries] = useState<Array<{ date: string; label: string; value: number | null }>>([]);
   const [burnSeries, setBurnSeries] = useState<Array<{ date: string; label: string; value: number | null }>>([]);
 
-  // Stripe integration
-  const [stripeModalOpen, setStripeModalOpen] = useState(false);
-  const [stripeKey, setStripeKey] = useState("");
-  const [savingStripe, setSavingStripe] = useState(false);
-  const [stripeError, setStripeError] = useState<string | null>(null);
-  const [connectingStripe, setConnectingStripe] = useState(false); // Prevent double-clicks
-  const [stripeStatus, setStripeStatus] = useState<{
-    status: "not_connected" | "pending" | "connected";
-    stripeAccountId: string | null;
-    connectedAt: string | null;
-    lastVerifiedAt: string | null;
-    masked: string | null;
-    pendingExpiresAt: string | null;
-  }>({
-    status: "not_connected",
-    stripeAccountId: null,
-    connectedAt: null,
-    lastVerifiedAt: null,
-    masked: null,
-    pendingExpiresAt: null,
-  });
-
   // User dropdown
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -346,77 +314,6 @@ function CompanyDashboardContent() {
       // Update currentCompanyId when URL changes
       const urlCompanyId = searchParams.get("companyId") || searchParams.get("company");
       setCurrentCompanyId(urlCompanyId);
-      
-      // Check for Stripe OAuth callback result
-      const stripeCallback = searchParams.get("stripe");
-      if (stripeCallback) {
-        // Refetch Stripe status to get latest state (if companyId available)
-        if (urlCompanyId) {
-          await loadStripeStatus(urlCompanyId);
-        }
-        
-        // Clean URL by removing query params (use router.replace for proper navigation)
-        const newSearchParams = new URLSearchParams(searchParams);
-        newSearchParams.delete("stripe");
-        newSearchParams.delete("msg"); // Also remove error message param
-        const cleanUrl = `${window.location.pathname}${newSearchParams.toString() ? `?${newSearchParams.toString()}` : ""}`;
-        
-        if (stripeCallback === "connected") {
-          // Success - show friendly message
-          // Using alert for now (can be replaced with toast component if available)
-          alert("Stripe connected successfully!");
-        } else if (stripeCallback === "pending") {
-          // Account Links: Onboarding incomplete
-          alert("Stripe account setup is incomplete. Please complete the onboarding process.");
-        } else if (stripeCallback === "refresh") {
-          // Account Links: Link expired
-          alert("The Stripe connection link has expired. Please connect again.");
-        } else if (stripeCallback === "return") {
-          // Account Links: User returned from onboarding - verify account status
-          if (urlCompanyId) {
-            try {
-              const verifyRes = await fetch("/api/stripe/verify-account", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ companyId: urlCompanyId }),
-              });
-              
-              const verifyData = await verifyRes.json();
-              
-              if (verifyData.ok && verifyData.connected) {
-                alert("Stripe connected successfully!");
-                // Reload status to reflect connected state
-                await loadStripeStatus(urlCompanyId);
-              } else {
-                // Account not fully onboarded yet
-                alert("Stripe account setup is incomplete. Please complete the onboarding process.");
-                await loadStripeStatus(urlCompanyId);
-              }
-            } catch (verifyError) {
-              console.error("Error verifying Stripe account:", verifyError);
-              alert("Stripe connection may be incomplete. Please check your Stripe status.");
-            }
-          }
-        } else if (stripeCallback === "error") {
-          // Show friendly error message - never show "Unauthorized" or raw errors
-          const errorMsg = searchParams.get("msg");
-          if (errorMsg) {
-            // Decode and show user-friendly message
-            try {
-              const decoded = decodeURIComponent(errorMsg);
-              alert(`Couldn't connect Stripe: ${decoded}. Try again.`);
-            } catch {
-              alert("Couldn't connect Stripe. Try again.");
-            }
-          } else {
-            alert("Couldn't connect Stripe. Try again.");
-          }
-        }
-        
-        // Use router.replace to clean URL without full reload
-        // This ensures query params are cleaned after processing
-        router.replace(cleanUrl);
-      }
       
       await loadData(urlCompanyId);
     }
@@ -699,7 +596,6 @@ function CompanyDashboardContent() {
         loadInsights(selectedCompany.id), 
         loadAgentLogs(selectedCompany.id),
         loadKpiHistory(selectedCompany.id),
-        loadStripeStatus(selectedCompany.id),
       ]);
     } else {
       setInsights([]);
@@ -747,171 +643,6 @@ function CompanyDashboardContent() {
     mrrChartData: mrrChartData.length,
     burnChartData: burnChartData.length,
   });
-
-  async function loadStripeStatus(companyId: string) {
-    try {
-      const res = await authedFetch(`/api/stripe/status?companyId=${companyId}`, {
-        cache: "no-store",
-      });
-      const data = await res.json();
-      if (data?.ok) {
-        setStripeStatus({
-          status: data.status || "not_connected",
-          stripeAccountId: data.stripeAccountId || null,
-          connectedAt: data.connectedAt || null,
-          lastVerifiedAt: data.lastVerifiedAt || null,
-          masked: data.masked || null,
-          pendingExpiresAt: data.pendingExpiresAt || null,
-        });
-      } else {
-        // Handle error gracefully - set to not_connected
-        setStripeStatus({
-          status: "not_connected",
-          stripeAccountId: null,
-          connectedAt: null,
-          lastVerifiedAt: null,
-          masked: null,
-          pendingExpiresAt: null,
-        });
-      }
-    } catch (e: any) {
-      // Never show "Unauthorized" or raw errors to user
-      console.error("Failed to load Stripe status", e);
-      if (e?.message === "Not authenticated") {
-        // Silently fail - user will need to refresh/auth
-        return;
-      }
-      setStripeStatus({
-        status: "not_connected",
-        stripeAccountId: null,
-        connectedAt: null,
-        lastVerifiedAt: null,
-        masked: null,
-        pendingExpiresAt: null,
-      });
-    }
-  }
-
-  async function handleSaveStripeKey() {
-    if (!currentCompanyId) {
-      alert("No company selected");
-      return;
-    }
-
-    if (!stripeKey.trim()) {
-      setStripeError("Please enter a Stripe secret key");
-      return;
-    }
-
-    setSavingStripe(true);
-    setStripeError(null);
-
-    try {
-      const res = await authedFetch("/api/stripe/save-key", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          companyId: currentCompanyId,
-          secretKey: stripeKey.trim(),
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data?.ok) {
-        throw new Error(data?.error || "Failed to save Stripe key");
-      }
-
-      // Close modal and clear input immediately (never show secret key)
-      setStripeModalOpen(false);
-      setStripeKey("");
-      setStripeError(null);
-
-      // Re-fetch status to get latest state (including masked key)
-      await loadStripeStatus(currentCompanyId);
-    } catch (e: any) {
-      // Keep modal open on error, show friendly error message
-      // Never show "Unauthorized" or raw errors
-      if (e?.message === "Not authenticated") {
-        // Silently fail - user will need to refresh/auth
-        setStripeModalOpen(false);
-        return;
-      }
-      setStripeError("Failed to save Stripe key. Please try again.");
-    } finally {
-      setSavingStripe(false);
-    }
-  }
-
-  async function handleDisconnectStripe() {
-    if (!currentCompanyId) {
-      alert("No company selected");
-      return;
-    }
-
-    if (!confirm("Are you sure you want to disconnect Stripe? This will remove your Stripe key.")) {
-      return;
-    }
-
-    try {
-      const res = await authedFetch("/api/stripe/disconnect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId: currentCompanyId }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data?.ok) {
-        throw new Error(data?.error || "Failed to disconnect Stripe");
-      }
-
-      // Re-fetch status to get latest state
-      await loadStripeStatus(currentCompanyId);
-    } catch (e: any) {
-      console.error("Error disconnecting Stripe:", e);
-      alert("Error: " + (e?.message || "Failed to disconnect Stripe"));
-    }
-  }
-
-  async function handleConnectStripe() {
-    if (!currentCompanyId) {
-      alert("No company selected");
-      return;
-    }
-
-    // Prevent double-click/connect spam
-    if (connectingStripe) {
-      return; // Already connecting, ignore additional clicks
-    }
-
-    setConnectingStripe(true);
-
-    try {
-      // Fetch authorizeUrl with Authorization header
-      const res = await authedFetch(`/api/stripe/connect?companyId=${currentCompanyId}`, {
-        cache: "no-store",
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data?.ok || !data?.authorizeUrl) {
-        throw new Error(data?.error || "Failed to get Stripe authorization URL");
-      }
-
-      // Redirect browser to Stripe OAuth page
-      // Note: This navigation will leave the page, so connectingStripe state will reset
-      window.location.assign(data.authorizeUrl);
-    } catch (e: any) {
-      console.error("Error connecting Stripe:", e);
-      // Never show "Unauthorized" or raw errors to user
-      if (e?.message === "Not authenticated") {
-        // Silently fail - user will need to refresh/auth
-        setConnectingStripe(false);
-        return;
-      }
-      alert("Failed to connect Stripe. Please try again.");
-      setConnectingStripe(false);
-    }
-    // Note: If redirect succeeds, we won't reach here, but if it fails, reset state
-  }
 
   async function copyLink() {
     if (!investorUrl) return;
@@ -1641,68 +1372,6 @@ function CompanyDashboardContent() {
               className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white w-full sm:w-auto h-10 sm:h-9 px-4"
             >
               {savingKpi ? "Saving..." : "Save KPIs"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Stripe Connect Modal */}
-      <Dialog open={stripeModalOpen} onOpenChange={setStripeModalOpen}>
-        <DialogContent className="bg-slate-950 border-slate-800 text-slate-50 w-[calc(100vw-2rem)] sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Connect Stripe</DialogTitle>
-            <DialogDescription className="text-sm text-slate-400">
-              Advanced: only use this if you can't use Connect.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label htmlFor="stripe-key" className="text-sm text-slate-300">
-                Stripe Secret Key
-              </label>
-              <Input
-                id="stripe-key"
-                type="password"
-                value={stripeKey}
-                onChange={(e) => {
-                  setStripeKey(e.target.value);
-                  setStripeError(null);
-                }}
-                placeholder="sk_live_..."
-                className="bg-slate-900 border-slate-700 text-slate-50 font-mono text-sm"
-              />
-              <p className="text-xs text-slate-500">
-                We use this key only to read billing metrics. It is encrypted and never shown again.
-              </p>
-            </div>
-
-            {stripeError && (
-              <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3">
-                <p className="text-sm text-red-300">{stripeError}</p>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button
-              onClick={handleSaveStripeKey}
-              disabled={savingStripe || !stripeKey.trim() || !currentCompanyId}
-              className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white w-full sm:w-auto"
-            >
-              {savingStripe ? "Verifying..." : "Save & Verify"}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setStripeModalOpen(false);
-                setStripeKey("");
-                setStripeError(null);
-              }}
-              disabled={savingStripe}
-              className="border-slate-700 text-slate-300 bg-slate-800/40 hover:bg-slate-700/50 w-full sm:w-auto"
-            >
-              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>

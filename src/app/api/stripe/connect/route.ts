@@ -214,8 +214,8 @@ export async function GET(req: Request) {
         const accountLink = await stripe.accountLinks.create(
           {
             account: stripeAccountId,
-            refresh_url: `${baseUrl}/company-dashboard?companyId=${encodeURIComponent(companyId)}&stripe=refresh`,
-            return_url: `${baseUrl}/company-dashboard?companyId=${encodeURIComponent(companyId)}&stripe=return`,
+            refresh_url: `${baseUrl}/overview?companyId=${encodeURIComponent(companyId)}&stripe=refresh`,
+            return_url: `${baseUrl}/overview?companyId=${encodeURIComponent(companyId)}&stripe=return`,
             type: "account_onboarding",
           },
           { idempotencyKey: linkIdempotencyKey }
