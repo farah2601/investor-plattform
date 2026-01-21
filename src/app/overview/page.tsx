@@ -1,11 +1,10 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AppShell } from "@/components/shell/AppShell";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { supabase } from "@/app/lib/supabaseClient";
 import { authedFetch } from "@/lib/authedFetch";
 import { FormattedDate } from "@/components/ui/FormattedDate";
@@ -13,14 +12,6 @@ import { KpiCard } from "@/components/ui/KpiCard";
 import { ArrChart, type ArrChartDataPoint } from "@/components/ui/ArrChart";
 import { MrrChart, type MrrChartDataPoint } from "@/components/ui/MrrChart";
 import { useCompanyData } from "@/hooks/useCompanyData";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "../../../components/ui/dialog";
 
 type ChartDataPoint = {
   date: string;
@@ -85,18 +76,8 @@ function formatRelativeTime(dateString: string | null): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-const DATA_SOURCES = [
-  { id: "stripe", category: "Billing", name: "Stripe", status: "not_connected" },
-  { id: "hubspot", category: "CRM", name: "HubSpot", status: "coming_soon" },
-  { id: "pipedrive", category: "CRM", name: "Pipedrive", status: "coming_soon" },
-  { id: "fiken", category: "Accounting", name: "Fiken", status: "coming_soon" },
-  { id: "tripletex", category: "Accounting", name: "Tripletex", status: "coming_soon" },
-  { id: "sheets", category: "Manual input", name: "Google Sheets", status: "coming_soon" }, // Status determined dynamically based on hasGoogleSheets
-];
-
 function OverviewPageContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [runningAgent, setRunningAgent] = useState(false);
   const [agentError, setAgentError] = useState<string | null>(null);
@@ -105,29 +86,11 @@ function OverviewPageContent() {
   const [loadingKpiHistory, setLoadingKpiHistory] = useState(false);
   const [activeChart, setActiveChart] = useState<"arr" | "mrr">("arr");
 
-  // Connected Systems Modal
-  const [connectedSystemsModalOpen, setConnectedSystemsModalOpen] = useState(false);
-
-  // Stripe integration - same state and logic as dashboard
-  const [stripeModalOpen, setStripeModalOpen] = useState(false);
-  const [stripeKey, setStripeKey] = useState("");
-  const [savingStripe, setSavingStripe] = useState(false);
-  const [stripeError, setStripeError] = useState<string | null>(null);
-  const [connectingStripe, setConnectingStripe] = useState(false);
+  // Stripe status - only for displaying count and hint in overview
   const [stripeStatus, setStripeStatus] = useState<{
     status: "not_connected" | "pending" | "connected";
-    stripeAccountId: string | null;
-    connectedAt: string | null;
-    lastVerifiedAt: string | null;
-    masked: string | null;
-    pendingExpiresAt: string | null;
   }>({
     status: "not_connected",
-    stripeAccountId: null,
-    connectedAt: null,
-    lastVerifiedAt: null,
-    masked: null,
-    pendingExpiresAt: null,
   });
 
   // Use shared hook to fetch company data - same source as dashboard
@@ -175,24 +138,6 @@ function OverviewPageContent() {
       loadStripeStatus(company.id);
     }
   }, [company?.id]);
-
-  // Handle Stripe OAuth callback - same logic as dashboard
-  useEffect(() => {
-    async function handleStripeCallback() {
-      const stripeCallback = searchParams.get("stripe");
-      if (stripeCallback && company?.id) {
-        await loadStripeStatus(company.id);
-        
-        // Clean URL
-        const newSearchParams = new URLSearchParams(searchParams);
-        newSearchParams.delete("stripe");
-        newSearchParams.delete("msg");
-        const cleanUrl = `${window.location.pathname}${newSearchParams.toString() ? `?${newSearchParams.toString()}` : ""}`;
-        router.replace(cleanUrl);
-      }
-    }
-    handleStripeCallback();
-  }, [searchParams, company?.id, router]);
 
   async function loadKpiHistory(companyId: string) {
     setLoadingKpiHistory(true);
@@ -258,7 +203,7 @@ function OverviewPageContent() {
     }
   }
 
-  // Stripe functions - same logic as dashboard, using same API endpoints
+  // Stripe status - only for displaying count and hint in overview
   async function loadStripeStatus(companyId: string) {
     try {
       const res = await authedFetch(`/api/stripe/status?companyId=${companyId}`, {
@@ -268,20 +213,10 @@ function OverviewPageContent() {
       if (data?.ok) {
         setStripeStatus({
           status: data.status || "not_connected",
-          stripeAccountId: data.stripeAccountId || null,
-          connectedAt: data.connectedAt || null,
-          lastVerifiedAt: data.lastVerifiedAt || null,
-          masked: data.masked || null,
-          pendingExpiresAt: data.pendingExpiresAt || null,
         });
       } else {
         setStripeStatus({
           status: "not_connected",
-          stripeAccountId: null,
-          connectedAt: null,
-          lastVerifiedAt: null,
-          masked: null,
-          pendingExpiresAt: null,
         });
       }
     } catch (e: any) {
@@ -289,133 +224,8 @@ function OverviewPageContent() {
       if (e?.message !== "Not authenticated") {
         setStripeStatus({
           status: "not_connected",
-          stripeAccountId: null,
-          connectedAt: null,
-          lastVerifiedAt: null,
-          masked: null,
-          pendingExpiresAt: null,
         });
       }
-    }
-  }
-
-  async function handleSaveStripeKey() {
-    if (!company?.id) {
-      alert("No company selected");
-      return;
-    }
-
-    if (!stripeKey.trim()) {
-      setStripeError("Please enter a Stripe secret key");
-      return;
-    }
-
-    setSavingStripe(true);
-    setStripeError(null);
-
-    try {
-      const res = await authedFetch("/api/stripe/save-key", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          companyId: company.id,
-          secretKey: stripeKey.trim(),
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data?.ok) {
-        throw new Error(data?.error || "Failed to save Stripe key");
-      }
-
-      setStripeModalOpen(false);
-      setStripeKey("");
-      setStripeError(null);
-      await loadStripeStatus(company.id);
-    } catch (e: any) {
-      if (e?.message === "Not authenticated") {
-        setStripeModalOpen(false);
-        return;
-      }
-      setStripeError("Failed to save Stripe key. Please try again.");
-    } finally {
-      setSavingStripe(false);
-    }
-  }
-
-  async function handleDisconnectStripe() {
-    if (!company?.id) {
-      alert("No company selected");
-      return;
-    }
-
-    if (!confirm("Are you sure you want to disconnect Stripe? This will remove your Stripe key.")) {
-      return;
-    }
-
-    try {
-      const res = await authedFetch("/api/stripe/disconnect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId: company.id }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data?.ok) {
-        throw new Error(data?.error || "Failed to disconnect Stripe");
-      }
-
-      await loadStripeStatus(company.id);
-    } catch (e: any) {
-      console.error("Error disconnecting Stripe:", e);
-      alert("Error: " + (e?.message || "Failed to disconnect Stripe"));
-    }
-  }
-
-  async function handleConnectStripe() {
-    if (!company?.id) {
-      alert("No company selected");
-      return;
-    }
-
-    if (connectingStripe) {
-      return;
-    }
-
-    setConnectingStripe(true);
-
-    try {
-      const res = await authedFetch(`/api/stripe/connect?companyId=${company.id}`, {
-        cache: "no-store",
-      });
-
-      const data = await res.json();
-      
-      // Log full response for debugging
-      console.log("[handleConnectStripe] API response:", {
-        ok: res.ok,
-        status: res.status,
-        dataOk: data?.ok,
-        hasAuthorizeUrl: !!data?.authorizeUrl,
-        error: data?.error,
-        details: data?.details,
-        code: data?.code,
-      });
-
-      if (!res.ok || !data?.ok || !data?.authorizeUrl) {
-        // Use the error message from API, or fallback to a generic message
-        const errorMsg = data?.error || "Failed to get Stripe authorization URL";
-        const detailsMsg = data?.details ? `\n\nDetails: ${data.details}` : "";
-        throw new Error(errorMsg + detailsMsg);
-      }
-
-      window.location.href = data.authorizeUrl;
-    } catch (e: any) {
-      console.error("Error connecting Stripe:", e);
-      // Show the actual error message from API
-      const errorMessage = e?.message || "Failed to connect Stripe. Please check your Stripe configuration.";
-      alert(errorMessage);
-      setConnectingStripe(false);
     }
   }
 
@@ -541,25 +351,23 @@ function OverviewPageContent() {
 
         {/* At-a-glance Stats - Top Row */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {/* Connected Systems Count - Clickable to open integrations */}
-          <button
-            type="button"
-            onClick={() => setConnectedSystemsModalOpen(true)}
-            className="bg-gradient-to-br from-slate-800/50 to-slate-700/30 border border-slate-700/40 rounded-lg px-4 py-4 transition-all hover:border-slate-600/60 hover:bg-slate-800/60 cursor-pointer group text-left light:bg-white light:border-slate-200 light:hover:border-slate-300"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <svg className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-400 transition-colors light:text-slate-600 light:group-hover:text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-              </svg>
-              <div className="text-xs text-slate-500 uppercase tracking-wider group-hover:text-slate-400 transition-colors light:text-slate-600 light:group-hover:text-slate-800">Connected Systems</div>
+          {/* Connected Systems Count - Clickable to navigate to connected systems page */}
+          <Link href="/overview/connected-systems">
+            <div className="bg-gradient-to-br from-slate-800/50 to-slate-700/30 border border-slate-700/40 rounded-lg px-4 py-4 transition-all hover:border-slate-600/60 hover:bg-slate-800/60 cursor-pointer group text-left light:bg-white light:border-slate-200 light:hover:border-slate-300">
+              <div className="flex items-center gap-2 mb-2">
+                <svg className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-400 transition-colors light:text-slate-600 light:group-hover:text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+                <div className="text-xs text-slate-500 uppercase tracking-wider group-hover:text-slate-400 transition-colors light:text-slate-600 light:group-hover:text-slate-800">Connected Systems</div>
+              </div>
+              <div className="text-xl font-bold text-white group-hover:text-slate-100 transition-colors light:text-slate-950">
+                {(() => {
+                  const count = (hasGoogleSheets ? 1 : 0) + (stripeStatus.status === "connected" ? 1 : 0);
+                  return `${count} ${count === 1 ? "system" : "systems"}`;
+                })()}
+              </div>
             </div>
-            <div className="text-xl font-bold text-white group-hover:text-slate-100 transition-colors light:text-slate-950">
-              {(() => {
-                const count = (hasGoogleSheets ? 1 : 0) + (stripeStatus.status === "connected" ? 1 : 0);
-                return `${count} ${count === 1 ? "system" : "systems"}`;
-              })()}
-            </div>
-          </button>
+          </Link>
 
           {/* Status - Real data from company.google_sheets_last_sync_at and company.last_agent_run_at */}
           <div className={`border rounded-lg px-4 py-4 ${
@@ -906,211 +714,6 @@ function OverviewPageContent() {
         </div>
       </div>
 
-      {/* Connected Systems Modal - Data Sources */}
-      <Dialog open={connectedSystemsModalOpen} onOpenChange={setConnectedSystemsModalOpen}>
-        <DialogContent className="bg-slate-950 border-slate-800 text-slate-50 w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Connected Systems</DialogTitle>
-            <DialogDescription className="text-sm text-slate-400">
-              Automatically keeps your metrics up to date.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            {/* Stripe Integration Card */}
-            <div className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-4 sm:p-5 space-y-4">
-              <div>
-                <h3 className="text-sm font-medium text-slate-100">Stripe</h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Connect your Stripe account to automatically sync revenue and subscription metrics.
-                </p>
-              </div>
-
-              {/* Status Display */}
-              <div className="flex items-center gap-2">
-                {stripeStatus.status === "connected" ? (
-                  <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-[#2B74FF]/10 text-[#2B74FF] border border-[#2B74FF]/20">
-                    Connected
-                  </span>
-                ) : stripeStatus.status === "pending" ? (
-                  <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                    Pending — complete connection in Stripe
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-slate-800/60 text-slate-400 border border-slate-700/50">
-                    Not connected
-                  </span>
-                )}
-                {stripeStatus.masked && (
-                  <span className="text-xs text-slate-500 font-mono">
-                    {stripeStatus.masked}
-                  </span>
-                )}
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                {stripeStatus.status === "connected" ? (
-                  <>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleConnectStripe}
-                      disabled={connectingStripe}
-                      className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white border-[#2B74FF] disabled:opacity-50"
-                    >
-                      {connectingStripe ? "Redirecting…" : "Reconnect Stripe"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleDisconnectStripe}
-                      className="border-red-500/30 text-red-400 bg-red-500/10 hover:bg-red-500/20"
-                    >
-                      Disconnect
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button
-                      size="sm"
-                      onClick={handleConnectStripe}
-                      disabled={connectingStripe}
-                      className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white disabled:opacity-50"
-                    >
-                      {connectingStripe ? "Redirecting…" : "Connect Stripe"}
-                    </Button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setConnectedSystemsModalOpen(false);
-                        if (company?.id) {
-                          setStripeModalOpen(true);
-                        }
-                      }}
-                      className="text-xs text-slate-400 hover:text-slate-300 underline"
-                    >
-                      Enter key manually
-                    </button>
-                  </>
-                )}
-              </div>
-
-              {/* Trust Message */}
-              <p className="text-xs text-slate-500">
-                We never store your Stripe secret key unless you choose manual setup.
-              </p>
-            </div>
-
-            {/* Other Data Sources */}
-            <div className="space-y-0 divide-y divide-slate-800/50">
-              {DATA_SOURCES.filter((source) => source.id !== "stripe").map((source) => {
-                // Determine actual status for Google Sheets based on real data
-                const isConnected = source.id === "sheets" 
-                  ? hasGoogleSheets 
-                  : source.status === "connected";
-                
-                return (
-                  <div
-                    key={source.id}
-                    className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
-                  >
-                    <div className="flex items-center gap-4 flex-1">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-100">{source.name}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">{source.category}</p>
-                      </div>
-                    </div>
-                    <div className="flex-shrink-0 flex items-center gap-2">
-                      {isConnected ? (
-                        <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-[#2B74FF]/10 text-[#2B74FF] border border-[#2B74FF]/20">
-                          Connected
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-slate-800/60 text-slate-400 border border-slate-700/50">
-                          Coming soon
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setConnectedSystemsModalOpen(false)}
-              className="border-slate-700 text-slate-300 bg-slate-800/40 hover:bg-slate-700/50"
-            >
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Stripe Connect Modal */}
-      <Dialog open={stripeModalOpen} onOpenChange={setStripeModalOpen}>
-        <DialogContent className="bg-slate-950 border-slate-800 text-slate-50 w-[calc(100vw-2rem)] sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Connect Stripe</DialogTitle>
-            <DialogDescription className="text-sm text-slate-400">
-              Advanced: only use this if you can't use Connect.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label htmlFor="stripe-key" className="text-sm text-slate-300">
-                Stripe Secret Key
-              </label>
-              <Input
-                id="stripe-key"
-                type="password"
-                value={stripeKey}
-                onChange={(e) => {
-                  setStripeKey(e.target.value);
-                  setStripeError(null);
-                }}
-                placeholder="sk_live_..."
-                className="bg-slate-900 border-slate-700 text-slate-50 font-mono text-sm"
-              />
-              <p className="text-xs text-slate-500">
-                We use this key only to read billing metrics. It is encrypted and never shown again.
-              </p>
-            </div>
-
-            {stripeError && (
-              <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3">
-                <p className="text-sm text-red-300">{stripeError}</p>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button
-              onClick={handleSaveStripeKey}
-              disabled={savingStripe || !stripeKey.trim() || !company?.id}
-              className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white w-full sm:w-auto"
-            >
-              {savingStripe ? "Verifying..." : "Save & Verify"}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setStripeModalOpen(false);
-                setStripeKey("");
-                setStripeError(null);
-              }}
-              disabled={savingStripe}
-              className="border-slate-700 text-slate-300 bg-slate-800/40 hover:bg-slate-700/50 w-full sm:w-auto"
-            >
-              Cancel
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </AppShell>
   );
 }
