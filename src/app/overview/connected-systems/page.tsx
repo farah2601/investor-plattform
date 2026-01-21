@@ -31,10 +31,19 @@ function ConnectedSystemsPageContent() {
 
   // Stripe integration
   const [stripeModalOpen, setStripeModalOpen] = useState(false);
+  const [stripeManageModalOpen, setStripeManageModalOpen] = useState(false);
   const [stripeKey, setStripeKey] = useState("");
   const [savingStripe, setSavingStripe] = useState(false);
   const [stripeError, setStripeError] = useState<string | null>(null);
   const [connectingStripe, setConnectingStripe] = useState(false);
+
+  // Google Sheets integration
+  const [sheetsManageModalOpen, setSheetsManageModalOpen] = useState(false);
+  const [sheetsUrl, setSheetsUrl] = useState("");
+  const [sheetsTab, setSheetsTab] = useState("");
+  const [savingSheets, setSavingSheets] = useState(false);
+  const [syncingKPIs, setSyncingKPIs] = useState(false);
+  const [syncSuccess, setSyncSuccess] = useState(false);
   const [stripeStatus, setStripeStatus] = useState<{
     status: "not_connected" | "pending" | "connected";
     stripeAccountId: string | null;
@@ -289,6 +298,88 @@ function ConnectedSystemsPageContent() {
     setRequestSystemName("");
   }
 
+  // Load Google Sheets data when manage modal opens
+  useEffect(() => {
+    if (sheetsManageModalOpen && company) {
+      setSheetsUrl(company.google_sheets_url || "");
+      setSheetsTab(company.google_sheets_tab || "");
+    }
+  }, [sheetsManageModalOpen, company]);
+
+  async function handleSaveSheets() {
+    if (!company?.id) {
+      alert("No company selected");
+      return;
+    }
+
+    if (!sheetsUrl.trim()) {
+      alert("Please enter a Google Sheets URL");
+      return;
+    }
+
+    setSavingSheets(true);
+    try {
+      const res = await authedFetch("/api/sheets/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: company.id,
+          sheetUrl: sheetsUrl.trim(),
+          tabName: sheetsTab.trim() || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Failed to save Google Sheets configuration");
+      }
+
+      setSheetsManageModalOpen(false);
+      // Reload company data to reflect changes
+      window.location.reload();
+    } catch (e: any) {
+      console.error("Error saving Google Sheets:", e);
+      alert("Error: " + (e?.message || "Failed to save configuration"));
+    } finally {
+      setSavingSheets(false);
+    }
+  }
+
+  async function handleSyncKPIs() {
+    if (!company?.id) {
+      alert("No company selected");
+      return;
+    }
+
+    setSyncingKPIs(true);
+    setSyncSuccess(false);
+    try {
+      const res = await authedFetch("/api/sheets/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: company.id,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Failed to sync KPIs");
+      }
+
+      setSyncSuccess(true);
+      // Reload company data after sync
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (e: any) {
+      console.error("Error syncing KPIs:", e);
+      alert("Error: " + (e?.message || "Failed to sync KPIs"));
+    } finally {
+      setSyncingKPIs(false);
+    }
+  }
+
   if (loading) {
     return (
       <AppShell showNav={false}>
@@ -391,7 +482,7 @@ function ConnectedSystemsPageContent() {
 
   return (
     <AppShell showNav={false}>
-      <div className="mx-auto max-w-7xl px-6 py-8 space-y-8">
+      <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 py-8 space-y-8">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm">
           <Link 
@@ -420,10 +511,33 @@ function ConnectedSystemsPageContent() {
           </div>
           <Button
             onClick={() => {
-              // Scroll to request integration section or focus first available system
-              const firstNotConnected = visibleSystems.find((s) => !s.isConnected);
+              // Find first not connected system
+              const firstNotConnected = visibleSystems.find((s) => !s.isConnected && !s.isPending);
+              
               if (firstNotConnected) {
-                document.getElementById(`system-${firstNotConnected.id}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                // Scroll to the first not connected system
+                const element = document.getElementById(`system-${firstNotConnected.id}`);
+                if (element) {
+                  element.scrollIntoView({ behavior: "smooth", block: "center" });
+                  // Add a subtle highlight effect
+                  element.classList.add("ring-2", "ring-[#2B74FF]", "ring-opacity-50");
+                  setTimeout(() => {
+                    element.classList.remove("ring-2", "ring-[#2B74FF]", "ring-opacity-50");
+                  }, 2000);
+                }
+              } else {
+                // All systems are connected, scroll to request integration section
+                const requestSection = document.getElementById("request-integration");
+                if (requestSection) {
+                  requestSection.scrollIntoView({ behavior: "smooth", block: "center" });
+                  // Focus the input field
+                  setTimeout(() => {
+                    const input = requestSection.querySelector('input[type="text"]') as HTMLInputElement;
+                    if (input) {
+                      input.focus();
+                    }
+                  }, 500);
+                }
               }
             }}
             className="bg-gradient-to-r from-[#2B74FF] to-[#4D9FFF] hover:from-[#2563EB] hover:to-[#3B82F6] text-white font-semibold shadow-lg shadow-[#2B74FF]/20 hover:shadow-[#4D9FFF]/30"
@@ -479,8 +593,27 @@ function ConnectedSystemsPageContent() {
 
                   {/* Account ID / Sheet Name */}
                   {system.isConnected && system.accountId && (
-                    <div className="text-xs text-slate-500 font-mono truncate">
-                      {system.id === "stripe" && system.masked ? system.masked : system.accountId}
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs text-slate-500 font-mono truncate flex-1 min-w-0">
+                        {system.id === "stripe" && system.masked ? system.masked : system.accountId}
+                      </div>
+                      {system.id === "sheets" && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (system.accountId) {
+                              navigator.clipboard.writeText(system.accountId);
+                              // TODO: Add toast notification
+                            }
+                          }}
+                          className="flex-shrink-0 text-slate-400 hover:text-slate-300 transition-colors"
+                          title="Copy URL"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
                   )}
 
@@ -493,7 +626,7 @@ function ConnectedSystemsPageContent() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex flex-col gap-2 pt-2 border-t border-slate-700/30">
+                <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-slate-700/30">
                   {system.id === "stripe" ? (
                     // Stripe-specific actions
                     system.isConnected ? (
@@ -501,12 +634,12 @@ function ConnectedSystemsPageContent() {
                         <Button
                           size="sm"
                           variant="outline"
-                          disabled
-                          className="w-full border-slate-700 text-slate-300 bg-slate-800/40 hover:bg-slate-700/50 cursor-not-allowed"
+                          onClick={() => setStripeManageModalOpen(true)}
+                          className="w-full sm:flex-1 border-slate-700 text-slate-300 bg-slate-800/40 hover:bg-slate-700/50"
                         >
                           Manage
                         </Button>
-                        <div className="flex gap-2">
+                        <div className="flex flex-col sm:flex-row gap-2">
                           <Button
                             size="sm"
                             variant="outline"
@@ -519,7 +652,7 @@ function ConnectedSystemsPageContent() {
                           <button
                             type="button"
                             onClick={handleDisconnectStripe}
-                            className="text-xs text-red-400 hover:text-red-300 underline px-2"
+                            className="text-xs text-red-400 hover:text-red-300 underline px-2 sm:px-3 text-left sm:text-center"
                           >
                             Disconnect
                           </button>
@@ -568,16 +701,16 @@ function ConnectedSystemsPageContent() {
                         <Button
                           size="sm"
                           variant="outline"
-                          disabled
-                          className="w-full border-slate-700 text-slate-300 bg-slate-800/40 hover:bg-slate-700/50 cursor-not-allowed"
+                          onClick={() => setSheetsManageModalOpen(true)}
+                          className="w-full sm:flex-1 border-slate-700 text-slate-300 bg-slate-800/40 hover:bg-slate-700/50"
                         >
                           Manage
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
-                          disabled
-                          className="w-full border-slate-700 text-slate-300 bg-slate-800/40 hover:bg-slate-700/50 cursor-not-allowed"
+                          onClick={() => setSheetsManageModalOpen(true)}
+                          className="w-full sm:flex-1 border-slate-700 text-slate-300 bg-slate-800/40 hover:bg-slate-700/50"
                         >
                           Edit
                         </Button>
@@ -600,8 +733,8 @@ function ConnectedSystemsPageContent() {
         )}
 
         {/* Request Integration Section */}
-        <div className="max-w-2xl mx-auto mt-12 pt-8 border-t border-slate-800/50">
-          <div className="bg-gradient-to-br from-[#2B74FF]/10 to-[#4D9FFF]/5 border border-[#2B74FF]/20 rounded-xl p-6 space-y-4">
+        <div id="request-integration" className="mt-12 pt-8 border-t border-slate-800/50">
+          <div className="bg-gradient-to-br from-[#2B74FF]/10 to-[#4D9FFF]/5 border border-[#2B74FF]/20 rounded-xl p-4 sm:p-6 space-y-4">
             <div className="text-center">
               <h3 className="text-base font-semibold text-white mb-1 light:text-slate-950">
                 Missing an integration?
@@ -610,7 +743,7 @@ function ConnectedSystemsPageContent() {
                 Tell us what you use — we prioritize based on demand.
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <Input
                 type="text"
                 placeholder="System name"
@@ -625,7 +758,7 @@ function ConnectedSystemsPageContent() {
               />
               <Button
                 onClick={handleRequestIntegration}
-                className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white"
+                className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white w-full sm:w-auto"
               >
                 Request
               </Button>
@@ -688,6 +821,177 @@ function ConnectedSystemsPageContent() {
                 setStripeError(null);
               }}
               disabled={savingStripe}
+              className="border-slate-700 text-slate-300 bg-slate-800/40 hover:bg-slate-700/50 w-full sm:w-auto"
+            >
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Stripe Manage Modal */}
+      <Dialog open={stripeManageModalOpen} onOpenChange={setStripeManageModalOpen}>
+        <DialogContent className="bg-slate-950 border-slate-800 text-slate-50 w-[calc(100vw-2rem)] sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg sm:text-xl">Manage Stripe Integration</DialogTitle>
+            <DialogDescription className="text-sm text-slate-400">
+              View and manage your Stripe connection details.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm text-slate-300">Connection Status</label>
+              <div className="flex items-center gap-2">
+                {stripeStatus.status === "connected" ? (
+                  <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-[#2B74FF]/10 text-[#2B74FF] border border-[#2B74FF]/20">
+                    Connected
+                  </span>
+                ) : stripeStatus.status === "pending" ? (
+                  <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                    Pending
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-slate-800/60 text-slate-400 border border-slate-700/50">
+                    Not connected
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {stripeStatus.status === "connected" && (
+              <>
+                {stripeStatus.masked && (
+                  <div className="space-y-2">
+                    <label className="text-sm text-slate-300">Account ID</label>
+                    <div className="text-sm font-mono text-slate-400 bg-slate-900/50 border border-slate-700 rounded px-3 py-2">
+                      {stripeStatus.masked}
+                    </div>
+                  </div>
+                )}
+
+                {stripeStatus.connectedAt && (
+                  <div className="space-y-2">
+                    <label className="text-sm text-slate-300">Connected At</label>
+                    <div className="text-sm text-slate-400">
+                      {new Date(stripeStatus.connectedAt).toLocaleString()}
+                    </div>
+                  </div>
+                )}
+
+                {stripeStatus.lastVerifiedAt && (
+                  <div className="space-y-2">
+                    <label className="text-sm text-slate-300">Last Verified</label>
+                    <div className="text-sm text-slate-400">
+                      {formatLastSync(stripeStatus.lastVerifiedAt)}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            <div className="pt-4 border-t border-slate-700/50 space-y-2">
+              <p className="text-xs text-slate-500">
+                Need to reconnect or disconnect? Use the actions on the integration card.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setStripeManageModalOpen(false)}
+              className="border-slate-700 text-slate-300 bg-slate-800/40 hover:bg-slate-700/50 w-full sm:w-auto"
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Google Sheets Manage Modal */}
+      <Dialog open={sheetsManageModalOpen} onOpenChange={setSheetsManageModalOpen}>
+        <DialogContent className="bg-slate-950 border-slate-800 text-slate-50 w-[calc(100vw-2rem)] sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg sm:text-xl">Manage Google Sheets Integration</DialogTitle>
+            <DialogDescription className="text-sm text-slate-400">
+              Update your Google Sheets URL and sync KPIs.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label htmlFor="sheets-url" className="text-sm text-slate-300">
+                Google Sheets URL
+              </label>
+              <Input
+                id="sheets-url"
+                value={sheetsUrl}
+                onChange={(e) => setSheetsUrl(e.target.value)}
+                placeholder="https://docs.google.com/spreadsheets/d/..."
+                className="bg-slate-900 border-slate-700 text-slate-50"
+              />
+              <p className="text-xs text-slate-500">
+                Make sure the sheet is publicly accessible or shared with the service account.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="sheets-tab" className="text-sm text-slate-300">
+                Tab Name (optional)
+              </label>
+              <Input
+                id="sheets-tab"
+                value={sheetsTab}
+                onChange={(e) => setSheetsTab(e.target.value)}
+                placeholder="Sheet1"
+                className="bg-slate-900 border-slate-700 text-slate-50"
+              />
+              <p className="text-xs text-slate-500">
+                Leave empty to use the first tab.
+              </p>
+            </div>
+
+            {hasGoogleSheets && (
+              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+                <p className="text-sm text-emerald-300">
+                  ✓ Connected
+                  {company?.google_sheets_last_sync_at && (
+                    <span className="text-xs text-emerald-400/70 ml-2">
+                      Last synced: {formatLastSync(company.google_sheets_last_sync_at)}
+                    </span>
+                  )}
+                </p>
+              </div>
+            )}
+
+            {syncSuccess && (
+              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+                <p className="text-sm text-emerald-300">✓ Synced successfully!</p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            {hasGoogleSheets && (
+              <Button
+                onClick={handleSyncKPIs}
+                disabled={syncingKPIs || !company?.id}
+                className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white w-full sm:w-auto"
+              >
+                {syncingKPIs ? "Syncing..." : "Sync KPIs"}
+              </Button>
+            )}
+            <Button
+              onClick={handleSaveSheets}
+              disabled={savingSheets || !company?.id}
+              className="bg-white text-slate-950 hover:bg-white/90 w-full sm:w-auto"
+            >
+              {savingSheets ? "Saving..." : "Save"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setSheetsManageModalOpen(false)}
               className="border-slate-700 text-slate-300 bg-slate-800/40 hover:bg-slate-700/50 w-full sm:w-auto"
             >
               Cancel
