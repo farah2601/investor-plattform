@@ -27,25 +27,41 @@ export async function POST(req: Request) {
   if (res) return res;
 
   if (!secretKey || typeof secretKey !== "string") {
+    console.error("[save-key] Missing secretKey");
     return NextResponse.json({ ok: false, error: "Missing secretKey" }, { status: 400 });
   }
 
+  console.log("[save-key] Validating key format...", { prefix: secretKey.substring(0, 8) });
+
   if (!secretKey.startsWith("sk_")) {
-    return NextResponse.json({ ok: false, error: "Invalid Stripe key format" }, { status: 400 });
+    console.error("[save-key] Invalid Stripe key format - must start with sk_");
+    return NextResponse.json({ ok: false, error: "Invalid Stripe key format - must start with sk_" }, { status: 400 });
   }
 
   // Stripe verify
+  console.log("[save-key] Verifying key with Stripe API...");
   try {
     const stripe = new Stripe(secretKey, { apiVersion: "2024-06-20" as any });
     await stripe.balance.retrieve();
-  } catch {
+    console.log("[save-key] ✅ Stripe API verification successful");
+  } catch (err: any) {
+    console.error("[save-key] ❌ Stripe API verification failed:", err.message);
     return NextResponse.json({ ok: false, error: "Invalid Stripe key. Please check your key and try again." }, { status: 400 });
   }
 
-  const encrypted = encryptText(secretKey);
+  console.log("[save-key] Encrypting key...");
+  let encrypted: string;
+  try {
+    encrypted = encryptText(secretKey);
+  } catch (err: any) {
+    console.error("[save-key] ❌ Encryption failed:", err.message);
+    return NextResponse.json({ ok: false, error: "Encryption failed. Please contact support." }, { status: 500 });
+  }
+
   const masked = maskKey(secretKey);
   const now = new Date().toISOString();
 
+  console.log("[save-key] Saving to database...");
   const { error: dbError } = await supabaseAdmin
     .from("integrations")
     .upsert(
@@ -62,9 +78,11 @@ export async function POST(req: Request) {
     );
 
   if (dbError) {
+    console.error("[save-key] ❌ Database error:", dbError);
     return NextResponse.json({ ok: false, error: "Failed to save integration" }, { status: 500 });
   }
 
+  console.log("[save-key] ✅ Successfully saved Stripe integration");
   return NextResponse.json({ ok: true, connected: true, masked, lastVerifiedAt: now });
 }
 /*
