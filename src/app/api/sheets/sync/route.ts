@@ -300,121 +300,39 @@ export async function POST(req: Request) {
       );
     }
 
-    // Get CSV URL and fetch data
-    const csvUrl = getSheetsCsvUrl(company.google_sheets_url, company.google_sheets_tab);
-    console.log("[api/sheets/sync] Fetching CSV from:", csvUrl);
+    // Parse sheets - support both old format (single sheet) and new format (array)
+    let sheets: Array<{ url: string; tab: string }> = [];
     
-    let csvText: string;
     try {
-      const csvResponse = await fetch(csvUrl, {
-        cache: "no-store",
-      });
-      
-      if (!csvResponse.ok) {
-        // Get response body for detailed error
-        const responseText = await csvResponse.text().catch(() => "");
-        const preview = responseText.substring(0, 200);
-        
-        console.error("[api/sheets/sync] Fetch failed:", {
-          status: csvResponse.status,
-          statusText: csvResponse.statusText,
-          url: csvUrl,
-          responsePreview: preview,
-        });
-        
-        throw new Error(
-          `Failed to fetch Google Sheet: ${csvResponse.status} ${csvResponse.statusText}. ` +
-          `URL: ${csvUrl}. ` +
-          `Response preview: ${preview}`
-        );
+      const parsed = JSON.parse(company.google_sheets_url);
+      if (Array.isArray(parsed)) {
+        sheets = parsed;
+      } else {
+        // Old format: single sheet
+        sheets = [{
+          url: company.google_sheets_url,
+          tab: company.google_sheets_tab || "",
+        }];
       }
-      
-      csvText = await csvResponse.text();
-      console.log("[api/sheets/sync] Successfully fetched CSV, length:", csvText.length);
-    } catch (fetchError: any) {
-      console.error("[api/sheets/sync] Fetch error:", {
-        error: fetchError.message,
-        url: csvUrl,
-        stack: fetchError.stack,
-      });
-      return NextResponse.json(
-        { 
-          error: `Failed to fetch Google Sheet: ${fetchError.message}`,
-          details: {
-            csvUrl,
-            message: fetchError.message,
-          },
-        },
-        { status: 500 }
-      );
+    } catch {
+      // Not JSON, treat as old format
+      sheets = [{
+        url: company.google_sheets_url,
+        tab: company.google_sheets_tab || "",
+      }];
     }
 
-    // Parse CSV
-    const rows = parseCSV(csvText);
-    if (rows.length === 0) {
+    if (sheets.length === 0) {
       return NextResponse.json(
-        { error: "Google Sheet is empty" },
+        { error: "No Google Sheets configured" },
         { status: 400 }
       );
     }
 
-    // Find header row (first row)
-    const headerRow = rows[0];
-    if (!headerRow || headerRow.length === 0) {
-      return NextResponse.json(
-        { error: "Google Sheet has no header row" },
-        { status: 400 }
-      );
-    }
+    console.log(`[api/sheets/sync] Processing ${sheets.length} sheet(s)`);
 
-    // Map header columns to KPI fields and find Month/Year columns
-    const columnMap: { [key: number]: string } = {};
-    let monthColumnIndex: number | null = null;
-    let yearColumnIndex: number | null = null;
-    
-    for (let i = 0; i < headerRow.length; i++) {
-      const key = headerRow[i]?.trim();
-      if (!key) continue;
-      
-      // Check if this is the Month column
-      const normalizedKey = normalizeKey(key);
-      if (normalizedKey === "month" || normalizedKey === "måned") {
-        monthColumnIndex = i;
-        continue;
-      }
-      
-      // Check if this is the Year column
-      if (normalizedKey === "year" || normalizedKey === "år") {
-        yearColumnIndex = i;
-        continue;
-      }
-      
-      // Map to KPI field
-      const field = mapKeyToKPIField(key);
-      if (field) {
-        columnMap[i] = field;
-      }
-    }
-
-    // Debug: Log header row and column map with detailed mapping
-    console.log("[api/sheets/sync] Header row:", headerRow);
-    console.log("[api/sheets/sync] Column mapping details:", Object.entries(columnMap).map(([idx, field]) => ({
-      index: parseInt(idx),
-      header: headerRow[parseInt(idx)],
-      field,
-    })));
-    console.log("[api/sheets/sync] Month column index:", monthColumnIndex);
-    console.log("[api/sheets/sync] Year column index:", yearColumnIndex);
-
-    if (Object.keys(columnMap).length === 0) {
-      return NextResponse.json(
-        { error: "No recognized KPI columns found in Google Sheet" },
-        { status: 400 }
-      );
-    }
-
-    // Parse ALL data rows and build snapshots
-    const snapshots: Array<{
+    // Process all sheets and collect snapshots
+    const allSnapshots: Array<{
       period_date: string;
       mrr: number | null;
       arr: number | null;
@@ -427,7 +345,113 @@ export async function POST(req: Request) {
       customers: number | null;
     }> = [];
 
-    for (let rowIndex = 1; rowIndex < rows.length; rowIndex++) {
+    // Process each sheet
+    for (let sheetIndex = 0; sheetIndex < sheets.length; sheetIndex++) {
+      const sheet = sheets[sheetIndex];
+      console.log(`[api/sheets/sync] Processing sheet ${sheetIndex + 1}/${sheets.length}: ${sheet.url}`);
+
+      // Get CSV URL and fetch data
+      const csvUrl = getSheetsCsvUrl(sheet.url, sheet.tab);
+      console.log("[api/sheets/sync] Fetching CSV from:", csvUrl);
+      
+      let csvText: string;
+      try {
+        const csvResponse = await fetch(csvUrl, {
+          cache: "no-store",
+        });
+        
+        if (!csvResponse.ok) {
+          // Get response body for detailed error
+          const responseText = await csvResponse.text().catch(() => "");
+          const preview = responseText.substring(0, 200);
+          
+          console.error("[api/sheets/sync] Fetch failed:", {
+            status: csvResponse.status,
+            statusText: csvResponse.statusText,
+            url: csvUrl,
+            responsePreview: preview,
+          });
+          
+          throw new Error(
+            `Failed to fetch Google Sheet: ${csvResponse.status} ${csvResponse.statusText}. ` +
+            `URL: ${csvUrl}. ` +
+            `Response preview: ${preview}`
+          );
+        }
+        
+        csvText = await csvResponse.text();
+        console.log("[api/sheets/sync] Successfully fetched CSV, length:", csvText.length);
+      } catch (fetchError: any) {
+        console.error("[api/sheets/sync] Fetch error:", {
+          error: fetchError.message,
+          url: csvUrl,
+          stack: fetchError.stack,
+        });
+        // Continue with other sheets even if one fails
+        console.warn(`[api/sheets/sync] Skipping sheet ${sheetIndex + 1} due to fetch error, continuing with other sheets...`);
+        continue;
+      }
+
+      // Parse CSV
+      const rows = parseCSV(csvText);
+      if (rows.length === 0) {
+        console.warn(`[api/sheets/sync] Sheet ${sheetIndex + 1} is empty, skipping...`);
+        continue;
+      }
+
+      // Find header row (first row)
+      const headerRow = rows[0];
+      if (!headerRow || headerRow.length === 0) {
+        console.warn(`[api/sheets/sync] Sheet ${sheetIndex + 1} has no header row, skipping...`);
+        continue;
+      }
+
+      // Map header columns to KPI fields and find Month/Year columns
+      const columnMap: { [key: number]: string } = {};
+      let monthColumnIndex: number | null = null;
+      let yearColumnIndex: number | null = null;
+      
+      for (let i = 0; i < headerRow.length; i++) {
+        const key = headerRow[i]?.trim();
+        if (!key) continue;
+        
+        // Check if this is the Month column
+        const normalizedKey = normalizeKey(key);
+        if (normalizedKey === "month" || normalizedKey === "måned") {
+          monthColumnIndex = i;
+          continue;
+        }
+        
+        // Check if this is the Year column
+        if (normalizedKey === "year" || normalizedKey === "år") {
+          yearColumnIndex = i;
+          continue;
+        }
+        
+        // Map to KPI field
+        const field = mapKeyToKPIField(key);
+        if (field) {
+          columnMap[i] = field;
+        }
+      }
+
+      // Debug: Log header row and column map with detailed mapping
+      console.log(`[api/sheets/sync] Sheet ${sheetIndex + 1} header row:`, headerRow);
+      console.log(`[api/sheets/sync] Sheet ${sheetIndex + 1} column mapping details:`, Object.entries(columnMap).map(([idx, field]) => ({
+        index: parseInt(idx),
+        header: headerRow[parseInt(idx)],
+        field,
+      })));
+      console.log(`[api/sheets/sync] Sheet ${sheetIndex + 1} month column index:`, monthColumnIndex);
+      console.log(`[api/sheets/sync] Sheet ${sheetIndex + 1} year column index:`, yearColumnIndex);
+
+      if (Object.keys(columnMap).length === 0) {
+        console.warn(`[api/sheets/sync] Sheet ${sheetIndex + 1} has no recognized KPI columns, skipping...`);
+        continue;
+      }
+
+      // Parse ALL data rows and build snapshots for this sheet
+      for (let rowIndex = 1; rowIndex < rows.length; rowIndex++) {
       const row = rows[rowIndex];
       if (!row || row.length === 0) continue;
 
@@ -526,9 +550,9 @@ export async function POST(req: Request) {
       );
 
       if (hasAnyValue) {
-        snapshots.push(snapshotPayload);
+        allSnapshots.push(snapshotPayload);
         // Log each parsed row for debugging
-        console.log(`[api/sheets/sync] Row ${rowIndex} parsed:`, {
+        console.log(`[api/sheets/sync] Sheet ${sheetIndex + 1}, Row ${rowIndex} parsed:`, {
           month: row[monthColumnIndex || 0],
           periodDate,
           snapshotPayload: {
@@ -540,15 +564,59 @@ export async function POST(req: Request) {
           },
         });
       } else {
-        console.log(`[api/sheets/sync] Row ${rowIndex} skipped: no KPI values found`);
+          console.log(`[api/sheets/sync] Sheet ${sheetIndex + 1}, Row ${rowIndex} skipped: no KPI values found`);
+        }
+      }
+
+      console.log(`[api/sheets/sync] Parsed snapshots from sheet ${sheetIndex + 1}, total so far: ${allSnapshots.length}`);
+    }
+
+    // Merge snapshots by period_date - sum values from multiple sheets
+    const mergedSnapshotsMap = new Map<string, {
+      period_date: string;
+      mrr: number | null;
+      arr: number | null;
+      burn_rate: number | null;
+      churn: number | null;
+      growth_percent: number | null;
+      runway_months: number | null;
+      lead_velocity: number | null;
+      cash_balance: number | null;
+      customers: number | null;
+    }>();
+
+    for (const snapshot of allSnapshots) {
+      const existing = mergedSnapshotsMap.get(snapshot.period_date);
+      
+      if (existing) {
+        // Merge: sum numeric values, keep non-null values for non-additive fields
+        const merged: typeof snapshot = {
+          period_date: snapshot.period_date,
+          // Sum additive KPIs
+          mrr: (existing.mrr !== null && snapshot.mrr !== null) ? existing.mrr + snapshot.mrr : (snapshot.mrr ?? existing.mrr),
+          arr: (existing.arr !== null && snapshot.arr !== null) ? existing.arr + snapshot.arr : (snapshot.arr ?? existing.arr),
+          burn_rate: (existing.burn_rate !== null && snapshot.burn_rate !== null) ? existing.burn_rate + snapshot.burn_rate : (snapshot.burn_rate ?? existing.burn_rate),
+          lead_velocity: (existing.lead_velocity !== null && snapshot.lead_velocity !== null) ? existing.lead_velocity + snapshot.lead_velocity : (snapshot.lead_velocity ?? existing.lead_velocity),
+          cash_balance: (existing.cash_balance !== null && snapshot.cash_balance !== null) ? existing.cash_balance + snapshot.cash_balance : (snapshot.cash_balance ?? existing.cash_balance),
+          customers: (existing.customers !== null && snapshot.customers !== null) ? existing.customers + snapshot.customers : (snapshot.customers ?? existing.customers),
+          // Keep latest value for non-additive KPIs (or average if both exist)
+          churn: snapshot.churn ?? existing.churn,
+          growth_percent: snapshot.growth_percent ?? existing.growth_percent,
+          runway_months: snapshot.runway_months ?? existing.runway_months,
+        };
+        
+        mergedSnapshotsMap.set(snapshot.period_date, merged);
+      } else {
+        mergedSnapshotsMap.set(snapshot.period_date, { ...snapshot });
       }
     }
 
-    console.log("[api/sheets/sync] Parsed", snapshots.length, "snapshots from sheet");
+    const snapshots = Array.from(mergedSnapshotsMap.values());
+    console.log("[api/sheets/sync] Merged", snapshots.length, "unique snapshots from all sheets");
 
     if (snapshots.length === 0) {
       return NextResponse.json(
-        { error: "No valid KPI snapshots found in Google Sheet" },
+        { error: "No valid KPI snapshots found in any Google Sheets" },
         { status: 400 }
       );
     }

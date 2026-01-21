@@ -14,7 +14,7 @@ function isValidUUID(str: string | null | undefined): boolean {
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    const { companyId, sheetUrl, tabName } = body;
+    const { companyId, sheetUrl, tabName, sheets } = body;
 
     if (!companyId) {
       return NextResponse.json(
@@ -26,13 +26,6 @@ export async function POST(req: Request) {
     if (!isValidUUID(companyId)) {
       return NextResponse.json(
         { error: "Invalid companyId format (must be UUID)" },
-        { status: 400 }
-      );
-    }
-
-    if (!sheetUrl || typeof sheetUrl !== "string") {
-      return NextResponse.json(
-        { error: "Missing or invalid sheetUrl" },
         { status: 400 }
       );
     }
@@ -59,15 +52,40 @@ export async function POST(req: Request) {
       );
     }
 
-    // Update company with Google Sheets config
-    const updateData: any = {
-      google_sheets_url: sheetUrl.trim(),
-    };
+    // Support both old format (single sheet) and new format (array of sheets)
+    let updateData: any = {};
 
-    if (tabName && typeof tabName === "string" && tabName.trim()) {
-      updateData.google_sheets_tab = tabName.trim();
+    if (sheets && Array.isArray(sheets) && sheets.length > 0) {
+      // New format: multiple sheets stored as JSON array
+      const sheetsArray = sheets.map((s: any) => ({
+        url: s.url?.trim() || "",
+        tab: s.tab?.trim() || "",
+      })).filter((s: any) => s.url);
+
+      if (sheetsArray.length === 0) {
+        return NextResponse.json(
+          { error: "At least one valid sheet URL is required" },
+          { status: 400 }
+        );
+      }
+
+      // Store as JSON string in google_sheets_url column
+      // For backward compatibility, also set the first sheet's tab in google_sheets_tab
+      updateData.google_sheets_url = JSON.stringify(sheetsArray);
+      updateData.google_sheets_tab = sheetsArray[0].tab || null;
+    } else if (sheetUrl && typeof sheetUrl === "string") {
+      // Old format: single sheet (backward compatibility)
+      updateData.google_sheets_url = sheetUrl.trim();
+      if (tabName && typeof tabName === "string" && tabName.trim()) {
+        updateData.google_sheets_tab = tabName.trim();
+      } else {
+        updateData.google_sheets_tab = null;
+      }
     } else {
-      updateData.google_sheets_tab = null;
+      return NextResponse.json(
+        { error: "Missing or invalid sheetUrl or sheets array" },
+        { status: 400 }
+      );
     }
 
     const { data: updatedCompany, error: updateError } = await supabaseAdmin

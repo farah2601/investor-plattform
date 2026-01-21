@@ -39,8 +39,9 @@ function ConnectedSystemsPageContent() {
 
   // Google Sheets integration
   const [sheetsManageModalOpen, setSheetsManageModalOpen] = useState(false);
-  const [sheetsUrl, setSheetsUrl] = useState("");
-  const [sheetsTab, setSheetsTab] = useState("");
+  const [googleSheets, setGoogleSheets] = useState<Array<{ url: string; tab: string; id: string }>>([]);
+  const [newSheetUrl, setNewSheetUrl] = useState("");
+  const [newSheetTab, setNewSheetTab] = useState("");
   const [savingSheets, setSavingSheets] = useState(false);
   const [syncingKPIs, setSyncingKPIs] = useState(false);
   const [syncSuccess, setSyncSuccess] = useState(false);
@@ -301,10 +302,59 @@ function ConnectedSystemsPageContent() {
   // Load Google Sheets data when manage modal opens
   useEffect(() => {
     if (sheetsManageModalOpen && company) {
-      setSheetsUrl(company.google_sheets_url || "");
-      setSheetsTab(company.google_sheets_tab || "");
+      // Parse existing sheets - support both old format (single sheet) and new format (array)
+      let sheets: Array<{ url: string; tab: string; id: string }> = [];
+      
+      if (company.google_sheets_url) {
+        // Try to parse as JSON array first (new format)
+        try {
+          const parsed = JSON.parse(company.google_sheets_url);
+          if (Array.isArray(parsed)) {
+            sheets = parsed;
+          } else {
+            // Old format: single URL
+            sheets = [{
+              url: company.google_sheets_url,
+              tab: company.google_sheets_tab || "",
+              id: `sheet-${Date.now()}`,
+            }];
+          }
+        } catch {
+          // Not JSON, treat as single URL (old format)
+          sheets = [{
+            url: company.google_sheets_url,
+            tab: company.google_sheets_tab || "",
+            id: `sheet-${Date.now()}`,
+          }];
+        }
+      }
+      
+      setGoogleSheets(sheets);
+      setNewSheetUrl("");
+      setNewSheetTab("");
     }
   }, [sheetsManageModalOpen, company]);
+
+  function handleAddSheet() {
+    if (!newSheetUrl.trim()) {
+      alert("Please enter a Google Sheets URL");
+      return;
+    }
+
+    const newSheet = {
+      url: newSheetUrl.trim(),
+      tab: newSheetTab.trim() || "",
+      id: `sheet-${Date.now()}-${Math.random()}`,
+    };
+
+    setGoogleSheets([...googleSheets, newSheet]);
+    setNewSheetUrl("");
+    setNewSheetTab("");
+  }
+
+  function handleRemoveSheet(id: string) {
+    setGoogleSheets(googleSheets.filter((sheet) => sheet.id !== id));
+  }
 
   async function handleSaveSheets() {
     if (!company?.id) {
@@ -312,8 +362,8 @@ function ConnectedSystemsPageContent() {
       return;
     }
 
-    if (!sheetsUrl.trim()) {
-      alert("Please enter a Google Sheets URL");
+    if (googleSheets.length === 0) {
+      alert("Please add at least one Google Sheet");
       return;
     }
 
@@ -324,8 +374,7 @@ function ConnectedSystemsPageContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           companyId: company.id,
-          sheetUrl: sheetsUrl.trim(),
-          tabName: sheetsTab.trim() || undefined,
+          sheets: googleSheets.map((s) => ({ url: s.url, tab: s.tab })),
         }),
       });
 
@@ -401,7 +450,31 @@ function ConnectedSystemsPageContent() {
   }
 
   // Calculate connected systems from real data
-  const hasGoogleSheets = !!(company.google_sheets_url && company.google_sheets_tab);
+  // Support both old format (single sheet) and new format (array)
+  let hasGoogleSheets = false;
+  let googleSheetsList: Array<{ url: string; tab: string }> = [];
+  
+  if (company.google_sheets_url) {
+    try {
+      const parsed = JSON.parse(company.google_sheets_url);
+      if (Array.isArray(parsed)) {
+        googleSheetsList = parsed;
+        hasGoogleSheets = parsed.length > 0;
+      } else {
+        // Old format
+        hasGoogleSheets = !!(company.google_sheets_url && company.google_sheets_tab);
+        if (hasGoogleSheets) {
+          googleSheetsList = [{ url: company.google_sheets_url, tab: company.google_sheets_tab || "" }];
+        }
+      }
+    } catch {
+      // Not JSON, treat as old format
+      hasGoogleSheets = !!(company.google_sheets_url && company.google_sheets_tab);
+      if (hasGoogleSheets) {
+        googleSheetsList = [{ url: company.google_sheets_url, tab: company.google_sheets_tab || "" }];
+      }
+    }
+  }
 
   // Prepare all systems with their actual connection status
   const allSystems = [
@@ -431,7 +504,7 @@ function ConnectedSystemsPageContent() {
       isPending: false,
       status: source.id === "sheets" ? (hasGoogleSheets ? "connected" : "not_connected") : source.status,
       masked: null,
-      accountId: source.id === "sheets" ? company.google_sheets_url : null,
+      accountId: source.id === "sheets" ? (googleSheetsList.length > 0 ? `${googleSheetsList.length} sheet${googleSheetsList.length > 1 ? "s" : ""}` : null) : null,
       lastSync: source.id === "sheets" ? company.google_sheets_last_sync_at : null,
     })),
   ];
@@ -911,51 +984,111 @@ function ConnectedSystemsPageContent() {
 
       {/* Google Sheets Manage Modal */}
       <Dialog open={sheetsManageModalOpen} onOpenChange={setSheetsManageModalOpen}>
-        <DialogContent className="bg-slate-950 border-slate-800 text-slate-50 w-[calc(100vw-2rem)] sm:max-w-lg">
+        <DialogContent className="bg-slate-950 border-slate-800 text-slate-50 w-[calc(100vw-2rem)] sm:max-w-xl max-h-[85vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle className="text-lg sm:text-xl">Manage Google Sheets Integration</DialogTitle>
             <DialogDescription className="text-sm text-slate-400">
-              Update your Google Sheets URL and sync KPIs.
+              Add multiple Google Sheets to sync KPIs from different sources.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label htmlFor="sheets-url" className="text-sm text-slate-300">
-                Google Sheets URL
-              </label>
-              <Input
-                id="sheets-url"
-                value={sheetsUrl}
-                onChange={(e) => setSheetsUrl(e.target.value)}
-                placeholder="https://docs.google.com/spreadsheets/d/..."
-                className="bg-slate-900 border-slate-700 text-slate-50"
-              />
-              <p className="text-xs text-slate-500">
-                Make sure the sheet is publicly accessible or shared with the service account.
-              </p>
-            </div>
+          <div className="space-y-4 py-4 overflow-x-hidden">
+            {/* Existing Sheets List */}
+            {googleSheets.length > 0 && (
+              <div className="space-y-3 overflow-x-hidden">
+                <label className="text-sm font-medium text-slate-300">Connected Sheets</label>
+                <div className="space-y-2 overflow-x-hidden">
+                  {googleSheets.map((sheet, index) => (
+                    <div
+                      key={sheet.id}
+                      className="bg-slate-900/50 border border-slate-700 rounded-lg p-3 flex items-start gap-3 overflow-x-hidden"
+                    >
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <div className="text-xs text-slate-400 mb-1">Sheet #{index + 1}</div>
+                        <div className="text-sm font-mono text-slate-300 break-all mb-1 break-words overflow-wrap-anywhere">
+                          {sheet.url}
+                        </div>
+                        {sheet.tab && (
+                          <div className="text-xs text-slate-500">Tab: {sheet.tab}</div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveSheet(sheet.id)}
+                        className="flex-shrink-0 text-red-400 hover:text-red-300 transition-colors p-1"
+                        title="Remove sheet"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
-            <div className="space-y-2">
-              <label htmlFor="sheets-tab" className="text-sm text-slate-300">
-                Tab Name (optional)
-              </label>
-              <Input
-                id="sheets-tab"
-                value={sheetsTab}
-                onChange={(e) => setSheetsTab(e.target.value)}
-                placeholder="Sheet1"
-                className="bg-slate-900 border-slate-700 text-slate-50"
-              />
-              <p className="text-xs text-slate-500">
-                Leave empty to use the first tab.
-              </p>
+            {/* Add New Sheet Form */}
+            <div className="border-t border-slate-700/50 pt-4 space-y-4">
+              <label className="text-sm font-medium text-slate-300">Add New Sheet</label>
+              <div className="space-y-2">
+                <label htmlFor="new-sheets-url" className="text-sm text-slate-300">
+                  Google Sheets URL
+                </label>
+                <Input
+                  id="new-sheets-url"
+                  value={newSheetUrl}
+                  onChange={(e) => setNewSheetUrl(e.target.value)}
+                  placeholder="https://docs.google.com/spreadsheets/d/..."
+                  className="bg-slate-900 border-slate-700 text-slate-50"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleAddSheet();
+                    }
+                  }}
+                />
+                <p className="text-xs text-slate-500">
+                  Make sure the sheet is publicly accessible or shared with the service account.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="new-sheets-tab" className="text-sm text-slate-300">
+                  Tab Name (optional)
+                </label>
+                <Input
+                  id="new-sheets-tab"
+                  value={newSheetTab}
+                  onChange={(e) => setNewSheetTab(e.target.value)}
+                  placeholder="Sheet1"
+                  className="bg-slate-900 border-slate-700 text-slate-50"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleAddSheet();
+                    }
+                  }}
+                />
+                <p className="text-xs text-slate-500">
+                  Leave empty to use the first tab.
+                </p>
+              </div>
+
+              <Button
+                onClick={handleAddSheet}
+                disabled={!newSheetUrl.trim()}
+                className="w-full bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add Sheet
+              </Button>
             </div>
 
             {hasGoogleSheets && (
               <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
                 <p className="text-sm text-emerald-300">
-                  ✓ Connected
+                  ✓ {googleSheets.length} sheet{googleSheets.length > 1 ? "s" : ""} connected
                   {company?.google_sheets_last_sync_at && (
                     <span className="text-xs text-emerald-400/70 ml-2">
                       Last synced: {formatLastSync(company.google_sheets_last_sync_at)}
@@ -984,7 +1117,7 @@ function ConnectedSystemsPageContent() {
             )}
             <Button
               onClick={handleSaveSheets}
-              disabled={savingSheets || !company?.id}
+              disabled={savingSheets || !company?.id || googleSheets.length === 0}
               className="bg-white text-slate-950 hover:bg-white/90 w-full sm:w-auto"
             >
               {savingSheets ? "Saving..." : "Save"}
