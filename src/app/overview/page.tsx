@@ -91,7 +91,7 @@ const DATA_SOURCES = [
   { id: "pipedrive", category: "CRM", name: "Pipedrive", status: "coming_soon" },
   { id: "fiken", category: "Accounting", name: "Fiken", status: "coming_soon" },
   { id: "tripletex", category: "Accounting", name: "Tripletex", status: "coming_soon" },
-  { id: "sheets", category: "Manual input", name: "Google Sheets", status: "connected" },
+  { id: "sheets", category: "Manual input", name: "Google Sheets", status: "coming_soon" }, // Status determined dynamically based on hasGoogleSheets
 ];
 
 function OverviewPageContent() {
@@ -787,7 +787,7 @@ function OverviewPageContent() {
             </div>
 
         {/* What's next hint */}
-        {connectedCount === 0 || !hasGoogleSheets ? (
+        {stripeStatus.status !== "connected" ? (
           <div className="bg-gradient-to-br from-[#2B74FF]/15 to-[#4D9FFF]/8 border border-[#2B74FF]/30 rounded-xl p-4">
             <div className="flex items-start gap-3">
               <svg className="w-5 h-5 text-[#4D9FFF] mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1004,30 +1004,37 @@ function OverviewPageContent() {
 
             {/* Other Data Sources */}
             <div className="space-y-0 divide-y divide-slate-800/50">
-              {DATA_SOURCES.filter((source) => source.id !== "stripe").map((source) => (
-                <div
-                  key={source.id}
-                  className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
-                >
-                  <div className="flex items-center gap-4 flex-1">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-100">{source.name}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">{source.category}</p>
+              {DATA_SOURCES.filter((source) => source.id !== "stripe").map((source) => {
+                // Determine actual status for Google Sheets based on real data
+                const isConnected = source.id === "sheets" 
+                  ? hasGoogleSheets 
+                  : source.status === "connected";
+                
+                return (
+                  <div
+                    key={source.id}
+                    className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
+                  >
+                    <div className="flex items-center gap-4 flex-1">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-100">{source.name}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">{source.category}</p>
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0 flex items-center gap-2">
+                      {isConnected ? (
+                        <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-[#2B74FF]/10 text-[#2B74FF] border border-[#2B74FF]/20">
+                          Connected
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-slate-800/60 text-slate-400 border border-slate-700/50">
+                          Coming soon
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <div className="flex-shrink-0 flex items-center gap-2">
-                    {source.status === "connected" ? (
-                      <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-[#2B74FF]/10 text-[#2B74FF] border border-[#2B74FF]/20">
-                        Connected
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-slate-800/60 text-slate-400 border border-slate-700/50">
-                        Coming soon
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
