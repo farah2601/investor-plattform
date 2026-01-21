@@ -262,6 +262,11 @@ async function handleOAuthCallback(
   const clientId = process.env.STRIPE_CLIENT_ID;
   const redirectUri = process.env.STRIPE_CONNECT_REDIRECT_URI;
 
+  // Log environment variables for debugging (safe - only suffix/prefix, not full secrets)
+  console.log("[stripe] secret suffix:", stripeSecret?.slice(-6));
+  console.log("[stripe] client id:", process.env.STRIPE_CLIENT_ID);
+  console.log("[stripe] redirect uri:", process.env.STRIPE_CONNECT_REDIRECT_URI);
+
   // Validate environment variables
   if (!stripeSecret) {
     console.error("[api/stripe/callback] STRIPE_SECRET_KEY is missing");
