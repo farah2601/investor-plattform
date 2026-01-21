@@ -330,7 +330,9 @@ async function handleOAuthCallback(
 
   // CRITICAL: redirect_uri must match EXACTLY what was used in /api/stripe/connect authorizeUrl
   // Log redirect_uri for debugging (safe - it's a URL, not a secret)
-  console.log("[stripe oauth] redirect_uri:", redirectUri);
+  console.log("[stripe oauth callback] redirect_uri:", redirectUri);
+  console.log("[stripe oauth callback] client_id prefix:", clientId.substring(0, 10));
+  console.log("[stripe oauth callback] secret_key mode:", isTestSecret ? "test" : isLiveSecret ? "live" : "unknown");
 
   // Exchange code -> token
   const form = new URLSearchParams();
@@ -340,6 +342,21 @@ async function handleOAuthCallback(
   // CRITICAL: redirect_uri must match EXACTLY what was sent in authorizeUrl
   // Stripe validates this string match, so any difference (trailing slash, encoding, etc.) will fail
   form.set("redirect_uri", redirectUri);
+
+  // Log request details BEFORE sending (safe - no secrets exposed)
+  console.log("[stripe oauth token exchange] Request details:", {
+    grant_type: "authorization_code",
+    code_length: code.length,
+    code_prefix: code.substring(0, 10) + "...", // First 10 chars only
+    redirect_uri: redirectUri, // Safe to log - it's a URL
+    redirect_uri_length: redirectUri.length,
+    client_secret_prefix: stripeSecret.substring(0, 10) + "...", // First 10 chars only
+    client_secret_length: stripeSecret.length,
+    form_body_length: form.toString().length,
+  });
+
+  // Log the exact redirect_uri that will be sent (for comparison with /connect)
+  console.log("[stripe oauth token exchange] redirect_uri being sent:", JSON.stringify(redirectUri));
 
   const tokenRes = await fetch("https://connect.stripe.com/oauth/token", {
     method: "POST",
