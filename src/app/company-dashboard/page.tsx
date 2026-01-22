@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { supabase } from "../../app/lib/supabaseClient";
+import { authedFetch } from "@/lib/authedFetch";
 import { cn } from "../../../lib/utils";
 import { KpiCard } from "../../components/ui/KpiCard";
 import { Button } from "../../components/ui/button";
@@ -52,13 +53,15 @@ type CompanyKpi = {
   growth_percent: number | null;
   lead_velocity: number | null;
 
+  // Google Sheets metadata
+  google_sheets_url?: string | null;
+  google_sheets_tab?: string | null;
+  google_sheets_last_sync_at?: string | null;
+  google_sheets_last_sync_by?: string | null;
+
   // agent metadata
   last_agent_run_at?: string | null;
   last_agent_run_by?: string | null;
-  
-  // Google Sheets metadata
-  google_sheets_last_sync_at?: string | null;
-  google_sheets_last_sync_by?: string | null;
 };
 
 type AgentLog = {
@@ -245,6 +248,15 @@ function RemoveAccessButton({
   );
 }
 
+const DATA_SOURCES = [
+  { id: "stripe", category: "Billing", name: "Stripe", status: "not_connected" },
+  { id: "hubspot", category: "CRM", name: "HubSpot", status: "coming_soon" },
+  { id: "pipedrive", category: "CRM", name: "Pipedrive", status: "coming_soon" },
+  { id: "fiken", category: "Accounting", name: "Fiken", status: "coming_soon" },
+  { id: "tripletex", category: "Accounting", name: "Tripletex", status: "coming_soon" },
+  { id: "sheets", category: "Manual input", name: "Google Sheets", status: "connected" },
+];
+
 function CompanyDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -292,6 +304,30 @@ function CompanyDashboardContent() {
   const [arrSeries, setArrSeries] = useState<Array<{ date: string; label: string; value: number | null }>>([]);
   const [mrrSeries, setMrrSeries] = useState<Array<{ date: string; label: string; value: number | null }>>([]);
   const [burnSeries, setBurnSeries] = useState<Array<{ date: string; label: string; value: number | null }>>([]);
+  const [kpiSources, setKpiSources] = useState<Record<string, string> | null>(null); // Source metadata from latest snapshot
+
+  // Stripe integration
+  const [stripeModalOpen, setStripeModalOpen] = useState(false);
+  const [stripeKey, setStripeKey] = useState("");
+  const [savingStripe, setSavingStripe] = useState(false);
+  const [stripeError, setStripeError] = useState<string | null>(null);
+  const [connectingStripe, setConnectingStripe] = useState(false); // Prevent double-clicks
+  const [syncingStripe, setSyncingStripe] = useState(false);
+  const [stripeStatus, setStripeStatus] = useState<{
+    status: "not_connected" | "pending" | "connected";
+    stripeAccountId: string | null;
+    connectedAt: string | null;
+    lastVerifiedAt: string | null;
+    masked: string | null;
+    pendingExpiresAt: string | null;
+  }>({
+    status: "not_connected",
+    stripeAccountId: null,
+    connectedAt: null,
+    lastVerifiedAt: null,
+    masked: null,
+    pendingExpiresAt: null,
+  });
 
   // User dropdown
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -314,6 +350,87 @@ function CompanyDashboardContent() {
       // Update currentCompanyId when URL changes
       const urlCompanyId = searchParams.get("companyId") || searchParams.get("company");
       setCurrentCompanyId(urlCompanyId);
+      
+      // Check for Stripe OAuth callback result
+      const stripeCallback = searchParams.get("stripe");
+      if (stripeCallback) {
+        // Refetch Stripe status to get latest state (if companyId available)
+        if (urlCompanyId) {
+          await loadStripeStatus(urlCompanyId);
+        }
+        
+        // Clean URL by removing query params (use router.replace for proper navigation)
+        const newSearchParams = new URLSearchParams(searchParams);
+        newSearchParams.delete("stripe");
+        newSearchParams.delete("msg"); // Also remove error message param
+        const cleanUrl = `${window.location.pathname}${newSearchParams.toString() ? `?${newSearchParams.toString()}` : ""}`;
+        
+        if (stripeCallback === "connected") {
+          // Success - show friendly message
+          // Using alert for now (can be replaced with toast component if available)
+          alert("Stripe connected successfully!");
+          // Refetch Stripe status and KPI snapshots
+          if (urlCompanyId) {
+            await Promise.all([
+              loadStripeStatus(urlCompanyId),
+              loadKpiHistory(urlCompanyId),
+            ]);
+          }
+        } else if (stripeCallback === "pending") {
+          // Account Links: Onboarding incomplete
+          alert("Stripe account setup is incomplete. Please complete the onboarding process.");
+        } else if (stripeCallback === "refresh") {
+          // Account Links: Link expired
+          alert("The Stripe connection link has expired. Please connect again.");
+        } else if (stripeCallback === "return") {
+          // Account Links: User returned from onboarding - verify account status
+          if (urlCompanyId) {
+            try {
+              const verifyRes = await fetch("/api/stripe/verify-account", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ companyId: urlCompanyId }),
+              });
+              
+              const verifyData = await verifyRes.json();
+              
+              if (verifyData.ok && verifyData.connected) {
+                alert("Stripe connected successfully!");
+                // Reload status and KPI snapshots to reflect connected state
+                await Promise.all([
+                  loadStripeStatus(urlCompanyId),
+                  loadKpiHistory(urlCompanyId),
+                ]);
+              } else {
+                // Account not fully onboarded yet
+                alert("Stripe account setup is incomplete. Please complete the onboarding process.");
+                await loadStripeStatus(urlCompanyId);
+              }
+            } catch (verifyError) {
+              console.error("Error verifying Stripe account:", verifyError);
+              alert("Stripe connection may be incomplete. Please check your Stripe status.");
+            }
+          }
+        } else if (stripeCallback === "error") {
+          // Show friendly error message - never show "Unauthorized" or raw errors
+          const errorMsg = searchParams.get("msg");
+          if (errorMsg) {
+            // Decode and show user-friendly message
+            try {
+              const decoded = decodeURIComponent(errorMsg);
+              alert(`Couldn't connect Stripe: ${decoded}. Try again.`);
+            } catch {
+              alert("Couldn't connect Stripe. Try again.");
+            }
+          } else {
+            alert("Couldn't connect Stripe. Try again.");
+          }
+        }
+        
+        // Use router.replace to clean URL without full reload
+        // This ensures query params are cleaned after processing
+        router.replace(cleanUrl);
+      }
       
       await loadData(urlCompanyId);
     }
@@ -402,15 +519,25 @@ function CompanyDashboardContent() {
         setArrSeries(json.arrSeries);
         setMrrSeries(json.mrrSeries);
         setBurnSeries(json.burnSeries);
+        
+        // Store sources metadata from latest snapshot (for UI display)
+        if (json.sources && typeof json.sources === "object") {
+          setKpiSources(json.sources as Record<string, string>);
+        } else {
+          setKpiSources(null);
+        }
+        
         console.log("[loadKpiHistory] Set chart series:", {
           arr: json.arrSeries.length,
           mrr: json.mrrSeries.length,
           burn: json.burnSeries.length,
+          sources: json.sources,
         });
       } else {
         setArrSeries([]);
         setMrrSeries([]);
         setBurnSeries([]);
+        setKpiSources(null);
         console.log("[loadKpiHistory] No snapshot data available, set empty arrays");
       }
     } catch (e) {
@@ -418,6 +545,7 @@ function CompanyDashboardContent() {
       setArrSeries([]);
       setMrrSeries([]);
       setBurnSeries([]);
+      setKpiSources(null);
     }
   }
 
@@ -596,6 +724,7 @@ function CompanyDashboardContent() {
         loadInsights(selectedCompany.id), 
         loadAgentLogs(selectedCompany.id),
         loadKpiHistory(selectedCompany.id),
+        loadStripeStatus(selectedCompany.id),
       ]);
     } else {
       setInsights([]);
@@ -643,6 +772,210 @@ function CompanyDashboardContent() {
     mrrChartData: mrrChartData.length,
     burnChartData: burnChartData.length,
   });
+
+  async function loadStripeStatus(companyId: string) {
+    try {
+      const res = await authedFetch(`/api/stripe/status?companyId=${companyId}`, {
+        cache: "no-store",
+      });
+      const data = await res.json();
+      if (data?.ok) {
+        setStripeStatus({
+          status: data.status || "not_connected",
+          stripeAccountId: data.stripeAccountId || null,
+          connectedAt: data.connectedAt || null,
+          lastVerifiedAt: data.lastVerifiedAt || null,
+          masked: data.masked || null,
+          pendingExpiresAt: data.pendingExpiresAt || null,
+        });
+      } else {
+        // Handle error gracefully - set to not_connected
+        setStripeStatus({
+          status: "not_connected",
+          stripeAccountId: null,
+          connectedAt: null,
+          lastVerifiedAt: null,
+          masked: null,
+          pendingExpiresAt: null,
+        });
+      }
+    } catch (e: any) {
+      // Never show "Unauthorized" or raw errors to user
+      console.error("Failed to load Stripe status", e);
+      if (e?.message === "Not authenticated") {
+        // Silently fail - user will need to refresh/auth
+        return;
+      }
+      setStripeStatus({
+        status: "not_connected",
+        stripeAccountId: null,
+        connectedAt: null,
+        lastVerifiedAt: null,
+        masked: null,
+        pendingExpiresAt: null,
+      });
+    }
+  }
+
+  async function handleSaveStripeKey() {
+    if (!currentCompanyId) {
+      alert("No company selected");
+      return;
+    }
+
+    if (!stripeKey.trim()) {
+      setStripeError("Please enter a Stripe secret key");
+      return;
+    }
+
+    setSavingStripe(true);
+    setStripeError(null);
+
+    try {
+      const res = await authedFetch("/api/stripe/save-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: currentCompanyId,
+          secretKey: stripeKey.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Failed to save Stripe key");
+      }
+
+      // Close modal and clear input immediately (never show secret key)
+      setStripeModalOpen(false);
+      setStripeKey("");
+      setStripeError(null);
+
+      // Re-fetch status to get latest state (including masked key)
+      await loadStripeStatus(currentCompanyId);
+    } catch (e: any) {
+      // Keep modal open on error, show friendly error message
+      // Never show "Unauthorized" or raw errors
+      if (e?.message === "Not authenticated") {
+        // Silently fail - user will need to refresh/auth
+        setStripeModalOpen(false);
+        return;
+      }
+      setStripeError("Failed to save Stripe key. Please try again.");
+    } finally {
+      setSavingStripe(false);
+    }
+  }
+
+  async function handleSyncStripe() {
+    if (!currentCompanyId) {
+      alert("No company selected");
+      return;
+    }
+
+    setSyncingStripe(true);
+    try {
+      // Use /api/agent/run-all which triggers MCP's KPI refresh (includes Stripe sync)
+      const res = await authedFetch("/api/agent/run-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: currentCompanyId }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Failed to sync data via MCP");
+      }
+
+      // Refetch Stripe status and KPI snapshots to refresh charts/cards
+      await Promise.all([
+        loadStripeStatus(currentCompanyId),
+        loadKpiHistory(currentCompanyId),
+      ]);
+
+      // Show success message
+      const message = data.message || `Data synced successfully! ${data.stripeProcessed || 0} Stripe period(s) processed.`;
+      alert(message);
+    } catch (e: any) {
+      console.error("Error syncing via MCP:", e);
+      // Show friendly error message
+      const errorMsg = e?.message || "Failed to sync Stripe data";
+      alert("Error: " + errorMsg.replace("Unauthorized", "Please refresh and try again"));
+    } finally {
+      setSyncingStripe(false);
+    }
+  }
+
+  async function handleDisconnectStripe() {
+    if (!currentCompanyId) {
+      alert("No company selected");
+      return;
+    }
+
+    if (!confirm("Are you sure you want to disconnect Stripe? This will remove your Stripe key.")) {
+      return;
+    }
+
+    try {
+      const res = await authedFetch("/api/stripe/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: currentCompanyId }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Failed to disconnect Stripe");
+      }
+
+      // Re-fetch status to get latest state
+      await loadStripeStatus(currentCompanyId);
+    } catch (e: any) {
+      console.error("Error disconnecting Stripe:", e);
+      alert("Error: " + (e?.message || "Failed to disconnect Stripe"));
+    }
+  }
+
+  async function handleConnectStripe() {
+    if (!currentCompanyId) {
+      alert("No company selected");
+      return;
+    }
+
+    // Prevent double-click/connect spam
+    if (connectingStripe) {
+      return; // Already connecting, ignore additional clicks
+    }
+
+    setConnectingStripe(true);
+
+    try {
+      // Fetch authorizeUrl with Authorization header
+      const res = await authedFetch(`/api/stripe/connect?companyId=${currentCompanyId}`, {
+        cache: "no-store",
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data?.ok || !data?.authorizeUrl) {
+        throw new Error(data?.error || "Failed to get Stripe authorization URL");
+      }
+
+      // Redirect browser to Stripe OAuth page
+      // Note: This navigation will leave the page, so connectingStripe state will reset
+      window.location.assign(data.authorizeUrl);
+    } catch (e: any) {
+      console.error("Error connecting Stripe:", e);
+      // Never show "Unauthorized" or raw errors to user
+      if (e?.message === "Not authenticated") {
+        // Silently fail - user will need to refresh/auth
+        setConnectingStripe(false);
+        return;
+      }
+      alert("Failed to connect Stripe. Please try again.");
+      setConnectingStripe(false);
+    }
+    // Note: If redirect succeeds, we won't reach here, but if it fails, reset state
+  }
 
   async function copyLink() {
     if (!investorUrl) return;
@@ -1183,8 +1516,179 @@ function CompanyDashboardContent() {
             </div>
           </section>
 
-          {/* Data Sources section removed - now managed in Company Overview → Connected Systems */}
-          {/* All backend logic and functions remain intact for potential future use */}
+          {/* Data Sources */}
+          <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 space-y-4 light:border-slate-200 light:bg-white">
+            <div>
+              <h2 className="text-sm sm:text-base font-medium text-slate-200 light:text-slate-950">Data Sources</h2>
+              <p className="text-xs text-slate-500 mt-1 light:text-slate-600">
+                Automatically keeps your metrics up to date.
+              </p>
+            </div>
+
+            {/* Stripe Integration Card */}
+            <div className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-4 sm:p-5 space-y-4">
+              <div>
+                <h3 className="text-sm font-medium text-slate-100">Stripe</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Connect your Stripe account to automatically sync revenue and subscription metrics.
+                </p>
+              </div>
+
+              {/* Status Display */}
+              <div className="flex items-center gap-2">
+                {stripeStatus.status === "connected" ? (
+                  <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-[#2B74FF]/10 text-[#2B74FF] border border-[#2B74FF]/20">
+                    Connected
+                  </span>
+                ) : stripeStatus.status === "pending" ? (
+                  <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                    Pending — complete connection in Stripe
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-slate-800/60 text-slate-400 border border-slate-700/50">
+                    Not connected
+                  </span>
+                )}
+                {stripeStatus.masked && (
+                  <span className="text-xs text-slate-500 font-mono">
+                    {stripeStatus.masked}
+                  </span>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                {stripeStatus.status === "connected" ? (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleSyncStripe}
+                      disabled={syncingStripe}
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-100 border-slate-600 disabled:opacity-50"
+                    >
+                      {syncingStripe ? "Syncing…" : "Sync now"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleConnectStripe}
+                      disabled={connectingStripe}
+                      className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white border-[#2B74FF] disabled:opacity-50"
+                    >
+                      {connectingStripe ? "Redirecting…" : "Reconnect Stripe"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleDisconnectStripe}
+                      className="border-red-500/30 text-red-400 bg-red-500/10 hover:bg-red-500/20"
+                    >
+                      Disconnect
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      size="sm"
+                      onClick={handleConnectStripe}
+                      disabled={connectingStripe}
+                      className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white disabled:opacity-50"
+                    >
+                      {connectingStripe ? "Redirecting…" : "Connect Stripe"}
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (company?.id) {
+                          setStripeModalOpen(true);
+                        }
+                      }}
+                      className="text-xs text-slate-400 hover:text-slate-300 underline"
+                    >
+                      Enter key manually
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Trust Message */}
+              <p className="text-xs text-slate-500">
+                We never store your Stripe secret key unless you choose manual setup.
+              </p>
+            </div>
+
+            {/* Google Sheets Integration Card */}
+            {(() => {
+              // Check if Google Sheets is connected:
+              // 1. google_sheets_last_sync_at exists (or google_sheets_url exists)
+              // 2. AND there is at least 1 snapshot KPI with source="sheet" in latest snapshot
+              const hasSheetsUrl = !!company?.google_sheets_url;
+              const hasSheetsSync = !!company?.google_sheets_last_sync_at;
+              const hasSheetSource = kpiSources && Object.values(kpiSources).some(s => s === "sheet");
+              const isSheetsConnected = (hasSheetsUrl || hasSheetsSync) && hasSheetSource;
+              
+              return (
+                <div className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-4 sm:p-5 space-y-4">
+                  <div>
+                    <h3 className="text-sm font-medium text-slate-100">Google Sheets</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Import KPIs directly from spreadsheets.
+                    </p>
+                  </div>
+
+                  {/* Status Display */}
+                  <div className="flex items-center gap-2">
+                    {isSheetsConnected ? (
+                      <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-[#2B74FF]/10 text-[#2B74FF] border border-[#2B74FF]/20">
+                        Connected
+                      </span>
+                    ) : hasSheetsUrl ? (
+                      <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                        Configured — sync to import data
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-slate-800/60 text-slate-400 border border-slate-700/50">
+                        Not connected
+                      </span>
+                    )}
+                    {company?.google_sheets_last_sync_at && (
+                      <span className="text-xs text-slate-500">
+                        Last sync: <FormattedDate date={company.google_sheets_last_sync_at} />
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Info: Sheets sync is handled by MCP via "Run Valyxo Agent" */}
+                  <p className="text-xs text-slate-500">
+                    Sheets are synced automatically when you run the Valyxo Agent.
+                  </p>
+                </div>
+              );
+            })()}
+
+            {/* Other Data Sources */}
+            <div className="space-y-0 divide-y divide-slate-800/50">
+              {DATA_SOURCES.filter((source) => source.id !== "stripe" && source.id !== "sheets").map((source) => (
+                <div
+                  key={source.id}
+                  className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
+                >
+                  <div className="flex items-center gap-4 flex-1">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-100">{source.name}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{source.category}</p>
+                    </div>
+                  </div>
+                  <div className="flex-shrink-0 flex items-center gap-2">
+                    <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-slate-800/60 text-slate-400 border border-slate-700/50">
+                      Coming soon
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
 
           {/* Investor Access */}
           <section id="investor-access" className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 space-y-4 light:border-slate-200 light:bg-white">
@@ -1372,6 +1876,68 @@ function CompanyDashboardContent() {
               className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white w-full sm:w-auto h-10 sm:h-9 px-4"
             >
               {savingKpi ? "Saving..." : "Save KPIs"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Stripe Connect Modal */}
+      <Dialog open={stripeModalOpen} onOpenChange={setStripeModalOpen}>
+        <DialogContent className="bg-slate-950 border-slate-800 text-slate-50 w-[calc(100vw-2rem)] sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg sm:text-xl">Connect Stripe</DialogTitle>
+            <DialogDescription className="text-sm text-slate-400">
+              Advanced: only use this if you can't use Connect.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label htmlFor="stripe-key" className="text-sm text-slate-300">
+                Stripe Secret Key
+              </label>
+              <Input
+                id="stripe-key"
+                type="password"
+                value={stripeKey}
+                onChange={(e) => {
+                  setStripeKey(e.target.value);
+                  setStripeError(null);
+                }}
+                placeholder="sk_live_..."
+                className="bg-slate-900 border-slate-700 text-slate-50 font-mono text-sm"
+              />
+              <p className="text-xs text-slate-500">
+                We use this key only to read billing metrics. It is encrypted and never shown again.
+              </p>
+            </div>
+
+            {stripeError && (
+              <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3">
+                <p className="text-sm text-red-300">{stripeError}</p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              onClick={handleSaveStripeKey}
+              disabled={savingStripe || !stripeKey.trim() || !currentCompanyId}
+              className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white w-full sm:w-auto"
+            >
+              {savingStripe ? "Verifying..." : "Save & Verify"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setStripeModalOpen(false);
+                setStripeKey("");
+                setStripeError(null);
+              }}
+              disabled={savingStripe}
+              className="border-slate-700 text-slate-300 bg-slate-800/40 hover:bg-slate-700/50 w-full sm:w-auto"
+            >
+              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>

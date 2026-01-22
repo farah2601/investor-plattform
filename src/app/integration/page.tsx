@@ -151,7 +151,8 @@ function IntegrationsContent() {
     setSyncingKPIs(true);
     setSyncSuccess(false);
     try {
-      const res = await fetch("/api/sheets/sync", {
+      // Use MCP agent run-all instead of direct sheets sync
+      const res = await fetch("/api/agent/run-all", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ companyId }),
@@ -159,9 +160,7 @@ function IntegrationsContent() {
 
       const data = await res.json();
       if (!res.ok || !data?.ok) {
-        const errorMsg = data?.details 
-          ? `${data.error} — ${data.details}`
-          : data?.error || "Failed to sync KPIs";
+        const errorMsg = data?.error || "Failed to sync KPIs";
         throw new Error(errorMsg);
       }
 

@@ -1,0 +1,427 @@
+/**
+ * KPI Snapshot utilities for MCP
+ * 
+ * Handles merging, computing derived metrics, and snapshot operations.
+ */
+
+type KpiSource = "stripe" | "sheet" | "manual" | "computed";
+
+type KpiValue = {
+  value: number | null;
+  source: KpiSource;
+  updated_at: string | null;
+};
+
+export type KpiSnapshotKpis = {
+  mrr: KpiValue;
+  arr: KpiValue;
+  mrr_growth_mom: KpiValue;
+  churn: KpiValue;
+  net_revenue: KpiValue;
+  failed_payment_rate: KpiValue;
+  refund_rate: KpiValue;
+  burn_rate: KpiValue;
+  cash_balance: KpiValue;
+  customers: KpiValue;
+  runway_months: KpiValue;
+};
+
+const KPI_KEYS: Array<keyof KpiSnapshotKpis> = [
+  "mrr",
+  "arr",
+  "mrr_growth_mom",
+  "churn",
+  "net_revenue",
+  "failed_payment_rate",
+  "refund_rate",
+  "burn_rate",
+  "cash_balance",
+  "customers",
+  "runway_months",
+];
+
+function createKpiValue(
+  value: number | null,
+  source: KpiSource,
+  updated_at: string | null = null
+): KpiValue {
+  return {
+    value,
+    source,
+    updated_at: updated_at || (value !== null ? new Date().toISOString() : null),
+  };
+}
+
+/**
+ * Extract numeric value from KPI (handles both old flat format and new nested format)
+ */
+export function extractKpiValue(kpi: unknown): number | null {
+  if (kpi === null || kpi === undefined) {
+    return null;
+  }
+
+  // New format: {value, source, updated_at}
+  if (typeof kpi === "object" && kpi !== null && "value" in kpi) {
+    const kpiValue = kpi as { value: unknown };
+    if (typeof kpiValue.value === "number") {
+      return kpiValue.value;
+    }
+    if (kpiValue.value === null) {
+      return null;
+    }
+    const num = Number(kpiValue.value);
+    return isNaN(num) ? null : num;
+  }
+
+  // Old format: direct number
+  if (typeof kpi === "number") {
+    return kpi;
+  }
+
+  const num = Number(kpi);
+  return isNaN(num) ? null : num;
+}
+
+/**
+ * Extract source from KPI
+ */
+export function extractKpiSource(kpi: unknown): KpiSource | null {
+  if (kpi === null || kpi === undefined) {
+    return null;
+  }
+
+  if (typeof kpi === "object" && kpi !== null && "source" in kpi) {
+    const kpiValue = kpi as { source: unknown };
+    if (typeof kpiValue.source === "string") {
+      return kpiValue.source as KpiSource;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Merge sheet values into existing snapshot KPIs with safe merge rules
+ * 
+ * Rules:
+ * - If existing KPI is from "stripe" or "manual" with non-null value -> keep it
+ * - If existing KPI value is null -> allow sheet to fill it
+ * - If existing KPI is "sheet" -> overwrite with new sheet value (latest wins)
+ * - If sheet value is null -> do NOT overwrite an existing non-null value
+ */
+export function mergeSheetValuesIntoKpis(
+  existingKpis: any,
+  sheetValues: Record<string, number | null>,
+  updatedAtIso: string
+): KpiSnapshotKpis {
+  const now = updatedAtIso || new Date().toISOString();
+  
+  const result: Partial<KpiSnapshotKpis> = {};
+
+  for (const kpiKey of KPI_KEYS) {
+    const existingKpi = existingKpis?.[kpiKey];
+    const existingValue = extractKpiValue(existingKpi);
+    const existingSource = extractKpiSource(existingKpi);
+    const sheetValue = sheetValues[kpiKey] ?? null;
+
+    let finalValue: number | null = null;
+    let finalSource: KpiSource = "sheet";
+    let finalUpdatedAt: string | null = null;
+
+    if (existingValue !== null) {
+      // Existing value exists
+      if (existingSource === "stripe" || existingSource === "manual") {
+        // Preserve Stripe/manual values
+        finalValue = existingValue;
+        finalSource = existingSource;
+        if (existingKpi && typeof existingKpi === "object" && "updated_at" in existingKpi) {
+          finalUpdatedAt = existingKpi.updated_at as string | null;
+        }
+      } else if (existingSource === "sheet") {
+        // Overwrite sheet values (latest wins)
+        finalValue = sheetValue;
+        finalSource = "sheet";
+        finalUpdatedAt = sheetValue !== null ? now : null;
+      } else {
+        // Old format or unknown source - treat as sheet if sheet value exists
+        if (sheetValue !== null) {
+          finalValue = sheetValue;
+          finalSource = "sheet";
+          finalUpdatedAt = now;
+        } else {
+          finalValue = existingValue;
+          finalSource = existingSource || "sheet";
+        }
+      }
+    } else {
+      // Existing value is null - allow sheet to fill it
+      finalValue = sheetValue;
+      finalSource = "sheet";
+      finalUpdatedAt = sheetValue !== null ? now : null;
+    }
+
+    result[kpiKey] = createKpiValue(finalValue, finalSource, finalUpdatedAt);
+  }
+
+  return result as KpiSnapshotKpis;
+}
+
+/**
+ * Compute derived metrics from base metrics
+ * 
+ * Takes numeric values (not KpiValue objects) and returns computed KpiValue objects.
+ */
+export function computeDerivedMetrics(
+  mrr: number | null,
+  burnRate: number | null,
+  cashBalance: number | null,
+  previousMonthMrr: number | null
+): {
+  arr: KpiValue;
+  mrr_growth_mom: KpiValue;
+  runway_months: KpiValue;
+} {
+  const now = new Date().toISOString();
+
+  // ARR = MRR * 12 (run-rate)
+  const arrValue = mrr !== null ? mrr * 12 : null;
+  const arr = createKpiValue(arrValue, "computed", arrValue !== null ? now : null);
+
+  // MRR Growth MoM
+  let mrrGrowthValue: number | null = null;
+  if (mrr !== null && previousMonthMrr !== null && previousMonthMrr > 0) {
+    mrrGrowthValue = ((mrr - previousMonthMrr) / previousMonthMrr) * 100;
+    mrrGrowthValue = Math.round(mrrGrowthValue * 10) / 10;
+  }
+  const mrr_growth_mom = createKpiValue(
+    mrrGrowthValue,
+    "computed",
+    mrrGrowthValue !== null ? now : null
+  );
+
+  // Runway months = cash_balance / burn_rate
+  let runwayValue: number | null = null;
+  if (cashBalance !== null && burnRate !== null && burnRate > 0) {
+    runwayValue = cashBalance / burnRate;
+    runwayValue = Math.round(runwayValue * 10) / 10;
+  }
+  const runway_months = createKpiValue(
+    runwayValue,
+    "computed",
+    runwayValue !== null ? now : null
+  );
+
+  return {
+    arr,
+    mrr_growth_mom,
+    runway_months,
+  };
+}
+
+/**
+ * Get default empty KPI snapshot
+ */
+export function getDefaultKpiSnapshot(): KpiSnapshotKpis {
+  const now = new Date().toISOString();
+  return {
+    mrr: createKpiValue(null, "computed"),
+    arr: createKpiValue(null, "computed"),
+    mrr_growth_mom: createKpiValue(null, "computed"),
+    churn: createKpiValue(null, "computed"),
+    net_revenue: createKpiValue(null, "computed"),
+    failed_payment_rate: createKpiValue(null, "computed"),
+    refund_rate: createKpiValue(null, "computed"),
+    burn_rate: createKpiValue(null, "computed"),
+    cash_balance: createKpiValue(null, "computed"),
+    customers: createKpiValue(null, "computed"),
+    runway_months: createKpiValue(null, "computed"),
+  };
+}
+
+/**
+ * Apply source priority to merge sheet and stripe KPIs
+ * 
+ * Priority rules (MVP):
+ * - mrr/arr -> Stripe if method="billing" and stripe mrr exists, else Sheets
+ * - net_revenue/refund_rate/failed_payment_rate -> Stripe (if exists)
+ * - burn_rate/runway_months/cash_balance -> Sheets (until bank/accounting integrations)
+ * - churn -> Sheets if exists, else Stripe if can calculate safely, else null
+ * - customers -> Stripe if exists, else Sheets
+ * 
+ * Returns merged KPIs and source metadata
+ */
+export function applySourcePriority(
+  existingKpis: any,
+  sheetKpis: Record<string, number | null> | null,
+  stripeKpis: Record<string, number | null> | null,
+  stripeMethod: "billing" | "payments" | null,
+  nowIso: string
+): {
+  mergedKpis: KpiSnapshotKpis;
+  kpiSources: Record<string, KpiSource>;
+} {
+  const now = nowIso || new Date().toISOString();
+  const result: Partial<KpiSnapshotKpis> = {};
+  const kpiSources: Record<string, KpiSource> = {};
+
+  // Initialize with existing KPIs if they exist
+  if (existingKpis) {
+    for (const key of KPI_KEYS) {
+      result[key] = { ...existingKpis[key] };
+    }
+  } else {
+    // No existing KPIs - initialize with defaults
+    for (const key of KPI_KEYS) {
+      result[key] = createKpiValue(null, "computed");
+    }
+  }
+
+  // Apply source priority per KPI
+  for (const key of KPI_KEYS) {
+    const existingKpi = result[key];
+    const existingValue = extractKpiValue(existingKpi);
+    const existingSource = extractKpiSource(existingKpi);
+
+    const sheetValue = sheetKpis?.[key] ?? null;
+    const stripeValue = stripeKpis?.[key] ?? null;
+
+    let finalValue: number | null = null;
+    let finalSource: KpiSource = "computed";
+    let finalUpdatedAt: string | null = null;
+
+    // Priority rules per KPI type
+    if (key === "mrr" || key === "arr") {
+      // MRR/ARR: Stripe (billing) > Sheets > existing
+      if (stripeValue !== null && stripeMethod === "billing") {
+        finalValue = stripeValue;
+        finalSource = "stripe";
+        finalUpdatedAt = now;
+      } else if (sheetValue !== null) {
+        finalValue = sheetValue;
+        finalSource = "sheet";
+        finalUpdatedAt = now;
+      } else if (existingValue !== null) {
+        finalValue = existingValue;
+        finalSource = existingSource || "computed";
+        if (existingKpi && typeof existingKpi === "object" && "updated_at" in existingKpi) {
+          finalUpdatedAt = existingKpi.updated_at as string | null;
+        }
+      }
+    } else if (key === "net_revenue" || key === "refund_rate" || key === "failed_payment_rate") {
+      // Revenue metrics: Stripe > Sheets > existing
+      if (stripeValue !== null) {
+        finalValue = stripeValue;
+        finalSource = "stripe";
+        finalUpdatedAt = now;
+      } else if (sheetValue !== null) {
+        finalValue = sheetValue;
+        finalSource = "sheet";
+        finalUpdatedAt = now;
+      } else if (existingValue !== null) {
+        finalValue = existingValue;
+        finalSource = existingSource || "computed";
+        if (existingKpi && typeof existingKpi === "object" && "updated_at" in existingKpi) {
+          finalUpdatedAt = existingKpi.updated_at as string | null;
+        }
+      }
+    } else if (key === "burn_rate" || key === "cash_balance" || key === "runway_months") {
+      // Financial metrics: Sheets > Stripe > existing
+      if (sheetValue !== null) {
+        finalValue = sheetValue;
+        finalSource = "sheet";
+        finalUpdatedAt = now;
+      } else if (stripeValue !== null) {
+        finalValue = stripeValue;
+        finalSource = "stripe";
+        finalUpdatedAt = now;
+      } else if (existingValue !== null) {
+        finalValue = existingValue;
+        finalSource = existingSource || "computed";
+        if (existingKpi && typeof existingKpi === "object" && "updated_at" in existingKpi) {
+          finalUpdatedAt = existingKpi.updated_at as string | null;
+        }
+      }
+    } else if (key === "churn") {
+      // Churn: Sheets > Stripe (if safe) > existing
+      if (sheetValue !== null) {
+        finalValue = sheetValue;
+        finalSource = "sheet";
+        finalUpdatedAt = now;
+      } else if (stripeValue !== null) {
+        // Only use Stripe churn if we can calculate it safely
+        finalValue = stripeValue;
+        finalSource = "stripe";
+        finalUpdatedAt = now;
+      } else if (existingValue !== null) {
+        finalValue = existingValue;
+        finalSource = existingSource || "computed";
+        if (existingKpi && typeof existingKpi === "object" && "updated_at" in existingKpi) {
+          finalUpdatedAt = existingKpi.updated_at as string | null;
+        }
+      }
+    } else if (key === "customers") {
+      // Customers: Stripe > Sheets > existing
+      if (stripeValue !== null) {
+        finalValue = stripeValue;
+        finalSource = "stripe";
+        finalUpdatedAt = now;
+      } else if (sheetValue !== null) {
+        finalValue = sheetValue;
+        finalSource = "sheet";
+        finalUpdatedAt = now;
+      } else if (existingValue !== null) {
+        finalValue = existingValue;
+        finalSource = existingSource || "computed";
+        if (existingKpi && typeof existingKpi === "object" && "updated_at" in existingKpi) {
+          finalUpdatedAt = existingKpi.updated_at as string | null;
+        }
+      }
+    } else {
+      // Other KPIs: Sheets > Stripe > existing
+      if (sheetValue !== null) {
+        finalValue = sheetValue;
+        finalSource = "sheet";
+        finalUpdatedAt = now;
+      } else if (stripeValue !== null) {
+        finalValue = stripeValue;
+        finalSource = "stripe";
+        finalUpdatedAt = now;
+      } else if (existingValue !== null) {
+        finalValue = existingValue;
+        finalSource = existingSource || "computed";
+        if (existingKpi && typeof existingKpi === "object" && "updated_at" in existingKpi) {
+          finalUpdatedAt = existingKpi.updated_at as string | null;
+        }
+      }
+    }
+
+    // Preserve existing non-null values from higher-priority sources
+    if (existingValue !== null) {
+      if (existingSource === "stripe" && finalSource === "sheet") {
+        // Keep Stripe value if it exists
+        finalValue = existingValue;
+        finalSource = existingSource;
+        if (existingKpi && typeof existingKpi === "object" && "updated_at" in existingKpi) {
+          finalUpdatedAt = existingKpi.updated_at as string | null;
+        }
+      } else if (existingSource === "manual") {
+        // Always preserve manual values
+        finalValue = existingValue;
+        finalSource = existingSource;
+        if (existingKpi && typeof existingKpi === "object" && "updated_at" in existingKpi) {
+          finalUpdatedAt = existingKpi.updated_at as string | null;
+        }
+      }
+    }
+
+    result[key] = createKpiValue(finalValue, finalSource, finalUpdatedAt);
+    if (finalValue !== null) {
+      kpiSources[key] = finalSource;
+    }
+  }
+
+  return {
+    mergedKpis: result as KpiSnapshotKpis,
+    kpiSources,
+  };
+}
