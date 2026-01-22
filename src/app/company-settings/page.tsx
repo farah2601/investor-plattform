@@ -166,6 +166,7 @@ function CompanySettingsContent() {
 
   const [teamRoles, setTeamRoles] = useState<TeamRole[]>([]);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [inviteForm, setInviteForm] = useState({
     email: "",
     role: "viewer" as "admin" | "finance" | "viewer",
@@ -576,6 +577,64 @@ function CompanySettingsContent() {
       setUploadingLogo(false);
     }
   };
+
+  async function handleDeleteCompany() {
+    if (!companyId) return;
+
+    // Fetch company name for confirmation message
+    let companyName = "this company";
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const { data: companyData } = await supabase
+          .from("companies")
+          .select("name")
+          .eq("id", companyId)
+          .maybeSingle();
+        if (companyData?.name) {
+          companyName = companyData.name;
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching company name:", err);
+    }
+
+    const confirmed = confirm(
+      `Are you sure you want to delete "${companyName}"? This action cannot be undone and will delete all associated data.`
+    );
+
+    if (!confirmed) return;
+
+    setDeleting(true);
+    setError(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        throw new Error("Not authenticated");
+      }
+
+      const res = await fetch(`/api/companies/${companyId}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData?.error || "Failed to delete company");
+      }
+
+      // Company deleted successfully - reload page to show updated state
+      window.location.href = "/overview";
+    } catch (err) {
+      console.error("Error deleting company:", err);
+      setError(err instanceof Error ? err.message : "Failed to delete company");
+      setDeleting(false);
+    }
+  }
 
   const handleInviteTeamMember = async () => {
     if (!inviteForm.email.trim()) {
@@ -1396,6 +1455,11 @@ function CompanySettingsContent() {
                   <p className="text-sm text-slate-400 mb-4">
                     Once you delete a company, there is no going back. Please be certain.
                   </p>
+                  {error && (
+                    <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+                      <p className="text-sm text-red-400">{error}</p>
+                    </div>
+                  )}
                   <Button
                     onClick={handleDeleteCompany}
                     disabled={deleting}

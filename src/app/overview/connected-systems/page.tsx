@@ -23,7 +23,7 @@ const DATA_SOURCES = [
   { id: "sheets", category: "Manual input", name: "Google Sheets", status: "coming_soon" }, // Status determined dynamically based on hasGoogleSheets
 ];
 
-function ConnectedSystemsPageContent() {
+function ConnectedSystemsPageContentInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [companyId, setCompanyId] = useState<string | null>(null);
@@ -1145,7 +1145,7 @@ export default function ConnectedSystemsPage() {
         </div>
       </AppShell>
     }>
-      <ConnectedSystemsPageContent />
+      <ConnectedSystemsPageContentInner />
     </Suspense>
   );
 }
