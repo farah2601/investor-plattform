@@ -1,8 +1,5 @@
 "use client";
 
-// Force dynamic rendering for this route since it uses search params
-export const dynamic = 'force-dynamic';
-
 import { CompanyProvider } from "@/lib/company-context";
 
 export default function CompanySettingsLayout({

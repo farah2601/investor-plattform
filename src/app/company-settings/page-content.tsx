@@ -1565,7 +1565,3 @@ export function CompanySettingsContent() {
     </AppShell>
   );
 }
-
-// Server component wrapper to ensure Suspense boundary is recognized
-// Export as named export for wrapper
-export { CompanySettingsContent };
