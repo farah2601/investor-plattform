@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getAuthenticatedUser } from "@/lib/server/auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -136,6 +137,70 @@ export async function GET(
           "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
         },
       }
+    );
+  }
+}
+
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: companyId } = await params;
+
+    if (!companyId) {
+      return NextResponse.json({ error: "Missing company ID" }, { status: 400 });
+    }
+
+    if (!isValidUUID(companyId)) {
+      return NextResponse.json(
+        { error: "Invalid company ID format (must be UUID)" },
+        { status: 400 }
+      );
+    }
+
+    // Verify user is authenticated
+    const { user, error: authError } = await getAuthenticatedUser(req);
+    if (authError || !user) {
+      return NextResponse.json({ error: authError || "Unauthorized" }, { status: 401 });
+    }
+
+    // Verify company exists and user owns it
+    const { data: company, error: companyError } = await supabaseAdmin
+      .from("companies")
+      .select("id, owner_id")
+      .eq("id", companyId)
+      .single();
+
+    if (companyError || !company) {
+      return NextResponse.json({ error: "Company not found" }, { status: 404 });
+    }
+
+    // Verify ownership
+    if (company.owner_id !== user.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    // Delete company (cascade will handle related records)
+    const { error: deleteError } = await supabaseAdmin
+      .from("companies")
+      .delete()
+      .eq("id", companyId);
+
+    if (deleteError) {
+      console.error("[api/companies/[id]] Delete error:", deleteError);
+      return NextResponse.json(
+        { error: "Failed to delete company", details: deleteError.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ ok: true, message: "Company deleted successfully" });
+  } catch (err: any) {
+    console.error("[api/companies/[id]] Unexpected error during delete:", err);
+    return NextResponse.json(
+      { error: err?.message || "Unknown error" },
+      { status: 500 }
     );
   }
 }

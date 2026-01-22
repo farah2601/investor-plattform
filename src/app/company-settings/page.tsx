@@ -123,6 +123,7 @@ function CompanySettingsContent() {
   );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [companyId, setCompanyId] = useState<string | null>(contextCompanyId);
 
   // Settings state
@@ -1386,6 +1387,26 @@ function CompanySettingsContent() {
                 </Button>
               </div>
             </Card>
+
+            {/* Danger Zone */}
+            {companyId && (
+              <Card className="mt-6 border-red-500/30" style={{ backgroundColor: 'var(--panel)', borderColor: 'var(--border)' }}>
+                <div className="p-6">
+                  <h3 className="text-lg font-semibold text-red-400 mb-2">Danger Zone</h3>
+                  <p className="text-sm text-slate-400 mb-4">
+                    Once you delete a company, there is no going back. Please be certain.
+                  </p>
+                  <Button
+                    onClick={handleDeleteCompany}
+                    disabled={deleting}
+                    variant="destructive"
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    {deleting ? "Deleting..." : "Delete Company"}
+                  </Button>
+                </div>
+              </Card>
+            )}
           </main>
         </div>
       </div>

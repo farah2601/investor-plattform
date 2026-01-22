@@ -286,7 +286,11 @@ export function AppShell({
                               <button
                                 key={company.id}
                                 onClick={() => {
-                                  router.push(`/company-dashboard?companyId=${company.id}`);
+                                  // If on overview page, stay on overview; otherwise go to dashboard
+                                  const targetPath = pathname === "/overview" 
+                                    ? `/overview?companyId=${company.id}`
+                                    : `/company-dashboard?companyId=${company.id}`;
+                                  router.push(targetPath);
                                   setCompanySwitcherOpen(false);
                                 }}
                                 className="w-full px-4 py-2 text-sm text-slate-300 hover:bg-slate-800/50 hover:text-white transition-colors text-left light:text-slate-700 light:hover:bg-slate-100"

@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { supabase } from "@/app/lib/supabaseClient";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
 type Company = {
   id: string;
@@ -25,6 +25,8 @@ const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 
 export function CompanyProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [activeCompany, setActiveCompanyState] = useState<Company | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
@@ -195,6 +197,21 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     fetchCompanies();
   }, []);
+
+  // Listen to URL changes and update activeCompany accordingly
+  useEffect(() => {
+    if (companies.length === 0) return;
+
+    const urlCompanyId = searchParams.get("companyId") || searchParams.get("company");
+    
+    if (urlCompanyId) {
+      const company = companies.find(c => c.id === urlCompanyId);
+      if (company && company.id !== activeCompany?.id) {
+        setActiveCompanyState(company);
+        localStorage.setItem("activeCompanyId", company.id);
+      }
+    }
+  }, [pathname, searchParams, companies, activeCompany?.id]);
 
   return (
     <CompanyContext.Provider

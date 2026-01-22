@@ -170,6 +170,132 @@ function mapKeyToKPIField(key: string): string | null {
 }
 
 /**
+ * AI-based column matching using OpenAI
+ * Returns a mapping of column index to KPI field name
+ * Falls back to existing matching if AI is unavailable or fails
+ */
+async function matchColumnsWithAI(
+  headerColumns: string[]
+): Promise<{ [key: number]: string } | null> {
+  // Check if OpenAI is available
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    console.log("[matchColumnsWithAI] OPENAI_API_KEY not found, skipping AI matching");
+    return null; // No API key, fallback to regular matching
+  }
+
+  console.log("[matchColumnsWithAI] Attempting AI-based column matching for", headerColumns.length, "columns");
+
+  try {
+    // Dynamically import OpenAI (works in both Next.js and Node.js)
+    let OpenAI: any;
+    try {
+      OpenAI = (await import("openai")).default;
+    } catch {
+      // OpenAI not available in this environment
+      return null;
+    }
+
+    const openai = new OpenAI({ apiKey });
+
+    // Available KPI fields
+    const kpiFields = [
+      "mrr",
+      "arr",
+      "burn_rate",
+      "churn",
+      "growth_percent",
+      "runway_months",
+      "lead_velocity",
+      "cash_balance",
+      "customers",
+    ];
+
+    // Build prompt
+    const prompt = `You are a data mapping assistant. Match the following column headers from a Google Sheet to KPI field names.
+
+Available KPI fields:
+- mrr (Monthly Recurring Revenue)
+- arr (Annual Recurring Revenue)
+- burn_rate (Monthly Burn Rate)
+- churn (Churn Rate)
+- growth_percent (Growth Percentage)
+- runway_months (Runway in Months)
+- lead_velocity (Lead Velocity)
+- cash_balance (Cash Balance)
+- customers (Number of Customers)
+
+Column headers to match:
+${headerColumns.map((col, idx) => `${idx}: "${col}"`).join("\n")}
+
+Return a JSON object mapping column index (as string) to KPI field name. Only include matches you're confident about. Skip columns that are "Month", "Year", "Måned", "År", or other date-related columns. If a column doesn't match any KPI field, don't include it.
+
+Example response:
+{
+  "0": "mrr",
+  "2": "burn_rate",
+  "4": "customers"
+}
+
+Response (JSON only, no explanation):`;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+    });
+
+    const raw = completion.choices?.[0]?.message?.content ?? "";
+    if (!raw) return null;
+
+    // Parse JSON response
+    let parsed: any;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      // Try to extract JSON from markdown code blocks
+      const jsonMatch = raw.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[1]);
+      } else {
+        return null;
+      }
+    }
+
+    // Validate and build mapping
+    const columnMap: { [key: number]: string } = {};
+    for (const [indexStr, fieldName] of Object.entries(parsed)) {
+      const index = parseInt(indexStr);
+      if (isNaN(index) || index < 0 || index >= headerColumns.length) {
+        console.warn(`[matchColumnsWithAI] Invalid column index from AI: ${indexStr}`);
+        continue;
+      }
+      
+      const field = String(fieldName).trim();
+      if (kpiFields.includes(field)) {
+        columnMap[index] = field;
+        console.log(`[matchColumnsWithAI] AI matched column ${index} "${headerColumns[index]}" -> ${field}`);
+      } else {
+        console.warn(`[matchColumnsWithAI] AI returned invalid field name: "${field}" for column ${index}`);
+      }
+    }
+
+    const matchCount = Object.keys(columnMap).length;
+    if (matchCount > 0) {
+      console.log(`[matchColumnsWithAI] Successfully matched ${matchCount} columns using AI`);
+      return columnMap;
+    } else {
+      console.warn(`[matchColumnsWithAI] AI returned no valid matches`);
+      return null;
+    }
+  } catch (error: any) {
+    console.warn("[matchColumnsWithAI] AI matching failed, using fallback:", error.message);
+    return null; // Fallback to regular matching
+  }
+}
+
+/**
  * Parse month string to period_date (YYYY-MM-DD)
  */
 function parseMonthToPeriodDate(monthStr: string, year?: number | null): string | null {
@@ -354,10 +480,24 @@ export async function fetchGoogleSheetsData(
       }
 
       // Map header columns to KPI fields and find Month/Year columns
-      const columnMap: { [key: number]: string } = {};
+      let columnMap: { [key: number]: string } = {};
       let monthColumnIndex: number | null = null;
       let yearColumnIndex: number | null = null;
       
+      // Log all header columns for debugging
+      console.log(`[fetchGoogleSheetsData] Sheet ${sheetIndex + 1} header columns:`, headerRow.map((col, idx) => `${idx}: "${col}"`).join(", "));
+      
+      // Try AI-based matching first
+      const aiMapping = await matchColumnsWithAI(headerRow);
+      if (aiMapping) {
+        console.log(`[fetchGoogleSheetsData] AI matched ${Object.keys(aiMapping).length} columns:`, Object.entries(aiMapping).map(([idx, field]) => `col ${idx} -> ${field}`).join(", "));
+        columnMap = { ...aiMapping };
+      } else {
+        console.log(`[fetchGoogleSheetsData] AI matching not available or failed, using fallback matching`);
+      }
+      
+      // Always check for Month/Year columns and do fallback matching
+      const unmatchedColumns: string[] = [];
       for (let i = 0; i < headerRow.length; i++) {
         const key = headerRow[i]?.trim();
         if (!key) continue;
@@ -366,20 +506,33 @@ export async function fetchGoogleSheetsData(
         const normalizedKey = normalizeKey(key);
         if (normalizedKey === "month" || normalizedKey === "måned") {
           monthColumnIndex = i;
+          console.log(`[fetchGoogleSheetsData] Found Month column at index ${i}: "${key}"`);
           continue;
         }
         
         // Check if this is the Year column
         if (normalizedKey === "year" || normalizedKey === "år") {
           yearColumnIndex = i;
+          console.log(`[fetchGoogleSheetsData] Found Year column at index ${i}: "${key}"`);
           continue;
         }
         
-        // Map to KPI field
-        const field = mapKeyToKPIField(key);
-        if (field) {
-          columnMap[i] = field;
+        // Fallback: Map to KPI field if not already matched by AI
+        if (!columnMap[i]) {
+          const field = mapKeyToKPIField(key);
+          if (field) {
+            columnMap[i] = field;
+            console.log(`[fetchGoogleSheetsData] Fallback matched column ${i} "${key}" -> ${field}`);
+          } else {
+            unmatchedColumns.push(`col ${i}: "${key}"`);
+          }
         }
+      }
+
+      // Log final column mapping
+      console.log(`[fetchGoogleSheetsData] Final column mapping:`, Object.entries(columnMap).map(([idx, field]) => `col ${idx} -> ${field}`).join(", "));
+      if (unmatchedColumns.length > 0) {
+        console.log(`[fetchGoogleSheetsData] Unmatched columns (${unmatchedColumns.length}):`, unmatchedColumns.join(", "));
       }
 
       if (Object.keys(columnMap).length === 0) {
@@ -431,11 +584,17 @@ export async function fetchGoogleSheetsData(
         };
 
         // Parse KPI values from this row
+        const parsedValues: string[] = [];
         for (const [colIndexStr, fieldName] of Object.entries(columnMap)) {
           const colIndex = parseInt(colIndexStr);
           const rawValue = row[colIndex]?.trim();
           
-          if (!rawValue) continue;
+          if (!rawValue) {
+            parsedValues.push(`${fieldName}: (empty)`);
+            continue;
+          }
+          
+          parsedValues.push(`${fieldName}: "${rawValue}"`);
           
           // Special handling for runway_months: handle cases where cell has multiple numbers (e.g., "10.4 4.0")
           if (fieldName === "runway_months") {
@@ -462,7 +621,14 @@ export async function fetchGoogleSheetsData(
             else if (fieldName === "lead_velocity") snapshotPayload.lead_velocity = parsedValue;
             else if (fieldName === "cash_balance") snapshotPayload.cash_balance = parsedValue;
             else if (fieldName === "customers") snapshotPayload.customers = parsedValue;
+          } else {
+            parsedValues[parsedValues.length - 1] += " (failed to parse)";
           }
+        }
+
+        // Log parsed values for debugging (only for first few rows to avoid spam)
+        if (rowIndex <= 3) {
+          console.log(`[fetchGoogleSheetsData] Row ${rowIndex} (${periodDate}):`, parsedValues.join(", "));
         }
 
         // Only add snapshot if it has at least one KPI value
@@ -472,6 +638,18 @@ export async function fetchGoogleSheetsData(
 
         if (hasAnyValue) {
           allSnapshots.push(snapshotPayload);
+          if (rowIndex <= 3) {
+            console.log(`[fetchGoogleSheetsData] Snapshot for ${periodDate}:`, {
+              mrr: snapshotPayload.mrr,
+              arr: snapshotPayload.arr,
+              burn_rate: snapshotPayload.burn_rate,
+              churn: snapshotPayload.churn,
+              growth_percent: snapshotPayload.growth_percent,
+              runway_months: snapshotPayload.runway_months,
+            });
+          }
+        } else if (rowIndex <= 3) {
+          console.warn(`[fetchGoogleSheetsData] Row ${rowIndex} (${periodDate}) has no valid KPI values, skipping`);
         }
       }
     } catch (error: any) {

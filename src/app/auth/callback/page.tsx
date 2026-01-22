@@ -12,7 +12,7 @@ import { supabase, isSupabaseConfigured } from "../../lib/supabaseClient";
  * - Email/password login (session refresh)
  * 
  * ROUTING LOGIC:
- * - No company → /onboarding
+ * - No company → /overview (user can create company from there)
  * - Company but profile_published = false → /company-profile
  * - Company and profile_published = true → /overview
  * 
@@ -152,15 +152,15 @@ function AuthCallbackContent() {
 
         if (companyError) {
           console.error("[AuthCallback] Error checking company:", companyError);
-          // Default to onboarding on error
-          router.replace("/onboarding");
+          // Default to overview on error
+          router.replace("/overview");
           return;
         }
 
-        // No company → onboarding
+        // No company → overview (user can create company from there)
         if (!company?.id) {
-          console.log("[AuthCallback] No company found, routing to onboarding:", userId);
-          router.replace("/onboarding");
+          console.log("[AuthCallback] No company found, routing to overview:", userId);
+          router.replace("/overview");
           return;
         }
 
@@ -176,8 +176,8 @@ function AuthCallbackContent() {
         router.replace(`/overview`);
       } catch (err) {
         console.error("[AuthCallback] Unexpected error during routing:", err);
-        // Default to onboarding on error
-        router.replace("/onboarding");
+        // Default to overview on error
+        router.replace("/overview");
       }
     };
 

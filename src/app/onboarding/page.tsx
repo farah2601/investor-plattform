@@ -74,10 +74,10 @@ export default function OnboardingPage() {
     return Boolean(form.companyName.trim() && form.industry && form.stage && form.country.trim());
   }, [form.companyName, form.industry, form.stage, form.country]);
 
-  // ✅ Guard: Check if user already has a company on mount
-  // If they do, redirect them away from onboarding
+  // ✅ Guard: Check if user is authenticated
+  // Allow users to create multiple companies, so we don't redirect if they already have one
   useEffect(() => {
-    const checkCompany = async () => {
+    const checkAuth = async () => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -87,26 +87,10 @@ export default function OnboardingPage() {
         return;
       }
 
-      const { data: company } = await supabase
-        .from("companies")
-        .select("id, profile_published")
-        .eq("owner_id", user.id)
-        .maybeSingle();
-
-      // User already has a company → redirect based on publication status
-      if (company?.id) {
-        if (company.profile_published === false) {
-          router.push("/company-profile");
-        } else {
-          router.push(`/company-dashboard?companyId=${company.id}`);
-        }
-        return;
-      }
-
       setCheckingAccess(false);
     };
 
-    checkCompany();
+    checkAuth();
   }, [router]);
 
   function back() {

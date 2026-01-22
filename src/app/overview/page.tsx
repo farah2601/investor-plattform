@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
 import { AppShell } from "@/components/shell/AppShell";
 import { Button } from "@/components/ui/button";
@@ -78,9 +78,15 @@ function formatRelativeTime(dateString: string | null): string {
 
 function OverviewPageContent() {
   const router = useRouter();
-  const [companyId, setCompanyId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  
+  // Read companyId from query params (support both 'companyId' and 'company') - same as dashboard
+  const companyIdFromUrl = searchParams.get("companyId") || searchParams.get("company");
+  const [companyId, setCompanyId] = useState<string | null>(companyIdFromUrl);
   const [runningAgent, setRunningAgent] = useState(false);
   const [agentError, setAgentError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [arrSeries, setArrSeries] = useState<ChartDataPoint[]>([]);
   const [mrrSeries, setMrrSeries] = useState<ChartDataPoint[]>([]);
   const [loadingKpiHistory, setLoadingKpiHistory] = useState(false);
@@ -96,40 +102,51 @@ function OverviewPageContent() {
   // Use shared hook to fetch company data - same source as dashboard
   const { company, investorRequests, investorLinks, loading, error } = useCompanyData(companyId);
 
-  // Get company ID from user's session
+  // Get company ID from URL params or fallback to most recent company - same logic as dashboard
+  // This effect runs whenever URL changes (pathname or searchParams)
   useEffect(() => {
-    async function getCompanyId() {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user) {
-          router.replace("/login");
-          return;
-        }
+    async function checkAuthAndSetCompany() {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.user) {
+        router.replace("/login");
+        return;
+      }
 
-        const { data: companyData, error } = await supabase
+      // Update companyId when URL changes - force read from current URL
+      const urlCompanyId = searchParams.get("companyId") || searchParams.get("company");
+      
+      if (urlCompanyId) {
+        // Use companyId from URL - always update to match URL
+        setCompanyId(urlCompanyId);
+      } else {
+        // Fallback: get most recent company if no URL param
+        const { data: companiesData, error } = await supabase
           .from("companies")
           .select("id")
           .eq("owner_id", session.user.id)
-          .maybeSingle();
+          .order("created_at", { ascending: false })
+          .limit(1);
 
         if (error) {
           console.error("Error loading company ID:", error);
           return;
         }
 
-        if (!companyData) {
-          router.replace("/onboarding");
+        if (!companiesData || companiesData.length === 0) {
+          // Don't redirect to onboarding - just leave companyId as null
+          // The UI will handle showing appropriate message
+          setCompanyId(null);
           return;
         }
 
-        setCompanyId(companyData.id);
-      } catch (err) {
-        console.error("Error in getCompanyId:", err);
+        // Use the most recently created company
+        setCompanyId(companiesData[0].id);
       }
     }
 
-    getCompanyId();
-  }, [router]);
+    checkAuthAndSetCompany();
+  }, [router, searchParams, pathname]);
 
   // Load KPI history and Stripe status when company is available
   useEffect(() => {
@@ -200,6 +217,47 @@ function OverviewPageContent() {
       console.error("Error running agent:", err);
       setAgentError(err instanceof Error ? err.message : "Failed to run agent");
       setRunningAgent(false);
+    }
+  }
+
+  async function handleDeleteCompany() {
+    if (!company?.id) return;
+
+    const confirmed = confirm(
+      `Are you sure you want to delete "${company.name}"? This action cannot be undone and will delete all associated data.`
+    );
+
+    if (!confirmed) return;
+
+    setDeleting(true);
+    setAgentError(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        throw new Error("Not authenticated");
+      }
+
+      const res = await fetch(`/api/companies/${company.id}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData?.error || "Failed to delete company");
+      }
+
+      // Company deleted successfully - reload page to show updated state
+      // This will either show "no company" or switch to another company if available
+      window.location.href = "/overview";
+    } catch (err) {
+      console.error("Error deleting company:", err);
+      setAgentError(err instanceof Error ? err.message : "Failed to delete company");
+      setDeleting(false);
     }
   }
 
@@ -691,8 +749,8 @@ function OverviewPageContent() {
 
           {/* Secondary Actions Row */}
           <div className="mt-5 pt-5 border-t border-slate-700/30">
-            <div className="flex justify-center">
-              <Link href="/companies">
+            <div className="flex justify-center gap-3">
+              <Link href="/onboarding">
                 <Button
                   variant="outline"
                   className="border-slate-600/40 text-slate-400 bg-slate-800/20 hover:bg-slate-700/30 text-sm light:border-slate-300 light:text-slate-700 light:bg-slate-100 light:hover:bg-slate-200"
@@ -703,6 +761,31 @@ function OverviewPageContent() {
                   Add company
                 </Button>
               </Link>
+              {company?.id && (
+                <Button
+                  variant="outline"
+                  onClick={handleDeleteCompany}
+                  disabled={deleting}
+                  className="border-red-500/30 text-red-400 bg-red-500/10 hover:bg-red-500/20 hover:border-red-500/50 text-sm light:border-red-300 light:text-red-600 light:bg-red-50 light:hover:bg-red-100"
+                >
+                  {deleting ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Delete company
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           </div>
 
