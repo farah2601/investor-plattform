@@ -226,17 +226,6 @@ export default function InvestorRequestsPageContent() {
     checkAuthAndSetCompany();
   }, [router, searchParams]);
 
-  // Reload data function - trigger a re-render by updating a refresh key
-  const [refreshKey, setRefreshKey] = useState(0);
-  
-  async function loadData() {
-    // Trigger hook refresh by updating the key
-    setRefreshKey(prev => prev + 1);
-    
-    // Small delay to ensure state updates
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-
   // Combine requests with their links and check for expired links
   const requestsWithLinks: RequestItem[] = investorRequests.map((req) => {
     const link = investorLinks.find((l) => l.request_id === req.id);
