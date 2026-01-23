@@ -119,6 +119,41 @@ function formatMonthLabel(dateStr: string): string {
 }
 
 /**
+ * Extract numeric value from KPI (handles both old flat format and new nested format)
+ * 
+ * Backwards compatibility: if kpi is a number, return it directly
+ * New format: if kpi is {value, source, updated_at}, return value
+ */
+function extractKpiValue(kpi: unknown): number | null {
+  if (kpi === null || kpi === undefined) {
+    return null;
+  }
+
+  // New format: {value, source, updated_at}
+  if (typeof kpi === "object" && kpi !== null && "value" in kpi) {
+    const kpiValue = kpi as { value: unknown };
+    if (typeof kpiValue.value === "number") {
+      return kpiValue.value;
+    }
+    if (kpiValue.value === null) {
+      return null;
+    }
+    // Try to convert to number
+    const num = Number(kpiValue.value);
+    return isNaN(num) ? null : num;
+  }
+
+  // Old format: direct number
+  if (typeof kpi === "number") {
+    return kpi;
+  }
+
+  // Try to convert to number
+  const num = Number(kpi);
+  return isNaN(num) ? null : num;
+}
+
+/**
  * Normalize burn_rate: if value < 1000, treat as "thousands" and multiply by 1000.
  * This handles the case where burn_rate is stored as 92 (meaning 92k) instead of 92000.
  */
@@ -422,17 +457,17 @@ export default function InvestorCompanyPage() {
         // The API returns latest snapshot directly
         if (json.latest?.kpis) {
           // Extract ALL KPI values from the latest snapshot's kpis JSONB object
-          // Normalize burn_rate: if < 1000, treat as thousands and multiply by 1000
-          const rawBurnRate = json.latest.kpis.burn_rate !== undefined && json.latest.kpis.burn_rate !== null ? Number(json.latest.kpis.burn_rate) : null;
+          // Handles both old format (flat numbers) and new format (nested {value, source, updated_at})
+          const rawBurnRate = json.latest.kpis.burn_rate !== undefined ? extractKpiValue(json.latest.kpis.burn_rate) : null;
           setLatestKpis({
-            mrr: json.latest.kpis.mrr !== undefined && json.latest.kpis.mrr !== null ? Number(json.latest.kpis.mrr) : null,
-            arr: json.latest.kpis.arr !== undefined && json.latest.kpis.arr !== null ? Number(json.latest.kpis.arr) : null,
+            mrr: json.latest.kpis.mrr !== undefined ? extractKpiValue(json.latest.kpis.mrr) : null,
+            arr: json.latest.kpis.arr !== undefined ? extractKpiValue(json.latest.kpis.arr) : null,
             burn_rate: normalizeBurnRate(rawBurnRate),
-            churn: json.latest.kpis.churn !== undefined && json.latest.kpis.churn !== null ? Number(json.latest.kpis.churn) : null,
-            growth_percent: json.latest.kpis.growth_percent !== undefined && json.latest.kpis.growth_percent !== null ? Number(json.latest.kpis.growth_percent) : null,
-            runway_months: json.latest.kpis.runway_months !== undefined && json.latest.kpis.runway_months !== null ? Number(json.latest.kpis.runway_months) : null,
-            cash_balance: json.latest.kpis.cash_balance !== undefined && json.latest.kpis.cash_balance !== null ? Number(json.latest.kpis.cash_balance) : null,
-            customers: json.latest.kpis.customers !== undefined && json.latest.kpis.customers !== null ? Number(json.latest.kpis.customers) : null,
+            churn: json.latest.kpis.churn !== undefined ? extractKpiValue(json.latest.kpis.churn) : null,
+            growth_percent: json.latest.kpis.growth_percent !== undefined ? extractKpiValue(json.latest.kpis.growth_percent) : null,
+            runway_months: json.latest.kpis.runway_months !== undefined ? extractKpiValue(json.latest.kpis.runway_months) : null,
+            cash_balance: json.latest.kpis.cash_balance !== undefined ? extractKpiValue(json.latest.kpis.cash_balance) : null,
+            customers: json.latest.kpis.customers !== undefined ? extractKpiValue(json.latest.kpis.customers) : null,
           });
           setLatestSnapshotDate(json.latest.period_date || null);
         } else {

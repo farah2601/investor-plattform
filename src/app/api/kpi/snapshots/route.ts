@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { extractKpiValue } from "@/lib/server/kpiSnapshot";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -127,10 +128,13 @@ export async function GET(req: Request) {
       
       const kpis = snapshot.kpis || null;
       
-      // Extract values from kpis JSONB
-      const arr = kpis?.arr !== undefined && kpis.arr !== null ? Number(kpis.arr) : null;
-      const mrr = kpis?.mrr !== undefined && kpis.mrr !== null ? Number(kpis.mrr) : null;
-      const burn = kpis?.burn_rate !== undefined && kpis.burn_rate !== null ? Number(kpis.burn_rate) : null;
+      // Extract values from kpis JSONB (handles both old flat format and new nested {value} format)
+      // Backwards compatibility: if kpi is a number, use it directly
+      // New format: if kpi is {value, source, updated_at}, extract value
+      // Always return number | null (never undefined) for stable arrays
+      const arr = kpis?.arr !== undefined ? extractKpiValue(kpis.arr) : null;
+      const mrr = kpis?.mrr !== undefined ? extractKpiValue(kpis.mrr) : null;
+      const burn = kpis?.burn_rate !== undefined ? extractKpiValue(kpis.burn_rate) : null;
       
       // Format period_date as ISO date string (YYYY-MM-DD)
       const dateStr = snapshot.period_date;
@@ -151,6 +155,30 @@ export async function GET(req: Request) {
     // Get latest snapshot (last item in sortedData)
     const latest = sortedData.length > 0 ? sortedData[sortedData.length - 1] : null;
 
+    // Extract sources metadata from latest snapshot (if new format)
+    // This lets UI display "Source of truth" for each metric
+    const sources: Record<string, string> | null = (() => {
+      if (!latest?.kpis) return null;
+      
+      const kpis = latest.kpis;
+      const result: Record<string, string> = {};
+      
+      // Check each KPI - if it's new format {value, source, updated_at}, extract source
+      const kpiKeys = ["mrr", "arr", "mrr_growth_mom", "churn", "net_revenue", "failed_payment_rate", "refund_rate", "burn_rate", "cash_balance", "customers", "runway_months"] as const;
+      
+      for (const key of kpiKeys) {
+        const kpi = kpis[key as keyof typeof kpis];
+        if (kpi && typeof kpi === "object" && "source" in kpi) {
+          const kpiValue = kpi as { source?: unknown };
+          if (typeof kpiValue.source === "string") {
+            result[key] = kpiValue.source;
+          }
+        }
+      }
+      
+      return Object.keys(result).length > 0 ? result : null;
+    })();
+
     return NextResponse.json(
       {
         ok: true,
@@ -161,6 +189,7 @@ export async function GET(req: Request) {
           period_date: latest.period_date,
           kpis: latest.kpis,
         } : null,
+        sources, // Metric metadata: source of truth for each KPI (new format only)
         arrSeries,
         mrrSeries,
         burnSeries,
