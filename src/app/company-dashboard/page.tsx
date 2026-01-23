@@ -93,158 +93,6 @@ function formatRunway(value: number | null) {
   return `${value.toFixed(1)} months`;
 }
 
-function RequestActions({
-  req,
-  onUpdated,
-}: {
-  req: RequestItem;
-  onUpdated: () => void;
-}) {
-  const [isPending, startTransition] = useTransition();
-
-  async function updateStatus(status: string) {
-    startTransition(async () => {
-      // 1) Oppdater status
-      const { error: updateError } = await supabase
-        .from("access_requests")
-        .update({ status })
-        .eq("id", req.id);
-
-      if (updateError) {
-        console.error("Error updating status", updateError);
-        alert("Error updating status: " + updateError.message);
-        return;
-      }
-
-      // 2) Approved → create investor_link if it doesn't exist
-      if (status === "approved") {
-        const { data: existing, error: existingError } = await supabase
-          .from("investor_links")
-          .select("*")
-          .eq("request_id", req.id)
-          .maybeSingle();
-
-        if (existingError) {
-          console.error("Error fetching existing link", existingError);
-        }
-
-        if (!existing) {
-          const token =
-            typeof crypto !== "undefined" && "randomUUID" in crypto
-              ? crypto.randomUUID()
-              : Math.random().toString(36).slice(2) +
-                Math.random().toString(36).slice(2);
-
-          const expiresAt = new Date();
-          expiresAt.setDate(expiresAt.getDate() + 30);
-
-          const { error: insertError } = await supabase
-            .from("investor_links")
-            .insert([
-              {
-                access_token: token,
-                request_id: req.id,
-                company_id: req.company_id,
-                expires_at: expiresAt.toISOString(),
-              },
-            ]);
-
-          if (insertError) {
-            console.error("Error creating link", insertError);
-            alert("Error creating access link: " + insertError.message);
-          }
-        }
-      }
-
-      // 3) Refresh UI
-      await onUpdated();
-    });
-  }
-
-  return (
-    <div className="flex gap-2">
-      <Button
-        size="sm"
-        variant="outline"
-        className="border-slate-700 text-slate-200 bg-slate-800/40 hover:bg-slate-700/50 text-xs h-7 px-2.5"
-        onClick={() => updateStatus("approved")}
-        disabled={isPending}
-      >
-        Approve
-      </Button>
-
-      <Button
-        size="sm"
-        variant="outline"
-        className="border-slate-700 text-slate-300 bg-slate-800/40 hover:bg-slate-700/50 text-xs h-7 px-2.5"
-        onClick={() => updateStatus("rejected")}
-        disabled={isPending}
-      >
-        Decline
-      </Button>
-    </div>
-  );
-}
-
-function RemoveAccessButton({
-  req,
-  onUpdated,
-}: {
-  req: RequestItem;
-  onUpdated: () => void;
-}) {
-  const [isPending, startTransition] = useTransition();
-
-  async function removeAccess() {
-    if (!confirm(`Remove access for ${req.investor_name}? This will revoke their investor link.`)) {
-      return;
-    }
-
-    startTransition(async () => {
-      // 1) Delete investor_link if it exists
-      if (req.link) {
-        const { error: linkError } = await supabase
-          .from("investor_links")
-          .delete()
-          .eq("id", req.link.id);
-
-        if (linkError) {
-          console.error("Error deleting investor link", linkError);
-          alert("Error removing access: " + linkError.message);
-          return;
-        }
-      }
-
-      // 2) Update status to rejected
-      const { error: updateError } = await supabase
-        .from("access_requests")
-        .update({ status: "rejected" })
-        .eq("id", req.id);
-
-      if (updateError) {
-        console.error("Error updating status", updateError);
-        alert("Error removing access: " + updateError.message);
-        return;
-      }
-
-      // 3) Refresh UI
-      await onUpdated();
-    });
-  }
-
-  return (
-    <Button
-      size="sm"
-      variant="outline"
-      className="border-red-500/30 text-red-400 bg-red-500/10 hover:bg-red-500/20 hover:border-red-500/50 text-xs h-7 px-2.5"
-      onClick={removeAccess}
-      disabled={isPending}
-    >
-      {isPending ? "Removing..." : "Remove"}
-    </Button>
-  );
-}
-
 function CompanyDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -614,7 +462,6 @@ function CompanyDashboardContent() {
     typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
 
   const investorUrl = latestLink ? `${baseUrl}/investor/${latestLink.access_token}` : null;
-  const visibleRequests = requests.filter((r) => r.status !== "rejected");
 
   // Transform API series to chart data formats
   // API returns arrSeries/mrrSeries/burnSeries with { date, label, value } format
@@ -1159,7 +1006,7 @@ function CompanyDashboardContent() {
                 </div>
               ) : (
                 <p className="text-sm text-slate-400">
-                  Approve a request below to generate an investor link.
+                  Approve a request in Overview to generate an investor link.
                 </p>
               )}
             </div>
@@ -1185,64 +1032,7 @@ function CompanyDashboardContent() {
 
           {/* Data Sources section removed - now managed in Company Overview → Connected Systems */}
           {/* All backend logic and functions remain intact for potential future use */}
-
-          {/* Investor Access */}
-          <section id="investor-access" className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 space-y-4 light:border-slate-200 light:bg-white">
-            <div>
-              <h2 className="text-sm sm:text-base font-medium text-slate-200 light:text-slate-950">Investor Access</h2>
-              <p className="text-xs text-slate-500 mt-1 light:text-slate-600">
-                Approve access requests to generate private investor links.
-              </p>
-            </div>
-
-            {visibleRequests.length === 0 && (
-              <p className="text-sm text-slate-400">No pending access requests.</p>
-            )}
-
-            {visibleRequests.length > 0 && (
-              <div className="space-y-0 divide-y divide-slate-800/50">
-              {visibleRequests.map((req) => (
-                  <div key={req.id} className="py-3 first:pt-0 last:pb-0">
-                    {/* mobile: stack, desktop: side-by-side */}
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-100 break-words light:text-slate-950">{req.investor_name}</p>
-                        <p className="text-xs text-slate-400 mt-0.5 break-all light:text-slate-600">
-                          {req.investor_email}
-                          {req.investor_company && ` · ${req.investor_company}`}
-                  </p>
-                        {req.message && (
-                          <p className="text-xs text-slate-300 mt-1.5 italic break-words light:text-slate-700">"{req.message}"</p>
-                        )}
-                        {req.status === "approved" && req.link && (
-                          <p className="text-xs text-slate-500 mt-2">
-                            Link expires {new Date(req.link.expires_at).toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric"
-                            })}
-                    </p>
-                  )}
-                      </div>
-                      {/* mobile: full width buttons, desktop: shrink */}
-                      <div className="flex-shrink-0 flex items-center gap-2 sm:flex-col sm:items-end">
-                        {req.status === "approved" ? (
-                          <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
-                              Approved
-                            </span>
-                            <RemoveAccessButton req={req} onUpdated={loadData} />
-                          </div>
-                        ) : (
-                  <RequestActions req={req} onUpdated={loadData} />
-                        )}
-                      </div>
-                    </div>
-                </div>
-              ))}
-            </div>
-            )}
-          </section>
+          {/* Investor Access section removed - now managed in Company Overview → Investor Requests */}
         </div>
       </main>
 

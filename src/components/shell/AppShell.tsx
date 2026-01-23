@@ -182,7 +182,7 @@ export function AppShell({
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(1200px_600px_at_20%_0%,rgba(43,116,255,0.10),transparent_55%),radial-gradient(900px_500px_at_80%_20%,rgba(43,116,255,0.06),transparent_60%)] light:hidden" />
 
       {/* header */}
-      <header className="sticky top-0 z-50 border-b border-slate-900/30 bg-slate-950/30 backdrop-blur light:border-slate-200/50 light:bg-white/80">
+      <header className="sticky top-0 z-50 border-b border-slate-900/30 bg-slate-950/30 backdrop-blur light:border-slate-200/50 light:bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-4 sm:gap-6">
             <div className="flex items-center gap-4 sm:gap-10 shrink-0">

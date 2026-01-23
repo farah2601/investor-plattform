@@ -37,9 +37,13 @@ function applyTheme(theme: Theme) {
   if (resolved === "dark") {
     document.documentElement.classList.add("dark");
     document.documentElement.classList.remove("light");
+    // Ensure bg-dark class is present in dark mode
+    document.body.classList.add("bg-dark");
   } else {
     document.documentElement.classList.remove("dark");
     document.documentElement.classList.add("light");
+    // Remove bg-dark class in light mode to allow white background
+    document.body.classList.remove("bg-dark");
   }
   // Set on #app-shell for app-specific light mode (scoped to app pages only)
   const appShell = document.getElementById("app-shell");

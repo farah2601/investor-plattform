@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
 import { AppShell } from "@/components/shell/AppShell";
@@ -80,6 +80,7 @@ function OverviewPageContentInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
+  const prevPathnameRef = useRef<string | null>(null);
   
   // Read companyId from query params (support both 'companyId' and 'company') - same as dashboard
   const companyIdFromUrl = searchParams.get("companyId") || searchParams.get("company");
@@ -147,6 +148,22 @@ function OverviewPageContentInner() {
 
     checkAuthAndSetCompany();
   }, [router, searchParams, pathname]);
+
+  // Refresh data when navigating back to overview page (not on initial load)
+  useEffect(() => {
+    // Only refresh if we're navigating TO /overview FROM another page
+    if (pathname === '/overview' && prevPathnameRef.current && prevPathnameRef.current !== '/overview' && companyId) {
+      // Trigger refresh by temporarily clearing and resetting companyId
+      // This will cause useCompanyData to re-fetch
+      const currentId = companyId;
+      setCompanyId(null);
+      setTimeout(() => {
+        setCompanyId(currentId);
+      }, 50);
+    }
+    // Update previous pathname
+    prevPathnameRef.current = pathname;
+  }, [pathname, companyId]);
 
   // Load KPI history and Stripe status when company is available
   useEffect(() => {
@@ -370,11 +387,24 @@ function OverviewPageContentInner() {
   const dataStatus = getDataStatus();
   
   // Calculate investor access counts
-  // - Approved with access: requests with status "approved" that have links
+  // - Approved with access: investor_links that are connected to approved requests AND not expired
   // - Pending requests: requests with status "pending"
-  const approvedWithAccess = investorRequests.filter(r => {
-    if (r.status !== "approved") return false;
-    return investorLinks.some(link => link.request_id === r.id);
+  const approvedWithAccess = investorLinks.filter(link => {
+    // Find the request associated with this link
+    const request = investorRequests.find(r => r.id === link.request_id);
+    // Check if request exists and is approved
+    if (!request || request.status !== "approved") return false;
+    
+    // Check if link is expired
+    if (link.expires_at) {
+      const expiresAt = new Date(link.expires_at);
+      const now = new Date();
+      if (expiresAt.getTime() < now.getTime()) {
+        return false; // Link is expired
+      }
+    }
+    
+    return true; // Link is valid and not expired
   }).length;
   
   const pendingRequestsCount = investorRequests.filter(r => r.status === "pending").length;
@@ -448,8 +478,8 @@ function OverviewPageContentInner() {
             </div>
           </div>
 
-          {/* Investor Requests - Link to Investor Access section */}
-          <Link href={`/company-dashboard?companyId=${company.id}#investor-access`}>
+          {/* Investor Requests - Link to Investor Requests page */}
+          <Link href={`/overview/investor-requests?companyId=${company.id}`}>
             <div className="bg-gradient-to-br from-slate-800/50 to-slate-700/30 border border-slate-700/40 rounded-lg px-4 py-4 transition-all hover:border-slate-600/60 hover:bg-slate-800/60 cursor-pointer group light:bg-white light:border-slate-200 light:hover:border-slate-300">
               <div className="flex items-center gap-2 mb-2">
                 <svg className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-400 transition-colors light:text-slate-600 light:group-hover:text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">

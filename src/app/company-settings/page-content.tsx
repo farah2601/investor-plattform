@@ -273,9 +273,7 @@ export function CompanySettingsContent() {
         
         // Try to get error details from response
         try {
-          // Clone response to avoid consuming the body
-          const clonedResponse = response.clone();
-          rawText = await clonedResponse.text();
+          rawText = await response.text();
           
           if (rawText && rawText.trim()) {
             try {
@@ -305,17 +303,23 @@ export function CompanySettingsContent() {
         }
         
         // Ensure we always have some error message
-        const errorMessage = errorData.error || errorData.message || `HTTP ${response.status}: ${response.statusText || "Unknown error"}`;
+        const errorMessage = errorData?.error || errorData?.message || `HTTP ${response.status}: ${response.statusText || "Unknown error"}`;
+        
+        // Build error object with guaranteed non-empty values
+        const errorLog: any = {
+          status: response.status || "unknown",
+          statusText: response.statusText || "unknown",
+          error: errorMessage || "Failed to load team members",
+        };
+        
+        // Add optional fields only if they exist
+        if (errorData?.details) errorLog.details = errorData.details;
+        if (errorData?.hint) errorLog.hint = errorData.hint;
+        if (errorData?.code) errorLog.code = errorData.code;
+        if (errorData && Object.keys(errorData).length > 0) errorLog.fullError = errorData;
         
         // Log with all available details
-        console.error("Failed to load team members:", {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorMessage,
-          details: errorData.details || errorData.hint || null,
-          code: errorData.code || null,
-          fullError: errorData
-        });
+        console.error("Failed to load team members:", errorLog);
         
         // If table doesn't exist, just return empty array (don't show error to user)
         // User will see empty list and can still invite members (which will show migration error)
