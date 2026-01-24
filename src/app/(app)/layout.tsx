@@ -1,11 +1,11 @@
 "use client";
 
-import { CompanyProvider } from "@/lib/company-context";
+import { AppShell } from "@/components/app/AppShell";
 
 export default function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return <CompanyProvider>{children}</CompanyProvider>;
+  return <AppShell>{children}</AppShell>;
 }

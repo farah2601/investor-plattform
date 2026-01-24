@@ -162,13 +162,8 @@ export default function OnboardingPage() {
     setStep(2);
   }
 
-  // ✅ Step 3: done → go to company-dashboard
   function handleGoToDashboard() {
-    if (companyId) {
-      router.push(`/company-dashboard?companyId=${companyId}`);
-    } else {
-      router.push("/company-dashboard");
-    }
+    router.push("/company-dashboard");
   }
 
   // Show loading while checking if user should be here
