@@ -50,12 +50,13 @@ export type CompanyOverviewData = {
  * - Investor requests: access_requests table filtered by company_id
  * - Investor links: investor_links table filtered by company_id
  */
-export function useCompanyData(companyId: string | null): CompanyOverviewData {
+export function useCompanyData(companyId: string | null): CompanyOverviewData & { refetch: () => void } {
   const [company, setCompany] = useState<CompanyData | null>(null);
   const [investorRequests, setInvestorRequests] = useState<InvestorRequest[]>([]);
   const [investorLinks, setInvestorLinks] = useState<InvestorLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refetchTrigger, setRefetchTrigger] = useState(0);
 
   useEffect(() => {
     if (!companyId) {
@@ -125,7 +126,7 @@ export function useCompanyData(companyId: string | null): CompanyOverviewData {
     }
 
     loadData();
-  }, [companyId]);
+  }, [companyId, refetchTrigger]);
 
   return {
     company,
@@ -133,5 +134,6 @@ export function useCompanyData(companyId: string | null): CompanyOverviewData {
     investorLinks,
     loading,
     error,
+    refetch: () => setRefetchTrigger((t) => t + 1),
   };
 }

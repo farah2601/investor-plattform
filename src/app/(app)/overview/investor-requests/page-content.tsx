@@ -180,17 +180,10 @@ export default function InvestorRequestsPageContent() {
   const router = useRouter();
   const { company: userCompany, loading: userCompanyLoading, isAuthenticated } = useUserCompany();
   const companyId = userCompany?.id ?? null;
-  const { company, investorRequests, investorLinks, loading, error } = useCompanyData(companyId);
-  
-  // Reload data function - trigger a re-fetch by updating companyId
-  async function loadData() {
-    if (!companyId) return;
-    
-    // Force hook to refetch by temporarily clearing and resetting companyId
-    const currentId = companyId;
-    setCompanyId(null);
-    await new Promise(resolve => setTimeout(resolve, 50));
-    setCompanyId(currentId);
+  const { company, investorRequests, investorLinks, loading, error, refetch } = useCompanyData(companyId);
+
+  function loadData() {
+    refetch();
   }
 
   useEffect(() => {
