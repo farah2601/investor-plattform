@@ -63,6 +63,13 @@ type CompanyKpi = {
   // agent metadata
   last_agent_run_at?: string | null;
   last_agent_run_by?: string | null;
+
+  investor_view_config?: {
+    arrMrr?: boolean;
+    burnRunway?: boolean;
+    growthCharts?: boolean;
+    aiInsights?: boolean;
+  } | null;
 };
 
 type AgentLog = {
@@ -167,6 +174,14 @@ function CompanyDashboardContent() {
   // User dropdown
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  // What investors can see (customize investor view)
+  const [investorView, setInvestorView] = useState({
+    arrMrr: true,
+    burnRunway: true,
+    growthCharts: true,
+    aiInsights: false,
+  });
 
   useEffect(() => {
     if (userCompanyLoading) return;
@@ -496,6 +511,7 @@ function CompanyDashboardContent() {
       console.error("Error fetching company KPI", companyError);
       setError(companyError.message);
       setCompany(null);
+      setInvestorView({ arrMrr: true, burnRunway: true, growthCharts: true, aiInsights: false });
       setInsights([]);
       setAgentLogs([]);
       return;
@@ -505,6 +521,16 @@ function CompanyDashboardContent() {
     setCompany(selectedCompany);
 
     if (selectedCompany) {
+      const cfg = (selectedCompany as CompanyKpi).investor_view_config;
+      const c = cfg && typeof cfg === "object"
+        ? {
+            arrMrr: cfg.arrMrr !== false,
+            burnRunway: cfg.burnRunway !== false,
+            growthCharts: cfg.growthCharts !== false,
+            aiInsights: !!cfg.aiInsights,
+          }
+        : { arrMrr: true, burnRunway: true, growthCharts: true, aiInsights: false };
+      setInvestorView(c);
       setKpiForm({
         mrr: selectedCompany.mrr != null ? String(selectedCompany.mrr) : "",
         arr: selectedCompany.arr != null ? String(selectedCompany.arr) : "",
@@ -784,6 +810,30 @@ function CompanyDashboardContent() {
       }
     } catch {
       window.prompt("Copy link manually:", investorUrl);
+    }
+  }
+
+  async function handleInvestorViewToggle(key: "arrMrr" | "burnRunway" | "growthCharts" | "aiInsights") {
+    if (!company?.id) return;
+    const prev = { ...investorView };
+    const next = { ...investorView, [key]: !investorView[key] };
+    setInvestorView(next);
+    try {
+      const res = await authedFetch(`/api/companies/${company.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(next),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.ok) {
+        const errMsg = data?.error || "Failed to save";
+        const details = data?.details ? ` (${data.details})` : "";
+        throw new Error(errMsg + details);
+      }
+    } catch (e: any) {
+      setInvestorView(prev);
+      if (e?.message !== "Not authenticated") {
+        alert(e?.message || "Could not save investor view settings. Please try again.");
+      }
     }
   }
 
@@ -1237,48 +1287,81 @@ function CompanyDashboardContent() {
             )}
           </section>
 
-          {/* Investor Access Link + Update KPIs - mobile: stack, desktop: side-by-side */}
+          {/* What investors can see + Investor Access Link + Update KPIs */}
           <section className="grid grid-cols-1 lg:grid-cols-[2fr,1fr] gap-4 sm:gap-6">
-            {/* Shareable investor link */}
-            <div className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-4 sm:p-5 space-y-3 light:border-slate-200 light:bg-white">
-              <div>
-                <h2 className="text-xs sm:text-sm font-medium text-slate-300 light:text-slate-950">Investor Access Link</h2>
-                <p className="text-xs text-slate-500 mt-0.5 light:text-slate-600">
-                  Private link to share with approved investors
-                </p>
+            {/* Customize investor view + shareable link */}
+            <div className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-4 sm:p-5 space-y-4 light:border-slate-200 light:bg-white">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 light:text-slate-600">
+                What investors can see
+              </h2>
+
+              <div className="space-y-3">
+                {[
+                  { key: "arrMrr" as const, label: "ARR & MRR metrics" },
+                  { key: "burnRunway" as const, label: "Burn & Runway" },
+                  { key: "growthCharts" as const, label: "Growth charts" },
+                  { key: "aiInsights" as const, label: "AI insights" },
+                ].map(({ key, label }) => (
+                  <div key={key} className="flex items-center justify-between gap-3">
+                    <span className="text-sm text-slate-200 light:text-slate-800">{label}</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={investorView[key]}
+                      onClick={() => handleInvestorViewToggle(key)}
+                      className={cn(
+                        "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-[#2B74FF]/50 focus:ring-offset-2 focus:ring-offset-slate-900",
+                        investorView[key]
+                          ? "bg-[#2B74FF]"
+                          : "bg-slate-700 light:bg-slate-300"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "pointer-events-none block h-5 w-5 rounded-full bg-white shadow transition-transform",
+                          investorView[key] ? "translate-x-5" : "translate-x-0"
+                        )}
+                      />
+                    </button>
+                  </div>
+                ))}
               </div>
 
-              {investorUrl ? (
-                <div className="space-y-2">
-                  {/* mobile: stack, desktop: row */}
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                    <code className="flex-1 text-xs text-slate-300 bg-black/30 px-3 py-2 rounded border border-slate-800 font-mono break-all min-w-0">
-                    {investorUrl}
-                  </code>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                    onClick={copyLink}
-                      className="border-slate-700 text-slate-200 bg-slate-800/40 hover:bg-slate-700/50 shrink-0 h-10 sm:h-9 px-4"
-                    >
-                      Copy
-                    </Button>
-                  </div>
-                  {latestLink?.expires_at && (
-                    <p className="text-xs text-slate-500">
-                      Link expires {new Date(latestLink.expires_at).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric"
-                      })}
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <p className="text-sm text-slate-400">
-                  Approve a request in Overview to generate an investor link.
-                </p>
-              )}
+              <div className="pt-2 border-t border-slate-700/50 light:border-slate-200 space-y-3">
+                {investorUrl ? (
+                  <>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <code className="flex-1 text-xs text-slate-300 bg-black/30 px-3 py-2 rounded border border-slate-800 font-mono break-all min-w-0 light:bg-slate-100 light:border-slate-200 light:text-slate-800">
+                        {investorUrl}
+                      </code>
+                      <Button
+                        size="sm"
+                        onClick={copyLink}
+                        className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white shrink-0 h-10 sm:h-9 px-4"
+                      >
+                        Copy link
+                      </Button>
+                    </div>
+                    {latestLink?.expires_at && (
+                      <p className="text-xs text-slate-500 light:text-slate-600">
+                        Link expires {new Date(latestLink.expires_at).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric"
+                        })}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm text-slate-400 light:text-slate-600">
+                    Approve a request in Overview to generate an investor link.
+                  </p>
+                )}
+              </div>
+
+              <p className="text-xs text-slate-500 light:text-slate-600">
+                Investors see a clean, focused view. You stay in control of what&apos;s shared and can revoke access anytime.
+              </p>
             </div>
 
             {/* Update KPIs */}

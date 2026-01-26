@@ -57,7 +57,8 @@ export async function GET(
         based_on_snapshot_date,
         logo_url,
         header_style,
-        brand_color
+        brand_color,
+        investor_view_config
       `)
       .eq("id", companyId)
       .maybeSingle();
@@ -93,15 +94,14 @@ export async function GET(
         .eq("id", companyId)
         .maybeSingle();
       
-      // Type assertion to handle missing branding fields
       company = fallbackResult.data as typeof company;
       companyError = fallbackResult.error;
       
-      // Add default branding fields if they don't exist
       if (company) {
         (company as any).logo_url = null;
         (company as any).header_style = "minimal";
         (company as any).brand_color = null;
+        (company as any).investor_view_config = { arrMrr: true, burnRunway: true, growthCharts: true, aiInsights: false };
       }
     }
 
@@ -117,8 +117,13 @@ export async function GET(
       return NextResponse.json({ error: "Company not found" }, { status: 404 });
     }
 
+    const c = company as any;
+    if (!c.investor_view_config || typeof c.investor_view_config !== "object") {
+      c.investor_view_config = { arrMrr: true, burnRunway: true, growthCharts: true, aiInsights: false };
+    }
+
     return NextResponse.json(
-      { ok: true, company },
+      { ok: true, company: c },
       {
         headers: {
           "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
@@ -205,3 +210,85 @@ export async function DELETE(
   }
 }
 
+const DEFAULT_INVESTOR_VIEW = {
+  arrMrr: true,
+  burnRunway: true,
+  growthCharts: true,
+  aiInsights: false,
+};
+
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: companyId } = await params;
+
+    if (!companyId) {
+      return NextResponse.json({ error: "Missing company ID" }, { status: 400 });
+    }
+
+    if (!isValidUUID(companyId)) {
+      return NextResponse.json(
+        { error: "Invalid company ID format (must be UUID)" },
+        { status: 400 }
+      );
+    }
+
+    const { user, error: authError } = await getAuthenticatedUser(req);
+    if (authError || !user) {
+      return NextResponse.json({ error: authError || "Unauthorized" }, { status: 401 });
+    }
+
+    const { data: company, error: companyError } = await supabaseAdmin
+      .from("companies")
+      .select("id, owner_id")
+      .eq("id", companyId)
+      .single();
+
+    if (companyError || !company) {
+      return NextResponse.json({ error: "Company not found" }, { status: 404 });
+    }
+
+    if (company.owner_id !== user.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const config = {
+      arrMrr: typeof body.arrMrr === "boolean" ? body.arrMrr : DEFAULT_INVESTOR_VIEW.arrMrr,
+      burnRunway: typeof body.burnRunway === "boolean" ? body.burnRunway : DEFAULT_INVESTOR_VIEW.burnRunway,
+      growthCharts: typeof body.growthCharts === "boolean" ? body.growthCharts : DEFAULT_INVESTOR_VIEW.growthCharts,
+      aiInsights: typeof body.aiInsights === "boolean" ? body.aiInsights : DEFAULT_INVESTOR_VIEW.aiInsights,
+    };
+
+    const { error: updateError } = await supabaseAdmin
+      .from("companies")
+      .update({ investor_view_config: config })
+      .eq("id", companyId);
+
+    if (updateError) {
+      console.error("[api/companies/[id]] PATCH investor_view_config error:", updateError);
+      const msg = updateError.message || "";
+      const isMissingColumn =
+        msg.includes("investor_view_config") ||
+        (msg.includes("column") && msg.includes("does not exist")) ||
+        (updateError as any).code === "42703";
+      const errorMessage = isMissingColumn
+        ? "Investor view config requires a database migration. Run: supabase db push or apply migration 20250126_investor_view_config."
+        : "Failed to update investor view";
+      return NextResponse.json(
+        { error: errorMessage, details: updateError.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ ok: true, config });
+  } catch (err: any) {
+    console.error("[api/companies/[id]] PATCH unexpected error:", err);
+    return NextResponse.json(
+      { error: err?.message || "Unknown error" },
+      { status: 500 }
+    );
+  }
+}
