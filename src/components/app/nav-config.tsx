@@ -53,3 +53,22 @@ export function getPageTitle(pathname: string): string {
   }
   return "Dashboard";
 }
+
+/**
+ * Routes reached via header nav (For Founders, For Investors, Resources, Pricing).
+ * These show full-width content only — no app sidebar.
+ */
+const MARKETING_PATHS: string[] = [
+  "/fundraising",
+  "/company-performance",
+  "/investor-updates",
+  "/investors/portfolio-alerts",
+  "/help",
+];
+
+export function isMarketingRoute(pathname: string): boolean {
+  if (!pathname) return false;
+  return MARKETING_PATHS.some(
+    (p) => pathname === p || pathname.startsWith(p + "/")
+  );
+}

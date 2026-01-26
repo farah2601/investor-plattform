@@ -705,12 +705,12 @@ function ConnectedSystemsPageContentInner() {
                         </button>
                       </>
                     ) : (
-                      <>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 w-full min-w-0">
                         <Button
                           size="sm"
                           onClick={handleConnectStripe}
                           disabled={connectingStripe}
-                          className="w-full bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white disabled:opacity-50"
+                          className="flex-shrink-0 bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white disabled:opacity-50"
                         >
                           {connectingStripe ? "Redirecting…" : "Connect"}
                         </Button>
@@ -721,12 +721,12 @@ function ConnectedSystemsPageContentInner() {
                               setStripeModalOpen(true);
                             }
                           }}
-                          className="text-xs text-slate-400 hover:text-slate-300 underline text-left"
+                          className="flex-shrink-0 whitespace-nowrap text-xs text-slate-400 hover:text-slate-300 underline focus:outline-none focus:ring-2 focus:ring-[#2B74FF]/50 focus:ring-offset-1 focus:ring-offset-slate-900 rounded px-1 py-1 -m-1"
                           title="We never store your Stripe secret key unless you choose manual setup."
                         >
                           Enter key manually
                         </button>
-                      </>
+                      </div>
                     )
                   ) : system.id === "sheets" ? (
                     // Google Sheets-specific actions

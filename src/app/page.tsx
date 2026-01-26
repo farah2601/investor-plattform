@@ -37,7 +37,7 @@ export default function LandingPage() {
 
   return (
     <>
-      <TrackingScripts />
+      <TrackingScripts skipVwo />
       <TourModal />
       <div className="relative bg-dark text-white" data-vtbot-replace="body">
         {/* Header */}
@@ -55,7 +55,7 @@ export default function LandingPage() {
                 Stop explaining your numbers
               </h1>
               <div className="mt-6 max-w-2xl text-balance text-center text-lg lg:text-xl text-white/80">
-                Live metrics that stay updated, so you don&apos;t have to.
+                Connect your systems. Get live metrics — built for startups raising capital.
               </div>
               <div className="mt-5 lg:mt-8">
                 <div data-ab-test-single-button>
@@ -136,18 +136,18 @@ export default function LandingPage() {
                     <div className="font-medium text-white mb-4">For Founders</div>
                     <ul className="space-y-3 text-sm text-white/70">
                       <li>
-                        <Link href="/login" className="hover:text-white">
-                          Investor Updates
+                        <Link href="/company-performance" className="hover:text-white">
+                          Company Performance
                         </Link>
                       </li>
                       <li>
-                        <Link href="/login" className="hover:text-white">
+                        <Link href="/fundraising" className="hover:text-white">
                           Fundraising
                         </Link>
                       </li>
                       <li>
-                        <Link href="/login" className="hover:text-white">
-                          Metric Tracking
+                        <Link href="/investor-updates" className="hover:text-white">
+                          Investor Updates
                         </Link>
                       </li>
                     </ul>
@@ -156,6 +156,11 @@ export default function LandingPage() {
                     <div className="font-medium text-white mb-4">For Investors</div>
                     <ul className="space-y-3 text-sm text-white/70">
                       <li>
+                        <Link href="/investors/portfolio-alerts" className="hover:text-white">
+                          Portfolio Alerts
+                        </Link>
+                      </li>
+                      <li>
                         <Link href="/company-dashboard?role=investor" className="hover:text-white">
                           Portfolio Monitoring
                         </Link>
@@ -163,11 +168,6 @@ export default function LandingPage() {
                       <li>
                         <Link href="/login" className="hover:text-white">
                           Portfolio Insights
-                        </Link>
-                      </li>
-                      <li>
-                        <Link href="/login" className="hover:text-white">
-                          LP Reporting
                         </Link>
                       </li>
                     </ul>

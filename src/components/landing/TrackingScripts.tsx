@@ -2,10 +2,13 @@
 
 import Script from "next/script";
 
-export function TrackingScripts() {
+type TrackingScriptsProps = { skipVwo?: boolean };
+
+export function TrackingScripts({ skipVwo = false }: TrackingScriptsProps) {
   return (
     <>
-      {/* VWO Async SmartCode */}
+      {/* VWO Async SmartCode – disabled on landing so hero copy is not overridden by A/B */}
+      {!skipVwo && (
       <Script
         id="vwoCode"
         strategy="afterInteractive"
@@ -26,6 +29,7 @@ export function TrackingScripts() {
           `,
         }}
       />
+      )}
 
       {/* Google Analytics */}
       <Script

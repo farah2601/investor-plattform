@@ -6,7 +6,7 @@ import { Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sidebar } from "./Sidebar";
 import { MobileSidebar } from "./MobileSidebar";
-import { getPageTitle } from "./nav-config";
+import { getPageTitle, isMarketingRoute } from "./nav-config";
 import { useAppearance } from "@/lib/use-appearance";
 
 interface AppShellProps {
@@ -56,6 +56,15 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
   }, []);
 
   const pageTitle = getPageTitle(pathname);
+  const marketing = isMarketingRoute(pathname);
+
+  if (marketing) {
+    return (
+      <div className="min-h-screen">
+        {children}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">

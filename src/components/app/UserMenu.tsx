@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { LogOut, Settings, User, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -13,7 +12,6 @@ export function UserMenu() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userInitials, setUserInitials] = useState<string>("U");
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
 
   useEffect(() => {
     async function loadUser() {
@@ -50,8 +48,11 @@ export function UserMenu() {
   }, []);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      window.location.replace("/login");
+    }
   };
 
   return (
