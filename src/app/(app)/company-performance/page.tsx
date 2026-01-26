@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
 import { supabase } from "@/app/lib/supabaseClient";
+import { Header } from "@/components/landing/Header";
 import { CompanyOverviewPreview } from "@/components/company/CompanyOverviewPreview";
 import "@/app/landing-styles.css";
 
