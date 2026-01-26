@@ -182,6 +182,7 @@ function CompanyDashboardContent() {
     growthCharts: true,
     aiInsights: false,
   });
+  const [, startTransition] = useTransition();
 
   useEffect(() => {
     if (userCompanyLoading) return;
@@ -586,15 +587,6 @@ function CompanyDashboardContent() {
     burn: point.value != null && !isNaN(Number(point.value)) ? Number(point.value) : null,
   }));
 
-  console.log("[Dashboard] Chart data lengths (from kpi_snapshots):", {
-    arrSeries: arrSeries.length,
-    mrrSeries: mrrSeries.length,
-    burnSeries: burnSeries.length,
-    arrChartData: arrChartData.length,
-    mrrChartData: mrrChartData.length,
-    burnChartData: burnChartData.length,
-  });
-
   async function loadStripeStatus(companyId: string) {
     try {
       const res = await authedFetch(`/api/stripe/status?companyId=${companyId}`, {
@@ -804,12 +796,12 @@ function CompanyDashboardContent() {
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(investorUrl);
-        alert("Link copied to clipboard");
+        setTimeout(() => alert("Link copied to clipboard"), 0);
       } else {
-        window.prompt("Copy link manually:", investorUrl);
+        setTimeout(() => window.prompt("Copy link manually:", investorUrl), 0);
       }
     } catch {
-      window.prompt("Copy link manually:", investorUrl);
+      setTimeout(() => window.prompt("Copy link manually:", investorUrl), 0);
     }
   }
 
@@ -817,7 +809,8 @@ function CompanyDashboardContent() {
     if (!company?.id) return;
     const prev = { ...investorView };
     const next = { ...investorView, [key]: !investorView[key] };
-    setInvestorView(next);
+    startTransition(() => setInvestorView(next));
+    await new Promise((r) => setTimeout(r, 0));
     try {
       const res = await authedFetch(`/api/companies/${company.id}`, {
         method: "PATCH",

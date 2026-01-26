@@ -31,6 +31,32 @@ type TeamMember = {
   experience?: string;
 };
 
+/** Dashboard "What investors can see" – stored in companies.investor_view_config (Supabase) */
+type InvestorViewConfig = {
+  arrMrr: boolean;
+  burnRunway: boolean;
+  growthCharts: boolean;
+  aiInsights: boolean;
+};
+
+const DEFAULT_INVESTOR_VIEW: InvestorViewConfig = {
+  arrMrr: true,
+  burnRunway: true,
+  growthCharts: true,
+  aiInsights: false,
+};
+
+function normalizeInvestorViewConfig(raw: unknown): InvestorViewConfig {
+  if (!raw || typeof raw !== "object") return { ...DEFAULT_INVESTOR_VIEW };
+  const o = raw as Record<string, unknown>;
+  return {
+    arrMrr: o.arrMrr !== false,
+    burnRunway: o.burnRunway !== false,
+    growthCharts: o.growthCharts !== false,
+    aiInsights: !!o.aiInsights,
+  };
+}
+
 type CompanyProfile = {
   id: string;
   name: string;
@@ -57,6 +83,17 @@ type CompanyProfile = {
   latest_insights_generated_at?: string | null;
   latest_insights_generated_by?: string | null;
   based_on_snapshot_date?: string | null;
+
+  /** From companies.investor_view_config – what to show on investor view */
+  investor_view_config?: InvestorViewConfig | null;
+
+  /** KPI values from companies table – same source as dashboard (Update KPIs) */
+  mrr?: number | null;
+  arr?: number | null;
+  burn_rate?: number | null;
+  runway_months?: number | null;
+  churn?: number | null;
+  growth_percent?: number | null;
 };
 
 type InvestorLinkMeta = {
@@ -116,41 +153,6 @@ function formatMonthLabel(dateStr: string): string {
   } catch {
     return dateStr.slice(0, 7);
   }
-}
-
-/**
- * Extract numeric value from KPI (handles both old flat format and new nested format)
- * 
- * Backwards compatibility: if kpi is a number, return it directly
- * New format: if kpi is {value, source, updated_at}, return value
- */
-function extractKpiValue(kpi: unknown): number | null {
-  if (kpi === null || kpi === undefined) {
-    return null;
-  }
-
-  // New format: {value, source, updated_at}
-  if (typeof kpi === "object" && kpi !== null && "value" in kpi) {
-    const kpiValue = kpi as { value: unknown };
-    if (typeof kpiValue.value === "number") {
-      return kpiValue.value;
-    }
-    if (kpiValue.value === null) {
-      return null;
-    }
-    // Try to convert to number
-    const num = Number(kpiValue.value);
-    return isNaN(num) ? null : num;
-  }
-
-  // Old format: direct number
-  if (typeof kpi === "number") {
-    return kpi;
-  }
-
-  // Try to convert to number
-  const num = Number(kpi);
-  return isNaN(num) ? null : num;
 }
 
 /**
@@ -266,17 +268,6 @@ export default function InvestorCompanyPage() {
   const [mrrSeries, setMrrSeries] = useState<ChartDataPoint[]>([]);
   const [burnSeries, setBurnSeries] = useState<ChartDataPoint[]>([]);
   const [loadingKpiHistory, setLoadingKpiHistory] = useState(false);
-  // Latest snapshot's full kpis object - single source of truth for all KPI card values
-  const [latestKpis, setLatestKpis] = useState<{
-    mrr?: number | null;
-    arr?: number | null;
-    burn_rate?: number | null;
-    churn?: number | null;
-    growth_percent?: number | null;
-    runway_months?: number | null;
-    cash_balance?: number | null;
-    customers?: number | null;
-  } | null>(null);
   const [latestSnapshotDate, setLatestSnapshotDate] = useState<string | null>(null);
 
   useEffect(() => {
@@ -329,9 +320,18 @@ export default function InvestorCompanyPage() {
               "Customer acquisition cost decreased 22% as brand awareness increased.",
             ],
             latest_insights_generated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+            mrr: 124_000,
+            arr: 1_488_000,
+            burn_rate: 92_000,
+            runway_months: 18,
+            churn: 1.8,
+            growth_percent: 12,
           };
 
-          setCompany(demoCompany);
+          setCompany({
+            ...demoCompany,
+            investor_view_config: { ...DEFAULT_INVESTOR_VIEW },
+          });
           setLinkMeta({
             expires_at: null,
             company_id: "demo-company",
@@ -410,7 +410,11 @@ export default function InvestorCompanyPage() {
           return;
         }
 
-        setCompany(companyRow as unknown as CompanyProfile);
+        const cfg = normalizeInvestorViewConfig((companyRow as any).investor_view_config);
+        setCompany({
+          ...(companyRow as unknown as CompanyProfile),
+          investor_view_config: cfg,
+        });
         setLoading(false);
         
         // Load KPI history after company is loaded
@@ -452,33 +456,11 @@ export default function InvestorCompanyPage() {
           value: normalizeBurnRate(point.value),
         }));
         setBurnSeries(normalizedBurnSeries);
-        
-        // Get latest snapshot's full kpis object - single source of truth for all KPI values
-        // The API returns latest snapshot directly
-        if (json.latest?.kpis) {
-          // Extract ALL KPI values from the latest snapshot's kpis JSONB object
-          // Handles both old format (flat numbers) and new format (nested {value, source, updated_at})
-          const rawBurnRate = json.latest.kpis.burn_rate !== undefined ? extractKpiValue(json.latest.kpis.burn_rate) : null;
-          setLatestKpis({
-            mrr: json.latest.kpis.mrr !== undefined ? extractKpiValue(json.latest.kpis.mrr) : null,
-            arr: json.latest.kpis.arr !== undefined ? extractKpiValue(json.latest.kpis.arr) : null,
-            burn_rate: normalizeBurnRate(rawBurnRate),
-            churn: json.latest.kpis.churn !== undefined ? extractKpiValue(json.latest.kpis.churn) : null,
-            growth_percent: json.latest.kpis.growth_percent !== undefined ? extractKpiValue(json.latest.kpis.growth_percent) : null,
-            runway_months: json.latest.kpis.runway_months !== undefined ? extractKpiValue(json.latest.kpis.runway_months) : null,
-            cash_balance: json.latest.kpis.cash_balance !== undefined ? extractKpiValue(json.latest.kpis.cash_balance) : null,
-            customers: json.latest.kpis.customers !== undefined ? extractKpiValue(json.latest.kpis.customers) : null,
-          });
-          setLatestSnapshotDate(json.latest.period_date || null);
-        } else {
-          setLatestKpis(null);
-          setLatestSnapshotDate(null);
-        }
+        setLatestSnapshotDate(json.latest?.period_date ?? null);
       } else {
         setArrSeries([]);
         setMrrSeries([]);
         setBurnSeries([]);
-        setLatestKpis(null);
         setLatestSnapshotDate(null);
       }
     } catch (e) {
@@ -486,7 +468,6 @@ export default function InvestorCompanyPage() {
       setArrSeries([]);
       setMrrSeries([]);
       setBurnSeries([]);
-      setLatestKpis(null);
       setLatestSnapshotDate(null);
     } finally {
       setLoadingKpiHistory(false);
@@ -510,14 +491,17 @@ export default function InvestorCompanyPage() {
     [company]
   );
 
-  // Get ALL KPI values from the latest snapshot's kpis object - single source of truth
-  // This ensures we always use the most recent snapshot data from kpi_snapshots table
-  const latestMrr = latestKpis?.mrr ?? null;
-  const latestArr = latestKpis?.arr ?? null;
-  const latestBurn = latestKpis?.burn_rate ?? null;
-  const latestChurn = latestKpis?.churn ?? null;
-  const latestGrowth = latestKpis?.growth_percent ?? null;
-  const latestRunway = latestKpis?.runway_months ?? null;
+  /** Dashboard "What investors can see" – from companies.investor_view_config (Supabase) */
+  const config = company?.investor_view_config ?? DEFAULT_INVESTOR_VIEW;
+  const hasAnyKpiContent = config.arrMrr || config.burnRunway || config.growthCharts || config.aiInsights;
+
+  // KPI card values: use company (companies table), same source as dashboard (Update KPIs)
+  const latestMrr = company?.mrr ?? null;
+  const latestArr = company?.arr ?? null;
+  const latestBurn = company?.burn_rate ?? null;
+  const latestChurn = company?.churn ?? null;
+  const latestGrowth = company?.growth_percent ?? null;
+  const latestRunway = company?.runway_months ?? null;
 
   // Transform series data to chart format (include date for tooltip)
   const mrrChartData = mrrSeries.map((point) => ({
@@ -755,123 +739,127 @@ export default function InvestorCompanyPage() {
           </Card>
         </div>
 
-        {/* KPI CONTENT */}
+        {/* KPI CONTENT – visibility from dashboard "What investors can see" (Supabase investor_view_config) */}
         <div className="space-y-8 pb-10">
-          {/* Key metrics grid */}
-          <Card className="mt-2 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
-            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-base font-semibold text-white sm:text-lg">
-                  Key metrics
-                </h2>
-                <p className="text-xs text-slate-400">
-                  Accounting-grade KPIs maintained by the Valyxo Agent.
-                </p>
+          {!hasAnyKpiContent && (
+            <Card className="mt-2 rounded-2xl border border-white/10 bg-slate-900/60 p-8 text-center">
+              <p className="text-sm text-slate-400">No metrics shared for this link.</p>
+            </Card>
+          )}
+
+          {(config.arrMrr || config.burnRunway) && (
+            <Card className="mt-2 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
+              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-base font-semibold text-white sm:text-lg">
+                    Key metrics
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Accounting-grade KPIs maintained by the Valyxo Agent.
+                  </p>
+                </div>
+                {latestSnapshotDate && (
+                  <p className="text-[11px] text-slate-500">
+                    Last updated: {new Date(latestSnapshotDate).toLocaleDateString("en-US", {
+                      month: "short",
+                      year: "numeric"
+                    })}
+                  </p>
+                )}
               </div>
-              {latestSnapshotDate && (
-                <p className="text-[11px] text-slate-500">
-                  Last updated: {new Date(latestSnapshotDate).toLocaleDateString("en-US", {
-                    month: "short",
-                    year: "numeric"
-                  })}
-                </p>
-              )}
-            </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {/* MRR */}
-              <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
-                <p className="text-xs text-slate-400">MRR</p>
-                <p className="mt-1 text-xl font-semibold text-white">
-                  {formatMoney(latestMrr)}
-                </p>
-                <div className="mt-1 flex items-center gap-2 text-xs">
-                  {mrrTrend.text && (
-                    <Badge
-                      className={cn(
-                        "border-none px-2 py-0.5",
-                        mrrTrend.positive
-                          ? "bg-emerald-900/60 text-emerald-300"
-                          : "bg-red-900/60 text-red-300"
-                      )}
-                    >
-                      {mrrTrend.text}
-                    </Badge>
-                  )}
-                  <span className="text-slate-500">vs previous period</span>
-                </div>
-              </Card>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {config.arrMrr && (
+                  <>
+                    <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                      <p className="text-xs text-slate-400">MRR</p>
+                      <p className="mt-1 text-xl font-semibold text-white">
+                        {formatMoney(latestMrr)}
+                      </p>
+                      <div className="mt-1 flex items-center gap-2 text-xs">
+                        {mrrTrend.text && (
+                          <Badge
+                            className={cn(
+                              "border-none px-2 py-0.5",
+                              mrrTrend.positive
+                                ? "bg-emerald-900/60 text-emerald-300"
+                                : "bg-red-900/60 text-red-300"
+                            )}
+                          >
+                            {mrrTrend.text}
+                          </Badge>
+                        )}
+                        <span className="text-slate-500">vs previous period</span>
+                      </div>
+                    </Card>
+                    <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                      <p className="text-xs text-slate-400">ARR</p>
+                      <p className="mt-1 text-xl font-semibold text-white">
+                        {formatMoney(latestArr)}
+                      </p>
+                      <div className="mt-1 flex items-center gap-2 text-xs">
+                        <span className="text-slate-500">run-rate based on current MRR</span>
+                      </div>
+                    </Card>
+                    <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                      <p className="text-xs text-slate-400">Net revenue churn</p>
+                      <p className="mt-1 text-xl font-semibold text-white">
+                        {formatPercent(latestChurn)}
+                      </p>
+                      <div className="mt-1 flex items-center gap-2 text-xs">
+                        <span className="text-slate-500">logo + expansion combined</span>
+                      </div>
+                    </Card>
+                    <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                      <p className="text-xs text-slate-400">Customer growth</p>
+                      <p className="mt-1 text-xl font-semibold text-white">
+                        {formatPercent(latestGrowth)}
+                      </p>
+                      <div className="mt-1 flex items-center gap-2 text-xs">
+                        <span className="text-slate-500">paying customers</span>
+                      </div>
+                    </Card>
+                  </>
+                )}
+                {config.burnRunway && (
+                  <>
+                    <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                      <p className="text-xs text-slate-400">Monthly burn</p>
+                      <p className="mt-1 text-xl font-semibold text-white">
+                        {formatMoney(latestBurn)}
+                      </p>
+                      <div className="mt-1 flex items-center gap-2 text-xs">
+                        {burnTrend.text && (
+                          <Badge
+                            className={cn(
+                              "border-none px-2 py-0.5",
+                              burnTrend.positive
+                                ? "bg-emerald-900/60 text-emerald-300"
+                                : "bg-red-900/60 text-red-300"
+                            )}
+                          >
+                            {burnTrend.text}
+                          </Badge>
+                        )}
+                        <span className="text-slate-500">including headcount & infra</span>
+                      </div>
+                    </Card>
+                    <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                      <p className="text-xs text-slate-400">Runway</p>
+                      <p className="mt-1 text-xl font-semibold text-white">
+                        {formatRunway(latestRunway)}
+                      </p>
+                      <div className="mt-1 flex items-center gap-2 text-xs">
+                        <span className="text-slate-500">cash / net burn</span>
+                      </div>
+                    </Card>
+                  </>
+                )}
+              </div>
+            </Card>
+          )}
 
-              {/* ARR */}
-              <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
-                <p className="text-xs text-slate-400">ARR</p>
-                <p className="mt-1 text-xl font-semibold text-white">
-                  {formatMoney(latestArr)}
-                </p>
-                <div className="mt-1 flex items-center gap-2 text-xs">
-                  <span className="text-slate-500">run-rate based on current MRR</span>
-                </div>
-              </Card>
-
-              {/* Monthly burn */}
-              <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
-                <p className="text-xs text-slate-400">Monthly burn</p>
-                <p className="mt-1 text-xl font-semibold text-white">
-                  {formatMoney(latestBurn)}
-                </p>
-                <div className="mt-1 flex items-center gap-2 text-xs">
-                  {burnTrend.text && (
-                    <Badge
-                      className={cn(
-                        "border-none px-2 py-0.5",
-                        burnTrend.positive
-                          ? "bg-emerald-900/60 text-emerald-300"
-                          : "bg-red-900/60 text-red-300"
-                      )}
-                    >
-                      {burnTrend.text}
-                    </Badge>
-                  )}
-                  <span className="text-slate-500">including headcount & infra</span>
-                </div>
-              </Card>
-
-              {/* Runway */}
-              <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
-                <p className="text-xs text-slate-400">Runway</p>
-                <p className="mt-1 text-xl font-semibold text-white">
-                  {formatRunway(latestRunway)}
-                </p>
-                <div className="mt-1 flex items-center gap-2 text-xs">
-                  <span className="text-slate-500">cash / net burn</span>
-                </div>
-              </Card>
-
-              {/* Churn */}
-              <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
-                <p className="text-xs text-slate-400">Net revenue churn</p>
-                <p className="mt-1 text-xl font-semibold text-white">
-                  {formatPercent(latestChurn)}
-                </p>
-                <div className="mt-1 flex items-center gap-2 text-xs">
-                  <span className="text-slate-500">logo + expansion combined</span>
-                </div>
-              </Card>
-
-              {/* Growth */}
-              <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
-                <p className="text-xs text-slate-400">Customer growth</p>
-                <p className="mt-1 text-xl font-semibold text-white">
-                  {formatPercent(latestGrowth)}
-                </p>
-                <div className="mt-1 flex items-center gap-2 text-xs">
-                  <span className="text-slate-500">paying customers</span>
-                </div>
-              </Card>
-            </div>
-          </Card>
-
-          {/* Trends charts */}
+          {config.growthCharts && (
           <Card className="space-y-6 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
             <h2 className="text-base font-semibold text-white sm:text-lg">
               Trends
@@ -991,8 +979,9 @@ export default function InvestorCompanyPage() {
               </div>
             </div>
           </Card>
+          )}
 
-          {/* COMPUTED INSIGHTS */}
+          {config.aiInsights && (
           <section className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/80 to-slate-950/60 p-4 sm:p-6 lg:p-8 shadow-xl space-y-4">
             <div className="flex items-start justify-between">
               <div className="space-y-1">
@@ -1038,6 +1027,7 @@ export default function InvestorCompanyPage() {
               </div>
             )}
           </section>
+          )}
         </div>
         
         {/* Footer */}
