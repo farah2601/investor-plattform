@@ -1,6 +1,11 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/app/lib/supabaseClient";
 
+export type MetricsExcludedSources = {
+  stripe?: boolean;
+  sheets?: boolean;
+};
+
 export type CompanyData = {
   id: string;
   name: string;
@@ -14,6 +19,7 @@ export type CompanyData = {
   runway_months: number | null;
   churn: number | null;
   growth_percent: number | null;
+  metrics_excluded_sources?: MetricsExcludedSources | null;
 };
 
 export type InvestorRequest = {
@@ -70,12 +76,28 @@ export function useCompanyData(companyId: string | null): CompanyOverviewData & 
         setError(null);
 
         // Fetch company data - same fields as dashboard uses
-        // Dashboard fetches via /api/companies/[id] which returns these fields
-        const { data: companyData, error: companyError } = await supabase
+        let companyData: Record<string, unknown> | null = null;
+        let companyError: { message: string } | null = null;
+        const baseFields = "id, name, google_sheets_url, google_sheets_tab, google_sheets_last_sync_at, last_agent_run_at, mrr, arr, burn_rate, runway_months, churn, growth_percent";
+        const res = await supabase
           .from("companies")
-          .select("id, name, google_sheets_url, google_sheets_tab, google_sheets_last_sync_at, last_agent_run_at, mrr, arr, burn_rate, runway_months, churn, growth_percent")
+          .select(`${baseFields}, metrics_excluded_sources`)
           .eq("id", companyId)
           .maybeSingle();
+        companyError = res.error as { message: string } | null;
+        companyData = res.data as Record<string, unknown> | null;
+
+        if (companyError && (companyError.message?.includes("metrics_excluded_sources") || companyError.message?.includes("does not exist"))) {
+          const fallback = await supabase
+            .from("companies")
+            .select(baseFields)
+            .eq("id", companyId)
+            .maybeSingle();
+          if (!fallback.error && fallback.data) {
+            companyError = null;
+            companyData = { ...(fallback.data as Record<string, unknown>), metrics_excluded_sources: null };
+          }
+        }
 
         if (companyError) {
           console.error("Error loading company:", companyError);

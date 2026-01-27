@@ -17,6 +17,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Eye, EyeOff } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const DATA_SOURCES = [
   { id: "stripe", category: "Billing", name: "Stripe", status: "not_connected" },
@@ -28,8 +30,9 @@ function ConnectedSystemsPageContentInner() {
   const searchParams = useSearchParams();
   const { company: userCompany, loading: userCompanyLoading, isAuthenticated } = useUserCompany();
   const companyId = userCompany?.id ?? null;
-  const { company, loading, error } = useCompanyData(companyId);
+  const { company, loading, error, refetch } = useCompanyData(companyId);
   const [requestSystemName, setRequestSystemName] = useState("");
+  const [togglingExcluded, setTogglingExcluded] = useState<string | null>(null);
 
   const [stripeModalOpen, setStripeModalOpen] = useState(false);
   const [stripeManageModalOpen, setStripeManageModalOpen] = useState(false);
@@ -515,6 +518,35 @@ function ConnectedSystemsPageContentInner() {
     .sort((a, b) => b.getTime() - a.getTime());
   const overallLastSync = allLastSyncs.length > 0 ? formatLastSync(allLastSyncs[0].toISOString()) : "Never";
 
+  const excluded = {
+    stripe: !!(company?.metrics_excluded_sources as any)?.stripe,
+    sheets: !!(company?.metrics_excluded_sources as any)?.sheets,
+  };
+
+  async function toggleExcluded(sourceId: "stripe" | "sheets") {
+    if (!company?.id) return;
+    setTogglingExcluded(sourceId);
+    const next = !excluded[sourceId];
+    try {
+      const res = await authedFetch(`/api/companies/${company.id}/metrics-excluded`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [sourceId]: next }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Failed to update");
+      }
+      await refetch();
+    } catch (e: any) {
+      if (e?.message !== "Not authenticated") {
+        alert(e?.message || "Could not update exclusion. Please try again.");
+      }
+    } finally {
+      setTogglingExcluded(null);
+    }
+  }
+
   return (
     <div className="mx-auto w-full max-w-5xl space-y-8">
         {/* Breadcrumb */}
@@ -598,9 +630,45 @@ function ConnectedSystemsPageContentInner() {
               >
                 {/* Title and Description */}
                 <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-white mb-2 light:text-slate-950">
-                    {system.name}
-                  </h3>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3
+                      className={cn(
+                        "text-lg font-semibold text-white light:text-slate-950",
+                        system.isConnected && excluded[system.id as "stripe" | "sheets"] && "line-through opacity-70"
+                      )}
+                    >
+                      {system.name}
+                    </h3>
+                    {system.isConnected && (system.id === "stripe" || system.id === "sheets") && (
+                      <button
+                        type="button"
+                        onClick={() => toggleExcluded(system.id as "stripe" | "sheets")}
+                        disabled={!!togglingExcluded}
+                        className={cn(
+                          "p-1.5 rounded-md transition-colors",
+                          "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50",
+                          "disabled:opacity-50 disabled:pointer-events-none",
+                          "focus:outline-none focus:ring-2 focus:ring-[#2B74FF]/50 focus:ring-offset-1 focus:ring-offset-slate-900"
+                        )}
+                        title={
+                          excluded[system.id as "stripe" | "sheets"]
+                            ? "Include in metrics (click to use this source)"
+                            : "Exclude from metrics (click to hide this source)"
+                        }
+                        aria-label={
+                          excluded[system.id as "stripe" | "sheets"]
+                            ? "Include in metrics"
+                            : "Exclude from metrics"
+                        }
+                      >
+                        {excluded[system.id as "stripe" | "sheets"] ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    )}
+                  </div>
                   <p className="text-sm text-slate-400 light:text-slate-600 mb-4">
                     {system.description}
                   </p>

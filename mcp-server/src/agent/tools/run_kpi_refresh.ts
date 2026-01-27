@@ -55,7 +55,28 @@ export async function runKpiRefresh(input: unknown) {
 
   const { companyId } = parsed.data;
 
-  // Load sheets KPIs for this company
+  // Check metrics_excluded_sources: skip loading excluded sources
+  let excludeStripe = false;
+  let excludeSheets = false;
+  try {
+    const { data: companyRow } = await supabase
+      .from("companies")
+      .select("metrics_excluded_sources")
+      .eq("id", companyId)
+      .maybeSingle();
+    const cfg = (companyRow as any)?.metrics_excluded_sources;
+    if (cfg && typeof cfg === "object") {
+      excludeStripe = !!cfg.stripe;
+      excludeSheets = !!cfg.sheets;
+    }
+    if (excludeStripe || excludeSheets) {
+      console.log(`[runKpiRefresh] Excluded sources: stripe=${excludeStripe} sheets=${excludeSheets}`);
+    }
+  } catch (e) {
+    console.warn(`[runKpiRefresh] Could not read metrics_excluded_sources:`, e);
+  }
+
+  // Load sheets KPIs for this company (skip if excluded)
   let sheetRows: Array<{
     source: "google_sheets";
     period_date: string;
@@ -64,8 +85,10 @@ export async function runKpiRefresh(input: unknown) {
   }> = [];
 
   try {
-    sheetRows = await loadSheetsKpisForCompany(companyId);
-    console.log(`[runKpiRefresh] Loaded ${sheetRows.length} sheet rows for company ${companyId}`);
+    if (!excludeSheets) {
+      sheetRows = await loadSheetsKpisForCompany(companyId);
+      console.log(`[runKpiRefresh] Loaded ${sheetRows.length} sheet rows for company ${companyId}`);
+    }
   } catch (sheetsError: unknown) {
     const errorMessage = sheetsError instanceof Error ? sheetsError.message : String(sheetsError);
     console.error(`[runKpiRefresh] Failed to load sheets for company ${companyId}:`, errorMessage);
@@ -88,11 +111,13 @@ export async function runKpiRefresh(input: unknown) {
   let stripeMethod: "billing" | "payments" | null = null;
 
   try {
-    stripeRows = await loadStripeKpisForCompany(companyId, periodDates);
-    if (stripeRows.length > 0) {
-      stripeMethod = stripeRows[0].meta.method ?? null;
+    if (!excludeStripe) {
+      stripeRows = await loadStripeKpisForCompany(companyId, periodDates);
+      if (stripeRows.length > 0) {
+        stripeMethod = stripeRows[0].meta.method ?? null;
+      }
+      console.log(`[runKpiRefresh] Loaded ${stripeRows.length} stripe rows for company ${companyId}, method: ${stripeMethod}`);
     }
-    console.log(`[runKpiRefresh] Loaded ${stripeRows.length} stripe rows for company ${companyId}, method: ${stripeMethod}`);
   } catch (stripeError: unknown) {
     const errorMessage = stripeError instanceof Error ? stripeError.message : String(stripeError);
     console.error(`[runKpiRefresh] Failed to load stripe for company ${companyId}:`, errorMessage);
