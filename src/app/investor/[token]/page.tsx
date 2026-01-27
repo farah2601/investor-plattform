@@ -643,12 +643,12 @@ export default function InvestorCompanyPage() {
 
         {/* Soft gradient fade + subtle divider into content */}
         <div
-          className="h-px w-full bg-gradient-to-r from-transparent via-slate-700/60 to-transparent"
+          className="h-px w-full bg-gradient-to-r from-transparent via-slate-700/50 to-transparent"
           aria-hidden
         />
 
         {/* KPI CONTENT – primary focus; visibility from investor_view_config */}
-        <div className="space-y-6 pb-10 pt-6">
+        <div className="space-y-8 pb-12 pt-8">
           {!hasAnyKpiContent && (
             <Card className="rounded-xl border border-slate-700/60 bg-slate-900/70 shadow-sm p-6 text-center">
               <p className="text-sm text-slate-400">No metrics shared for this link.</p>
@@ -659,7 +659,7 @@ export default function InvestorCompanyPage() {
             <Card className="rounded-xl border border-slate-700/60 bg-slate-900/70 shadow-sm overflow-hidden">
               <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-slate-700/50">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <h2 className="text-sm font-semibold text-slate-100">
+                  <h2 className="text-sm font-semibold text-slate-200">
                     Key metrics
                   </h2>
                   {latestSnapshotDate && (
@@ -678,9 +678,9 @@ export default function InvestorCompanyPage() {
                   {config.arrMrr && (
                     <>
                       {/* Primary: MRR */}
-                      <Card className="rounded-lg border border-slate-600/70 bg-slate-950/70 shadow-sm p-3 sm:p-4 ring-1 ring-sky-500/15">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-300">MRR</p>
-                        <p className="mt-0.5 text-xl sm:text-2xl font-semibold text-white tabular-nums">
+                      <Card className="rounded-lg border border-slate-600/60 bg-gradient-to-br from-slate-950/95 via-slate-950/80 to-slate-900/60 p-3 sm:p-4 ring-1 ring-sky-500/20 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_0_24px_-6px_rgba(56,189,248,0.16)]">
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">MRR</p>
+                        <p className="mt-0.5 text-xl sm:text-2xl font-bold text-white tabular-nums">
                           {formatMoney(latestMrr)}
                         </p>
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
@@ -700,9 +700,9 @@ export default function InvestorCompanyPage() {
                         </div>
                       </Card>
                       {/* Primary: ARR */}
-                      <Card className="rounded-lg border border-slate-600/70 bg-slate-950/70 shadow-sm p-3 sm:p-4 ring-1 ring-sky-500/15">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-300">ARR</p>
-                        <p className="mt-0.5 text-xl sm:text-2xl font-semibold text-white tabular-nums">
+                      <Card className="rounded-lg border border-slate-600/60 bg-gradient-to-br from-slate-950/95 via-slate-950/80 to-slate-900/60 p-3 sm:p-4 ring-1 ring-sky-500/20 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_0_24px_-6px_rgba(56,189,248,0.16)]">
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">ARR</p>
+                        <p className="mt-0.5 text-xl sm:text-2xl font-bold text-white tabular-nums">
                           {formatMoney(latestArr)}
                         </p>
                         <p className="mt-1.5 text-[11px] text-slate-500">Run-rate from MRR</p>
@@ -711,9 +711,9 @@ export default function InvestorCompanyPage() {
                   )}
                   {config.burnRunway && (
                     /* Secondary: Runway (row 1) */
-                    <Card className="rounded-lg border border-slate-700/40 bg-slate-950/60 shadow-sm p-3 sm:p-4">
+                    <Card className="rounded-lg border border-slate-700/40 bg-gradient-to-br from-slate-950/75 to-slate-900/55 p-3 sm:p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
                       <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Runway</p>
-                      <p className="mt-0.5 text-lg sm:text-xl font-semibold text-slate-50 tabular-nums">
+                      <p className="mt-0.5 text-lg sm:text-xl font-bold text-slate-50 tabular-nums">
                         {formatRunway(latestRunway)}
                       </p>
                       <p className="mt-1.5 text-[11px] text-slate-500">Cash / net burn</p>
@@ -722,9 +722,9 @@ export default function InvestorCompanyPage() {
                   {config.burnRunway && (
                     <>
                       {/* Secondary: Monthly Burn (row 2) */}
-                      <Card className="rounded-lg border border-slate-700/40 bg-slate-950/60 shadow-sm p-3 sm:p-4">
+                      <Card className="rounded-lg border border-slate-700/40 bg-gradient-to-br from-slate-950/75 to-slate-900/55 p-3 sm:p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
                         <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Monthly burn</p>
-                        <p className="mt-0.5 text-lg sm:text-xl font-semibold text-slate-50 tabular-nums">
+                        <p className="mt-0.5 text-lg sm:text-xl font-bold text-slate-50 tabular-nums">
                           {formatMoney(latestBurn)}
                         </p>
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
@@ -748,17 +748,17 @@ export default function InvestorCompanyPage() {
                   {config.arrMrr && (
                     <>
                       {/* Secondary: Net Revenue Churn (row 2) */}
-                      <Card className="rounded-lg border border-slate-700/40 bg-slate-950/60 shadow-sm p-3 sm:p-4">
+                      <Card className="rounded-lg border border-slate-700/40 bg-gradient-to-br from-slate-950/75 to-slate-900/55 p-3 sm:p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
                         <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Net revenue churn</p>
-                        <p className="mt-0.5 text-lg sm:text-xl font-semibold text-slate-50 tabular-nums">
+                        <p className="mt-0.5 text-lg sm:text-xl font-bold text-slate-50 tabular-nums">
                           {formatPercent(latestChurn)}
                         </p>
                         <p className="mt-1.5 text-[11px] text-slate-500">Logo + expansion</p>
                       </Card>
                       {/* Secondary: Customer Growth (row 2) */}
-                      <Card className="rounded-lg border border-slate-700/40 bg-slate-950/60 shadow-sm p-3 sm:p-4">
+                      <Card className="rounded-lg border border-slate-700/40 bg-gradient-to-br from-slate-950/75 to-slate-900/55 p-3 sm:p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
                         <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Customer growth</p>
-                        <p className="mt-0.5 text-lg sm:text-xl font-semibold text-slate-50 tabular-nums">
+                        <p className="mt-0.5 text-lg sm:text-xl font-bold text-slate-50 tabular-nums">
                           {formatPercent(latestGrowth)}
                         </p>
                         <p className="mt-1.5 text-[11px] text-slate-500">Paying customers</p>
@@ -771,14 +771,14 @@ export default function InvestorCompanyPage() {
           )}
 
           {config.growthCharts && (
-          <Card className="rounded-xl border border-slate-700/60 bg-slate-900/70 shadow-sm overflow-hidden">
+          <Card className="rounded-xl border border-slate-700/60 border-t-slate-800/40 bg-slate-900/70 shadow-sm overflow-hidden">
             <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-slate-700/50">
-              <h2 className="text-sm font-semibold text-slate-100">
+              <h2 className="text-sm font-semibold text-slate-200">
                 Trends
               </h2>
             </div>
             <div className="p-4 sm:p-5">
-            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="grid gap-4 lg:grid-cols-2">
               {/* MRR chart */}
               <div className="space-y-2">
                 <p className="text-xs text-slate-400">
@@ -890,15 +890,15 @@ export default function InvestorCompanyPage() {
                   </ResponsiveContainer>
                 </div>
               </div>
-            </div>
+              </div>
             </div>
           </Card>
           )}
 
           {config.aiInsights && (
-          <Card className="rounded-xl border border-slate-700/60 bg-slate-900/70 shadow-sm overflow-hidden">
+          <Card className="rounded-xl border border-slate-700/60 border-t-slate-800/40 bg-slate-900/70 shadow-sm overflow-hidden">
             <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-slate-700/50">
-              <h2 className="text-sm font-semibold text-slate-100">Computed insights</h2>
+              <h2 className="text-sm font-semibold text-slate-200">Computed insights</h2>
               {company.latest_insights_generated_at && (
                 <p className="mt-0.5 text-[11px] text-slate-500">
                   Last generated: {new Date(company.latest_insights_generated_at).toLocaleDateString("en-US", {
@@ -917,15 +917,15 @@ export default function InvestorCompanyPage() {
             </div>
             <div className="p-4 sm:p-5">
               {insights.length > 0 ? (
-                <ul className="space-y-2.5">
+                <ul className="space-y-3.5 max-w-3xl">
                   {insights.map((x, i) => (
-                    <li key={i} className="text-sm text-slate-200 leading-relaxed pl-4 border-l-2 border-slate-600/60">
+                    <li key={i} className="text-sm text-slate-300 leading-relaxed pl-5 border-l border-slate-600/40">
                       {x}
                     </li>
                   ))}
                 </ul>
               ) : (
-                <div className="py-6 text-center">
+                <div className="py-8 text-center">
                   <p className="text-sm text-slate-500">No insights yet.</p>
                 </div>
               )}
