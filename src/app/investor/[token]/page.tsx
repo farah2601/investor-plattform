@@ -557,315 +557,228 @@ export default function InvestorCompanyPage() {
     );
   }
 
-  const initial = company.name?.charAt(0)?.toUpperCase() || "C";
-
   return (
     <div className="min-h-screen w-full overflow-x-hidden text-slate-50">
-      <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
-        {/* TOP AREA WITH GRADIENT BACKGROUND */}
-        <div className="rounded-3xl bg-gradient-to-br from-sky-500/15 via-slate-900/80 to-slate-950 p-[1px]">
-          <Card className="rounded-3xl bg-slate-950/80 border border-white/10">
-            <div className="flex flex-col gap-6 p-6 sm:p-8">
-              {/* Header row (Valyxo logo like Lovable layout) */}
-              <div className="flex items-center justify-between">
-                {token === "demo" && (
-                  <Link
-                    href="/"
-                    className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200 transition-colors"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                      />
-                    </svg>
-                    Back to home
-                  </Link>
+      <main className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 lg:px-8 space-y-0">
+        {/* Slim context bar – not a hero section */}
+        <header
+          className={cn(
+            "rounded-xl border border-slate-800/80 bg-slate-950/50 backdrop-blur-sm",
+            "mb-0"
+          )}
+        >
+          <div className="flex flex-col gap-3 px-3 py-3 sm:px-4 sm:py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
+              {token === "demo" && (
+                <Link
+                  href="/"
+                  className="shrink-0 inline-flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-300 transition-colors mr-1"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                  </svg>
+                  Back
+                </Link>
+              )}
+              <h1 className="text-sm sm:text-base font-semibold text-slate-200 truncate">
+                {company.name}
+              </h1>
+              <span
+                className={cn(
+                  "shrink-0 inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium",
+                  isPublished
+                    ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                    : "bg-amber-500/15 text-amber-400 border border-amber-500/30"
                 )}
-                {token !== "demo" && (
-                  <span className="text-[11px] text-slate-500">
-                    Secure token access
-                  </span>
-                )}
-                {token === "demo" && (
-                  <span className="text-[11px] text-slate-500">
-                    Demo view
-                  </span>
-                )}
-              </div>
-
-              {/* 3-column layout */}
-              <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[auto,minmax(0,1fr),minmax(0,1.2fr)] lg:items-start">
-                {/* Company avatar */}
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-12 w-12 rounded-2xl bg-slate-900">
-                    <AvatarFallback className="text-lg font-semibold">
-                      {initial}
-                    </AvatarFallback>
-                  </Avatar>
-                </div>
-
-                {/* Name + tags */}
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="text-xl sm:text-2xl font-semibold text-white">
-                      {company.name}
-                    </h1>
-
-                    {company.industry && (
-                      <Badge
-                        variant="outline"
-                        className="border-slate-600 bg-slate-900/80 text-[10px] uppercase tracking-wide text-slate-100"
-                      >
-                        {company.industry}
-                      </Badge>
-                    )}
-
-                    {company.stage && (
-                      <Badge
-                        variant="secondary"
-                        className="text-[10px] uppercase tracking-wide text-slate-950"
-                      >
-                        {company.stage}
-                      </Badge>
-                    )}
-                  </div>
-
-                  {company.description && (
-                    <p className="max-w-xl text-sm text-slate-300">
-                      {company.description}
-                    </p>
-                  )}
-
-                  {company.website_url && (
-                    <a
-                      href={company.website_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs text-sky-400 hover:underline break-all"
-                    >
-                      {company.website_url.replace(/^https?:\/\//, "")}
-                    </a>
-                  )}
-                </div>
-
-                {/* Metadata */}
-                <div className="space-y-2 text-xs text-slate-300 lg:text-right">
-                  <div className="flex items-center justify-between lg:justify-end gap-2">
-                    <span className="inline-flex items-center rounded-full border border-sky-500/40 bg-sky-500/10 px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-sky-300">
-                      Investor view — read only
-                    </span>
-
-                    {isExpired && (
-                      <span className="rounded-full bg-red-500/10 px-3 py-1 text-[10px] font-medium text-red-300 border border-red-500/40">
-                        Link expired
-                      </span>
-                    )}
-                  </div>
-
-                  <p>
-                    Status:{" "}
-                    <span
-                      className={cn(
-                        "font-medium",
-                        isPublished ? "text-emerald-400" : "text-amber-300"
-                      )}
-                    >
-                      {isPublished
-                        ? "Published by founders"
-                        : "Draft – contents may change"}
-                    </span>
-                  </p>
-
-                  <p>
-                    Last updated · Powered by Valyxo Agent ·{" "}
-                    <span className="text-slate-100">
-                      {formatDateLabel(agentUpdated)}
-                    </span>
-                  </p>
-
-                  {expiresAt && (
-                    <p>
-                      Token expiry:{" "}
-                      <span className="text-slate-100">
-                        {formatDateLabel(expiresAt)}
-                      </span>
-                    </p>
-                  )}
-
-                  <p className="text-slate-500">
-                    Secure token access. Do not forward or share publicly.
-                  </p>
-                </div>
-              </div>
-
-              {/* Tabs (KPI | Profile) */}
-              <div className="border-t border-white/10 pt-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar snap-x">
-                    <span
-                      className={cn(
-                        "whitespace-nowrap rounded-full px-3 py-1.5 text-xs sm:text-sm transition snap-start",
-                        "bg-white text-slate-950 font-medium shadow-sm"
-                      )}
-                    >
-                      KPIs
-                    </span>
-
-                    <Link
-                      href={`/investor/${token}/profile`}
-                      className={cn(
-                        "whitespace-nowrap rounded-full px-3 py-1.5 text-xs sm:text-sm transition snap-start",
-                        "bg-slate-900/70 text-slate-300 hover:bg-slate-800 border border-white/10"
-                      )}
-                    >
-                      Profile
-                    </Link>
-                  </div>
-
-                  <span className="hidden sm:inline-flex items-center rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-[10px] uppercase tracking-wide text-slate-400">
-                    Powered by Valyxo Agent
-                  </span>
-                </div>
-              </div>
+              >
+                {isPublished ? "Published" : "Draft"}
+              </span>
+              <span className="shrink-0 inline-flex items-center rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-300/90">
+                Investor view
+              </span>
+              {isExpired && (
+                <span className="shrink-0 rounded-md bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-400 border border-red-500/30">
+                  Link expired
+                </span>
+              )}
             </div>
-          </Card>
-        </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500 shrink-0">
+              <span>Last updated {formatDateLabel(agentUpdated)}</span>
+              {expiresAt && (
+                <span className="text-slate-600">Expires {formatDateLabel(expiresAt)}</span>
+              )}
+            </div>
+          </div>
+          {/* Tabs + read-only indicator */}
+          <div className="border-t border-slate-800/80 px-3 py-2 sm:px-4">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
+              <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+                <span
+                  className={cn(
+                    "whitespace-nowrap rounded-lg px-2.5 py-1 text-[11px] sm:text-xs font-medium",
+                    "bg-slate-800/80 text-slate-100 border border-slate-700/60"
+                  )}
+                >
+                  KPIs
+                </span>
+                <Link
+                  href={`/investor/${token}/profile`}
+                  className={cn(
+                    "whitespace-nowrap rounded-lg px-2.5 py-1 text-[11px] sm:text-xs transition",
+                    "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 border border-transparent"
+                  )}
+                >
+                  Profile
+                </Link>
+              </div>
+              <p className="flex items-center gap-1.5 shrink-0 text-[10px] text-slate-500">
+                <svg className="w-3 h-3 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                Read-only investor snapshot – auto-updated
+              </p>
+            </div>
+          </div>
+        </header>
 
-        {/* KPI CONTENT – visibility from dashboard "What investors can see" (Supabase investor_view_config) */}
-        <div className="space-y-8 pb-10">
+        {/* Soft gradient fade + subtle divider into content */}
+        <div
+          className="h-px w-full bg-gradient-to-r from-transparent via-slate-700/60 to-transparent"
+          aria-hidden
+        />
+
+        {/* KPI CONTENT – primary focus; visibility from investor_view_config */}
+        <div className="space-y-6 pb-10 pt-6">
           {!hasAnyKpiContent && (
-            <Card className="mt-2 rounded-2xl border border-white/10 bg-slate-900/60 p-8 text-center">
+            <Card className="rounded-xl border border-slate-700/60 bg-slate-900/70 shadow-sm p-6 text-center">
               <p className="text-sm text-slate-400">No metrics shared for this link.</p>
             </Card>
           )}
 
           {(config.arrMrr || config.burnRunway) && (
-            <Card className="mt-2 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
-              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 className="text-base font-semibold text-white sm:text-lg">
+            <Card className="rounded-xl border border-slate-700/60 bg-slate-900/70 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-slate-700/50">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <h2 className="text-sm font-semibold text-slate-100">
                     Key metrics
                   </h2>
-                  <p className="text-xs text-slate-400">
-                    Accounting-grade KPIs maintained by the Valyxo Agent.
-                  </p>
+                  {latestSnapshotDate && (
+                    <p className="text-[11px] text-slate-500">
+                      Snapshot: {new Date(latestSnapshotDate).toLocaleDateString("en-US", {
+                        month: "short",
+                        year: "numeric"
+                      })}
+                    </p>
+                  )}
                 </div>
-                {latestSnapshotDate && (
-                  <p className="text-[11px] text-slate-500">
-                    Last updated: {new Date(latestSnapshotDate).toLocaleDateString("en-US", {
-                      month: "short",
-                      year: "numeric"
-                    })}
-                  </p>
-                )}
               </div>
-
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {config.arrMrr && (
-                  <>
-                    <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
-                      <p className="text-xs text-slate-400">MRR</p>
-                      <p className="mt-1 text-xl font-semibold text-white">
-                        {formatMoney(latestMrr)}
-                      </p>
-                      <div className="mt-1 flex items-center gap-2 text-xs">
-                        {mrrTrend.text && (
-                          <Badge
-                            className={cn(
-                              "border-none px-2 py-0.5",
-                              mrrTrend.positive
-                                ? "bg-emerald-900/60 text-emerald-300"
-                                : "bg-red-900/60 text-red-300"
-                            )}
-                          >
-                            {mrrTrend.text}
-                          </Badge>
-                        )}
-                        <span className="text-slate-500">vs previous period</span>
-                      </div>
-                    </Card>
-                    <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
-                      <p className="text-xs text-slate-400">ARR</p>
-                      <p className="mt-1 text-xl font-semibold text-white">
-                        {formatMoney(latestArr)}
-                      </p>
-                      <div className="mt-1 flex items-center gap-2 text-xs">
-                        <span className="text-slate-500">run-rate based on current MRR</span>
-                      </div>
-                    </Card>
-                    <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
-                      <p className="text-xs text-slate-400">Net revenue churn</p>
-                      <p className="mt-1 text-xl font-semibold text-white">
-                        {formatPercent(latestChurn)}
-                      </p>
-                      <div className="mt-1 flex items-center gap-2 text-xs">
-                        <span className="text-slate-500">logo + expansion combined</span>
-                      </div>
-                    </Card>
-                    <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
-                      <p className="text-xs text-slate-400">Customer growth</p>
-                      <p className="mt-1 text-xl font-semibold text-white">
-                        {formatPercent(latestGrowth)}
-                      </p>
-                      <div className="mt-1 flex items-center gap-2 text-xs">
-                        <span className="text-slate-500">paying customers</span>
-                      </div>
-                    </Card>
-                  </>
-                )}
-                {config.burnRunway && (
-                  <>
-                    <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
-                      <p className="text-xs text-slate-400">Monthly burn</p>
-                      <p className="mt-1 text-xl font-semibold text-white">
-                        {formatMoney(latestBurn)}
-                      </p>
-                      <div className="mt-1 flex items-center gap-2 text-xs">
-                        {burnTrend.text && (
-                          <Badge
-                            className={cn(
-                              "border-none px-2 py-0.5",
-                              burnTrend.positive
-                                ? "bg-emerald-900/60 text-emerald-300"
-                                : "bg-red-900/60 text-red-300"
-                            )}
-                          >
-                            {burnTrend.text}
-                          </Badge>
-                        )}
-                        <span className="text-slate-500">including headcount & infra</span>
-                      </div>
-                    </Card>
-                    <Card className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
-                      <p className="text-xs text-slate-400">Runway</p>
-                      <p className="mt-1 text-xl font-semibold text-white">
+              <div className="p-4 sm:p-5">
+                {/* Row 1: MRR, ARR, Runway (revenue → sustainability) | Row 2: Burn, Churn, Growth (efficiency) */}
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {config.arrMrr && (
+                    <>
+                      {/* Primary: MRR */}
+                      <Card className="rounded-lg border border-slate-600/70 bg-slate-950/70 shadow-sm p-3 sm:p-4 ring-1 ring-sky-500/15">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-300">MRR</p>
+                        <p className="mt-0.5 text-xl sm:text-2xl font-semibold text-white tabular-nums">
+                          {formatMoney(latestMrr)}
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+                          {mrrTrend.text && (
+                            <Badge
+                              className={cn(
+                                "border-none px-1.5 py-0 text-[10px] font-medium",
+                                mrrTrend.positive
+                                  ? "bg-emerald-500/20 text-emerald-300"
+                                  : "bg-red-500/20 text-red-300"
+                              )}
+                            >
+                              {mrrTrend.text}
+                            </Badge>
+                          )}
+                          <span className="text-slate-500">vs previous period</span>
+                        </div>
+                      </Card>
+                      {/* Primary: ARR */}
+                      <Card className="rounded-lg border border-slate-600/70 bg-slate-950/70 shadow-sm p-3 sm:p-4 ring-1 ring-sky-500/15">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-300">ARR</p>
+                        <p className="mt-0.5 text-xl sm:text-2xl font-semibold text-white tabular-nums">
+                          {formatMoney(latestArr)}
+                        </p>
+                        <p className="mt-1.5 text-[11px] text-slate-500">Run-rate from MRR</p>
+                      </Card>
+                    </>
+                  )}
+                  {config.burnRunway && (
+                    /* Secondary: Runway (row 1) */
+                    <Card className="rounded-lg border border-slate-700/40 bg-slate-950/60 shadow-sm p-3 sm:p-4">
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Runway</p>
+                      <p className="mt-0.5 text-lg sm:text-xl font-semibold text-slate-50 tabular-nums">
                         {formatRunway(latestRunway)}
                       </p>
-                      <div className="mt-1 flex items-center gap-2 text-xs">
-                        <span className="text-slate-500">cash / net burn</span>
-                      </div>
+                      <p className="mt-1.5 text-[11px] text-slate-500">Cash / net burn</p>
                     </Card>
-                  </>
-                )}
+                  )}
+                  {config.burnRunway && (
+                    <>
+                      {/* Secondary: Monthly Burn (row 2) */}
+                      <Card className="rounded-lg border border-slate-700/40 bg-slate-950/60 shadow-sm p-3 sm:p-4">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Monthly burn</p>
+                        <p className="mt-0.5 text-lg sm:text-xl font-semibold text-slate-50 tabular-nums">
+                          {formatMoney(latestBurn)}
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+                          {burnTrend.text && (
+                            <Badge
+                              className={cn(
+                                "border-none px-1.5 py-0 text-[10px] font-medium",
+                                burnTrend.positive
+                                  ? "bg-emerald-500/20 text-emerald-300"
+                                  : "bg-red-500/20 text-red-300"
+                              )}
+                            >
+                              {burnTrend.text}
+                            </Badge>
+                          )}
+                          <span className="text-slate-500">Headcount & infra</span>
+                        </div>
+                      </Card>
+                    </>
+                  )}
+                  {config.arrMrr && (
+                    <>
+                      {/* Secondary: Net Revenue Churn (row 2) */}
+                      <Card className="rounded-lg border border-slate-700/40 bg-slate-950/60 shadow-sm p-3 sm:p-4">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Net revenue churn</p>
+                        <p className="mt-0.5 text-lg sm:text-xl font-semibold text-slate-50 tabular-nums">
+                          {formatPercent(latestChurn)}
+                        </p>
+                        <p className="mt-1.5 text-[11px] text-slate-500">Logo + expansion</p>
+                      </Card>
+                      {/* Secondary: Customer Growth (row 2) */}
+                      <Card className="rounded-lg border border-slate-700/40 bg-slate-950/60 shadow-sm p-3 sm:p-4">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Customer growth</p>
+                        <p className="mt-0.5 text-lg sm:text-xl font-semibold text-slate-50 tabular-nums">
+                          {formatPercent(latestGrowth)}
+                        </p>
+                        <p className="mt-1.5 text-[11px] text-slate-500">Paying customers</p>
+                      </Card>
+                    </>
+                  )}
+                </div>
               </div>
             </Card>
           )}
 
           {config.growthCharts && (
-          <Card className="space-y-6 rounded-2xl border border-white/10 bg-slate-900/60 p-6 sm:p-8">
-            <h2 className="text-base font-semibold text-white sm:text-lg">
-              Trends
-            </h2>
-
-            <div className="grid gap-6 lg:grid-cols-2">
+          <Card className="rounded-xl border border-slate-700/60 bg-slate-900/70 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-slate-700/50">
+              <h2 className="text-sm font-semibold text-slate-100">
+                Trends
+              </h2>
+            </div>
+            <div className="p-4 sm:p-5">
+            <div className="grid gap-4 lg:grid-cols-2">
               {/* MRR chart */}
               <div className="space-y-2">
                 <p className="text-xs text-slate-400">
@@ -978,62 +891,53 @@ export default function InvestorCompanyPage() {
                 </div>
               </div>
             </div>
+            </div>
           </Card>
           )}
 
           {config.aiInsights && (
-          <section className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/80 to-slate-950/60 p-4 sm:p-6 lg:p-8 shadow-xl space-y-4">
-            <div className="flex items-start justify-between">
-              <div className="space-y-1">
-                <h2 className="text-base font-semibold text-slate-100">Computed insights</h2>
-                <p className="text-xs text-slate-500">
-                  {company.latest_insights_generated_at ? (
-                    <>
-                      Last generated: {new Date(company.latest_insights_generated_at).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric"
-                      })}
-                      {company.based_on_snapshot_date ? (
-                        <> · Based on snapshot: {new Date(company.based_on_snapshot_date + "T00:00:00").toLocaleDateString("en-US", {
-                          month: "short",
-                          year: "numeric"
-                        })}</>
-                      ) : (
-                        <> · Based on snapshot: n/a</>
-                      )}
-                      <> · Computed</>
-                    </>
-                  ) : (
-                    <>Last generated: n/a · Based on snapshot: n/a · Computed</>
-                  )}
+          <Card className="rounded-xl border border-slate-700/60 bg-slate-900/70 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-slate-700/50">
+              <h2 className="text-sm font-semibold text-slate-100">Computed insights</h2>
+              {company.latest_insights_generated_at && (
+                <p className="mt-0.5 text-[11px] text-slate-500">
+                  Last generated: {new Date(company.latest_insights_generated_at).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric"
+                  })}
+                  {company.based_on_snapshot_date ? (
+                    <> · Snapshot: {new Date(company.based_on_snapshot_date + "T00:00:00").toLocaleDateString("en-US", {
+                      month: "short",
+                      year: "numeric"
+                    })}</>
+                  ) : null}
                 </p>
-              </div>
+              )}
             </div>
-
-            {insights.length > 0 ? (
-              <div className="space-y-3">
+            <div className="p-4 sm:p-5">
+              {insights.length > 0 ? (
                 <ul className="space-y-2.5">
                   {insights.map((x, i) => (
-                    <li key={i} className="text-sm text-slate-200 leading-relaxed pl-4 border-l-2 border-[#2B74FF]/30">
+                    <li key={i} className="text-sm text-slate-200 leading-relaxed pl-4 border-l-2 border-slate-600/60">
                       {x}
                     </li>
                   ))}
                 </ul>
-              </div>
-            ) : (
-              <div className="py-8 text-center space-y-3">
-                <p className="text-sm text-slate-400">No insights yet.</p>
-              </div>
-            )}
-          </section>
+              ) : (
+                <div className="py-6 text-center">
+                  <p className="text-sm text-slate-500">No insights yet.</p>
+                </div>
+              )}
+            </div>
+          </Card>
           )}
         </div>
         
-        {/* Footer */}
-        <footer className="pt-8 pb-10 border-t border-slate-800">
-          <p className="text-xs text-slate-500 text-center">
-            Updated automatically by Valyxo Agent
+        {/* Footer – muted */}
+        <footer className="pt-6 pb-8 border-t border-slate-800/60">
+          <p className="text-[11px] text-slate-600 text-center">
+            Updated automatically by Valyxo
           </p>
         </footer>
       </main>
