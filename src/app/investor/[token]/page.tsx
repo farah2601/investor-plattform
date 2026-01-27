@@ -8,6 +8,8 @@ import Link from "next/link";
 
 import { supabase } from "../../lib/supabaseClient";
 import { cn } from "@/lib/utils";
+import { extractKpiNumber, normalizePercent } from "@/lib/kpi/kpi_extract";
+import { buildDenseSeries, type SnapshotRow } from "@/lib/kpi/kpi_series";
 
 import { Card } from "../../../components/ui/card";
 import { Badge } from "../../../../components/ui/badge";
@@ -101,16 +103,6 @@ type InvestorLinkMeta = {
   company_id?: string | null;
 };
 
-type ChartDataPoint = {
-  date: string;
-  label: string;
-  value: number | null;
-};
-
-type ChartData = {
-  month: string;
-  value: number | null;
-};
 
 function formatDateLabel(dateString?: string | null): string {
   if (!dateString) return "Unknown";
@@ -146,14 +138,6 @@ function formatRunway(value: number | null) {
   return `${value.toFixed(1)} months`;
 }
 
-function formatMonthLabel(dateStr: string): string {
-  try {
-    const date = new Date(dateStr);
-    return new Intl.DateTimeFormat("en-US", { month: "short" }).format(date);
-  } catch {
-    return dateStr.slice(0, 7);
-  }
-}
 
 /**
  * Normalize burn_rate: if value < 1000, treat as "thousands" and multiply by 1000.
@@ -264,9 +248,7 @@ export default function InvestorCompanyPage() {
   const [linkMeta, setLinkMeta] = useState<InvestorLinkMeta | null>(null);
   
   // KPI history from snapshots
-  const [arrSeries, setArrSeries] = useState<ChartDataPoint[]>([]);
-  const [mrrSeries, setMrrSeries] = useState<ChartDataPoint[]>([]);
-  const [burnSeries, setBurnSeries] = useState<ChartDataPoint[]>([]);
+  const [snapshotRows, setSnapshotRows] = useState<Array<{ period_date: string; kpis: unknown }>>([]);
   const [loadingKpiHistory, setLoadingKpiHistory] = useState(false);
   const [latestSnapshotDate, setLatestSnapshotDate] = useState<string | null>(null);
 
@@ -447,27 +429,54 @@ export default function InvestorCompanyPage() {
       });
       const json = await res.json();
       
-      if (json?.ok && Array.isArray(json.arrSeries) && Array.isArray(json.mrrSeries) && Array.isArray(json.burnSeries)) {
-        setArrSeries(json.arrSeries);
-        setMrrSeries(json.mrrSeries);
-        // Normalize burn_rate values in series: if < 1000, treat as thousands and multiply by 1000
-        const normalizedBurnSeries = json.burnSeries.map((point: ChartDataPoint) => ({
-          ...point,
-          value: normalizeBurnRate(point.value),
-        }));
-        setBurnSeries(normalizedBurnSeries);
-        setLatestSnapshotDate(json.latest?.period_date ?? null);
+      if (json?.ok && Array.isArray(json.rows)) {
+        // Store raw snapshot rows for client-side series building
+        const rows = json.rows as SnapshotRow[];
+        setSnapshotRows(rows);
+        
+        // Get latest snapshot's full kpis object - single source of truth for all KPI values
+        // The API returns latest snapshot directly
+        if (json.latest?.kpis) {
+          // Extract ALL KPI values from the latest snapshot's kpis JSONB object
+          // Use shared utility for consistency (handles both flat and nested formats)
+          const kpis = json.latest.kpis;
+          const rawBurnRate = extractKpiNumber(kpis, "burn_rate");
+          const rawChurn = extractKpiNumber(kpis, "churn");
+          const rawGrowth = extractKpiNumber(kpis, "mrr_growth_mom");
+          
+          setLatestKpis({
+            mrr: extractKpiNumber(kpis, "mrr"),
+            arr: extractKpiNumber(kpis, "arr"),
+            burn_rate: normalizeBurnRate(rawBurnRate),
+            churn: normalizePercent(rawChurn, false), // Churn cannot be negative
+            growth_percent: normalizePercent(rawGrowth, true), // Growth can be negative
+            runway_months: extractKpiNumber(kpis, "runway_months"),
+            cash_balance: extractKpiNumber(kpis, "cash_balance"),
+            customers: extractKpiNumber(kpis, "customers"),
+          });
+          setLatestSnapshotDate(json.latest.period_date || null);
+        } else {
+          setLatestKpis(null);
+          setLatestSnapshotDate(null);
+        }
+        
+        const DEBUG = true;
+        if (DEBUG) {
+          const validCount = rows.filter((r) => r.period_date && r.kpis).length;
+          console.log("[InvestorView] Snapshots:", {
+            total: rows.length,
+            valid: validCount,
+          });
+        }
       } else {
-        setArrSeries([]);
-        setMrrSeries([]);
-        setBurnSeries([]);
+        setSnapshotRows([]);
+        setLatestKpis(null);
         setLatestSnapshotDate(null);
       }
     } catch (e) {
       console.error("Failed to load KPI history", e);
-      setArrSeries([]);
-      setMrrSeries([]);
-      setBurnSeries([]);
+      setSnapshotRows([]);
+      setLatestKpis(null);
       setLatestSnapshotDate(null);
     } finally {
       setLoadingKpiHistory(false);
@@ -503,25 +512,48 @@ export default function InvestorCompanyPage() {
   const latestGrowth = company?.growth_percent ?? null;
   const latestRunway = company?.runway_months ?? null;
 
-  // Transform series data to chart format (include date for tooltip)
-  const mrrChartData = mrrSeries.map((point) => ({
-    month: point.label || formatMonthLabel(point.date),
-    date: point.date, // Include date for tooltip formatting
-    value: point.value != null && !isNaN(Number(point.value)) ? Number(point.value) : null,
+  // Build chart series using shared utility (dense monthly axis, proper null handling)
+  const mrrSeries = buildDenseSeries(snapshotRows, "mrr");
+  const burnSeries = buildDenseSeries(snapshotRows, "burn_rate");
+  
+  // Check if series have any non-null data
+  const hasMrrData = mrrSeries.some((p) => p.value !== null);
+  const hasBurnData = burnSeries.some((p) => p.value !== null);
+
+  // Transform to chart format (include date for tooltip)
+  // Recharts handles null values gracefully (skips rendering that point)
+  const mrrChartData = mrrSeries.map((p) => ({
+    month: p.label,
+    date: "", // Will be populated from period_date if needed
+    value: p.value,
   }));
 
-  // burnSeries values are already normalized when set, so just map to chart format
-  const burnChartData = burnSeries.map((point) => ({
-    month: point.label || formatMonthLabel(point.date),
-    date: point.date, // Include date for tooltip formatting
-    value: point.value != null && !isNaN(Number(point.value)) ? Number(point.value) : null,
-  }));
+  // burnSeries: normalize burn_rate values (if < 1000, treat as thousands and multiply by 1000)
+  const burnChartData = burnSeries.map((p) => {
+    const normalizedValue = p.value !== null ? normalizeBurnRate(p.value) : null;
+    return {
+      month: p.label,
+      date: "", // Will be populated from period_date if needed
+      value: normalizedValue,
+    };
+  });
+  
+  const DEBUG = true;
+  if (DEBUG) {
+    console.log("[InvestorView] Chart series:", {
+      snapshotsTotal: snapshotRows.length,
+      validSnapshots: snapshotRows.filter((r) => r.period_date && r.kpis).length,
+      mrrSeries: { length: mrrSeries.length, hasData: hasMrrData },
+      burnSeries: { length: burnSeries.length, hasData: hasBurnData },
+    });
+  }
 
-  // Calculate trends (simple: compare last two values)
-  const getTrend = (series: ChartDataPoint[]) => {
-    if (series.length < 2) return { text: "", positive: true };
-    const last = series[series.length - 1]?.value ?? 0;
-    const prev = series[series.length - 2]?.value ?? 0;
+  // Calculate trends (simple: compare last two non-null values)
+  const getTrend = (points: Array<{ value: number | null }>) => {
+    const nonNullPoints = points.filter((p) => p.value !== null);
+    if (nonNullPoints.length < 2) return { text: "", positive: true };
+    const last = nonNullPoints[nonNullPoints.length - 1]?.value ?? 0;
+    const prev = nonNullPoints[nonNullPoints.length - 2]?.value ?? 0;
     if (prev === 0) return { text: "", positive: true };
     const change = ((last - prev) / prev) * 100;
     const positive = change >= 0;
@@ -790,12 +822,17 @@ export default function InvestorCompanyPage() {
                 <p className="text-xs text-slate-400">
                   MRR {mrrChartData.length > 0 ? `(${mrrChartData.length} periods)` : ""}
                 </p>
-                <div className="h-48 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart 
-                      data={mrrChartData}
-                      margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                    >
+                {!hasMrrData ? (
+                  <div className="h-48 w-full flex items-center justify-center rounded-lg border border-slate-800 bg-slate-950/60">
+                    <p className="text-sm text-slate-400">No valid data yet</p>
+                  </div>
+                ) : (
+                  <div className="h-48 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart 
+                        data={mrrChartData}
+                        margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                      >
                       <CartesianGrid 
                         strokeDasharray="3 3" 
                         stroke="#334155" 
@@ -836,9 +873,10 @@ export default function InvestorCompanyPage() {
                         dot={{ fill: "#38bdf8", r: 3, strokeWidth: 2, stroke: "#0f172a" }}
                         activeDot={{ r: 5, strokeWidth: 2, stroke: "#0f172a" }}
                       />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </div>
 
               {/* Burn chart */}
@@ -846,12 +884,17 @@ export default function InvestorCompanyPage() {
                 <p className="text-xs text-slate-400">
                   Burn {burnChartData.length > 0 ? `(${burnChartData.length} periods)` : ""}
                 </p>
-                <div className="h-48 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart 
-                      data={burnChartData}
-                      margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                    >
+                {!hasBurnData ? (
+                  <div className="h-48 w-full flex items-center justify-center rounded-lg border border-slate-800 bg-slate-950/60">
+                    <p className="text-sm text-slate-400">No valid data yet</p>
+                  </div>
+                ) : (
+                  <div className="h-48 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart 
+                        data={burnChartData}
+                        margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                      >
                       <CartesianGrid 
                         strokeDasharray="3 3" 
                         stroke="#334155" 
@@ -892,9 +935,10 @@ export default function InvestorCompanyPage() {
                         dot={{ fill: "#f97373", r: 3, strokeWidth: 2, stroke: "#0f172a" }}
                         activeDot={{ r: 5, strokeWidth: 2, stroke: "#0f172a" }}
                       />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </div>
               </div>
             </div>

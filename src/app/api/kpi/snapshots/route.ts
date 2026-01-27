@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { extractKpiValue } from "@/lib/server/kpiSnapshot";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -12,40 +11,10 @@ function isValidUUID(str: string | null | undefined): boolean {
   return uuidRegex.test(str);
 }
 
-type SnapshotRow = {
+export type SnapshotRow = {
   period_date: string;
-  kpis: {
-    arr?: number | null;
-    mrr?: number | null;
-    burn_rate?: number | null;
-    churn?: number | null;
-    growth_percent?: number | null;
-    runway_months?: number | null;
-    lead_velocity?: number | null;
-    cash_balance?: number | null;
-    customers?: number | null;
-    source?: string;
-  } | null;
+  kpis: unknown;
 };
-
-type ChartDataPoint = {
-  date: string;  // ISO date "YYYY-MM-DD"
-  label: string; // Month short name "Jan", "Feb", etc.
-  value: number | null;
-};
-
-
-/**
- * Format date to short month label (e.g., "Jan", "Feb")
- */
-function formatMonthLabel(dateStr: string): string {
-  try {
-    const date = new Date(dateStr);
-    return new Intl.DateTimeFormat("en-US", { month: "short" }).format(date);
-  } catch {
-    return dateStr.slice(0, 7);
-  }
-}
 
 export async function GET(req: Request) {
   try {
@@ -110,50 +79,16 @@ export async function GET(req: Request) {
     }
 
     // Data is already sorted by period_date ASC (oldest first)
-    // Take last 12 snapshots for charts (or all if less than 12)
+    // Return ALL snapshots - client-side will handle filtering and dense series building
     const allData = (data || []) as SnapshotRow[];
-    const sortedData = allData.length > 12 ? allData.slice(-12) : allData;
-    console.log("[api/kpi/snapshots] companyId", companyId, "total rows", allData.length, "returning", sortedData.length);
-    console.log("[api/kpi/snapshots] sample", sortedData.slice(0, 2));
-
-    // Build chart series directly from database rows (not generating months)
-    // Use actual period_date values from the database
-    const arrSeries: ChartDataPoint[] = [];
-    const mrrSeries: ChartDataPoint[] = [];
-    const burnSeries: ChartDataPoint[] = [];
-
-    // Process each snapshot row from the database
-    for (const snapshot of sortedData) {
-      if (!snapshot.period_date) continue;
-      
-      const kpis = snapshot.kpis || null;
-      
-      // Extract values from kpis JSONB (handles both old flat format and new nested {value} format)
-      // Backwards compatibility: if kpi is a number, use it directly
-      // New format: if kpi is {value, source, updated_at}, extract value
-      // Always return number | null (never undefined) for stable arrays
-      const arr = kpis?.arr !== undefined ? extractKpiValue(kpis.arr) : null;
-      const mrr = kpis?.mrr !== undefined ? extractKpiValue(kpis.mrr) : null;
-      const burn = kpis?.burn_rate !== undefined ? extractKpiValue(kpis.burn_rate) : null;
-      
-      // Format period_date as ISO date string (YYYY-MM-DD)
-      const dateStr = snapshot.period_date;
-      // Create label from period_date
-      const label = formatMonthLabel(dateStr);
-      
-      arrSeries.push({ date: dateStr, label, value: arr });
-      mrrSeries.push({ date: dateStr, label, value: mrr });
-      burnSeries.push({ date: dateStr, label, value: burn });
+    
+    const DEBUG = true;
+    if (DEBUG) {
+      console.log("[api/kpi/snapshots] companyId", companyId, "total rows", allData.length, "returning all snapshots");
     }
 
-    console.log("[api/kpi/snapshots] Returning", sortedData.length, "snapshots with chart series:", {
-      arrSeriesLength: arrSeries.length,
-      mrrSeriesLength: mrrSeries.length,
-      burnSeriesLength: burnSeries.length,
-    });
-
-    // Get latest snapshot (last item in sortedData)
-    const latest = sortedData.length > 0 ? sortedData[sortedData.length - 1] : null;
+    // Get latest snapshot (last item in allData)
+    const latest = allData.length > 0 ? allData[allData.length - 1] : null;
 
     // Extract sources metadata from latest snapshot (if new format)
     // This lets UI display "Source of truth" for each metric
@@ -183,16 +118,13 @@ export async function GET(req: Request) {
       {
         ok: true,
         companyId,
-        rows: sortedData, // Return full rows array for backward compatibility with dashboard
-        rowsCount: sortedData.length, // Return count
+        rows: allData, // Return ALL raw snapshot rows (client builds chart series with dense axis)
+        rowsCount: allData.length, // Return count
         latest: latest ? {
           period_date: latest.period_date,
           kpis: latest.kpis,
         } : null,
         sources, // Metric metadata: source of truth for each KPI (new format only)
-        arrSeries,
-        mrrSeries,
-        burnSeries,
       },
       {
         headers: {

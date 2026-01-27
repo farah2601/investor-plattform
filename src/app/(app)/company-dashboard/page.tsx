@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { ArrChart, type ArrChartDataPoint } from "@/components/ui/ArrChart";
 import { BurnChart, type BurnChartDataPoint } from "@/components/ui/BurnChart";
 import { MrrChart, type MrrChartDataPoint } from "@/components/ui/MrrChart";
+import { buildDenseSeries, type SnapshotRow } from "@/lib/kpi/kpi_series";
 import {
   Dialog,
   DialogContent,
@@ -143,9 +144,8 @@ function CompanyDashboardContent() {
   });
 
   // KPI History for charts - using new API format with series
-  const [arrSeries, setArrSeries] = useState<Array<{ date: string; label: string; value: number | null }>>([]);
-  const [mrrSeries, setMrrSeries] = useState<Array<{ date: string; label: string; value: number | null }>>([]);
-  const [burnSeries, setBurnSeries] = useState<Array<{ date: string; label: string; value: number | null }>>([]);
+  // Store raw snapshot rows for client-side series building
+  const [snapshotRows, setSnapshotRows] = useState<Array<{ period_date: string; kpis: unknown }>>([]);
   const [kpiSources, setKpiSources] = useState<Record<string, string> | null>(null); // Source metadata from latest snapshot
 
   // Stripe integration
@@ -323,19 +323,11 @@ function CompanyDashboardContent() {
       }
       
       const json = await res.json().catch(() => ({}));
-      console.log("[Dashboard] series lengths", {
-        arr: json.arrSeries?.length,
-        mrr: json.mrrSeries?.length,
-        burn: json.burnSeries?.length,
-        rows: json.rowsCount || (Array.isArray(json.rows) ? json.rows.length : json.rows),
-      });
-      console.log("[Dashboard] first 2 arr points", json.arrSeries?.slice(0, 2));
       
-      if (json?.ok && Array.isArray(json.arrSeries) && Array.isArray(json.mrrSeries) && Array.isArray(json.burnSeries)) {
-        // IMPORTANT: Use ALL data points, do NOT reduce to one element
-        setArrSeries(json.arrSeries);
-        setMrrSeries(json.mrrSeries);
-        setBurnSeries(json.burnSeries);
+      if (json?.ok && Array.isArray(json.rows)) {
+        // Store raw snapshot rows for client-side series building
+        const rows = json.rows as SnapshotRow[];
+        setSnapshotRows(rows);
         
         // Store sources metadata from latest snapshot (for UI display)
         if (json.sources && typeof json.sources === "object") {
@@ -344,24 +336,22 @@ function CompanyDashboardContent() {
           setKpiSources(null);
         }
         
-        console.log("[loadKpiHistory] Set chart series:", {
-          arr: json.arrSeries.length,
-          mrr: json.mrrSeries.length,
-          burn: json.burnSeries.length,
-          sources: json.sources,
-        });
+        const DEBUG = true;
+        if (DEBUG) {
+          const validCount = rows.filter((r) => r.period_date && r.kpis).length;
+          console.log("[loadKpiHistory] Snapshots:", {
+            total: rows.length,
+            valid: validCount,
+          });
+        }
       } else {
-        setArrSeries([]);
-        setMrrSeries([]);
-        setBurnSeries([]);
+        setSnapshotRows([]);
         setKpiSources(null);
-        console.log("[loadKpiHistory] No snapshot data available, set empty arrays");
+        console.log("[loadKpiHistory] No snapshot data available");
       }
     } catch (e) {
       console.error("Failed to load KPI history", e);
-      setArrSeries([]);
-      setMrrSeries([]);
-      setBurnSeries([]);
+      setSnapshotRows([]);
       setKpiSources(null);
     }
   }
@@ -377,12 +367,25 @@ function CompanyDashboardContent() {
     setAgentError(null);
 
     try {
-      const requestBody = { companyId: targetCompanyId };
-      console.log("[Dashboard] Sending request to /api/agent/run-all with body:", requestBody);
+      // Get session and extract access_token for Bearer authentication
+      // Using Bearer token instead of cookies for explicit auth flow
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
-      const res = await fetch("/api/agent/run-all", {
+      if (sessionError || !session?.access_token) {
+        setAgentError("Not authenticated");
+        alert("Error: Not authenticated. Please refresh the page and try again.");
+        return;
+      }
+
+      const requestBody = { companyId: targetCompanyId };
+      console.log("[Dashboard] Sending request to /api/agent/run with body:", requestBody);
+      
+      const res = await fetch("/api/agent/run", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { 
+          "content-type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify(requestBody),
       });
 
@@ -462,7 +465,7 @@ function CompanyDashboardContent() {
       })) ?? [];
 
     setRequests(withLinks);
-    
+
     // If no companyId provided, don't fetch KPIs
     if (!targetCompanyId) {
       setCompany(null);
@@ -568,25 +571,50 @@ function CompanyDashboardContent() {
 
   const investorUrl = latestLink ? `${baseUrl}/investor/${latestLink.access_token}` : null;
 
-  // Transform API series to chart data formats
-  // API returns arrSeries/mrrSeries/burnSeries with { date, label, value } format
-  // Charts expect { month, arr/mrr/burn } format
-  // IMPORTANT: Use ALL data points, do NOT reduce to one element
-  const arrChartData: ArrChartDataPoint[] = arrSeries.map((point) => ({
-    month: point.label || point.date, // Use label (e.g., "Jan") for display
-    arr: point.value != null && !isNaN(Number(point.value)) ? Number(point.value) : null,
+  // Build chart series using shared utility (dense monthly axis, proper null handling)
+  const arrSeries = buildDenseSeries(snapshotRows, "arr");
+  const mrrSeries = buildDenseSeries(snapshotRows, "mrr");
+  const burnSeries = buildDenseSeries(snapshotRows, "burn_rate");
+  const netRevenueSeries = buildDenseSeries(snapshotRows, "net_revenue");
+  const churnSeries = buildDenseSeries(snapshotRows, "churn", { percent: true, allowNegative: false });
+  const growthSeries = buildDenseSeries(snapshotRows, "mrr_growth_mom", { percent: true, allowNegative: true });
+
+  // Check if series have any non-null data
+  const hasArrData = arrSeries.some((p) => p.value !== null);
+  const hasMrrData = mrrSeries.some((p) => p.value !== null);
+  const hasBurnData = burnSeries.some((p) => p.value !== null);
+
+  // Transform to chart component format
+  // Charts expect { month: string, arr/mrr/burn: number | null }
+  // Recharts handles null values gracefully (skips rendering that point)
+  const arrChartData: ArrChartDataPoint[] = arrSeries.map((p) => ({
+    month: p.label,
+    arr: p.value,
   }));
 
-  const mrrChartData: MrrChartDataPoint[] = mrrSeries.map((point) => ({
-    month: point.label || point.date, // Use label (e.g., "Jan") for display
-    mrr: point.value != null && !isNaN(Number(point.value)) ? Number(point.value) : null,
+  const mrrChartData: MrrChartDataPoint[] = mrrSeries.map((p) => ({
+    month: p.label,
+    mrr: p.value,
   }));
 
-  const burnChartData: BurnChartDataPoint[] = burnSeries.map((point) => ({
-    month: point.label || point.date, // Use label (e.g., "Jan") for display
-    burn: point.value != null && !isNaN(Number(point.value)) ? Number(point.value) : null,
+  const burnChartData: BurnChartDataPoint[] = burnSeries.map((p) => ({
+    month: p.label,
+    burn: p.value,
   }));
 
+  const DEBUG = true;
+  if (DEBUG) {
+    console.log("[Dashboard] Chart series:", {
+      snapshotsTotal: snapshotRows.length,
+      validSnapshots: snapshotRows.filter((r) => r.period_date && r.kpis).length,
+      arrSeries: { length: arrSeries.length, hasData: hasArrData },
+      mrrSeries: { length: mrrSeries.length, hasData: hasMrrData },
+      burnSeries: { length: burnSeries.length, hasData: hasBurnData },
+      netRevenueSeries: { length: netRevenueSeries.length, hasData: netRevenueSeries.some((p) => p.value !== null) },
+      churnSeries: { length: churnSeries.length, hasData: churnSeries.some((p) => p.value !== null) },
+      growthSeries: { length: growthSeries.length, hasData: growthSeries.some((p) => p.value !== null) },
+    });
+  }
   async function loadStripeStatus(companyId: string) {
     try {
       const res = await authedFetch(`/api/stripe/status?companyId=${companyId}`, {
@@ -948,10 +976,10 @@ function CompanyDashboardContent() {
                       Last updated · <FormattedDate 
                         date={company.last_agent_run_at}
                         options={{
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit"
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit"
                         }}
                       />
                     </p>
@@ -1013,22 +1041,22 @@ function CompanyDashboardContent() {
                           href="/company-profile"
                           onClick={() => setUserDropdownOpen(false)}
                           className="block px-4 py-2 text-sm text-slate-300 hover:bg-slate-800/50 hover:text-white transition-colors light:text-slate-700 light:hover:bg-slate-100"
-                        >
-                          Profile
-                        </Link>
+                >
+                  Profile
+              </Link>
 
                         {/* Preview investor view */}
-                        {investorUrl && (
-                          <a
-                            href={investorUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
+              {investorUrl && (
+                <a
+                  href={investorUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
                             onClick={() => setUserDropdownOpen(false)}
                             className="block px-4 py-2 text-sm text-slate-300 hover:bg-slate-800/50 hover:text-white transition-colors light:text-slate-700 light:hover:bg-slate-100"
-                          >
+                >
                             Preview investor view
-                          </a>
-                        )}
+                </a>
+              )}
 
                         {/* Divider */}
                         <div className="my-1 border-t border-slate-700/50 light:border-slate-200" />
@@ -1038,9 +1066,9 @@ function CompanyDashboardContent() {
                           href="/logout"
                           onClick={() => setUserDropdownOpen(false)}
                           className="block px-4 py-2 text-sm text-slate-300 hover:bg-slate-800/50 hover:text-white transition-colors light:text-slate-700 light:hover:bg-slate-100"
-                        >
-                          Sign out
-                        </Link>
+                >
+                  Sign out
+              </Link>
                       </div>
                     </div>
                   </>
@@ -1061,11 +1089,11 @@ function CompanyDashboardContent() {
                         Last updated · <FormattedDate 
                           date={company.last_agent_run_at}
                           options={{
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit"
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit"
                           }}
                         />
                     </>
@@ -1115,17 +1143,35 @@ function CompanyDashboardContent() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                 {/* ARR Chart */}
                 <div>
-                  <ArrChart data={arrChartData} />
+                  {!hasArrData ? (
+                    <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 flex items-center justify-center">
+                      <p className="text-sm text-slate-400">No valid data yet</p>
+                    </div>
+                  ) : (
+                    <ArrChart data={arrChartData} />
+                  )}
                 </div>
 
                 {/* MRR Chart */}
                 <div>
-                  <MrrChart data={mrrChartData} />
+                  {!hasMrrData ? (
+                    <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 flex items-center justify-center">
+                      <p className="text-sm text-slate-400">No valid data yet</p>
+                    </div>
+                  ) : (
+                    <MrrChart data={mrrChartData} />
+                  )}
                 </div>
 
                 {/* Burn/Runway Chart - full width on desktop */}
                 <div className="lg:col-span-2">
-                  <BurnChart data={burnChartData} />
+                  {!hasBurnData ? (
+                    <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 flex items-center justify-center">
+                      <p className="text-sm text-slate-400">No valid data yet</p>
+                    </div>
+                  ) : (
+                    <BurnChart data={burnChartData} />
+                  )}
                 </div>
               </div>
             </section>
@@ -1256,18 +1302,18 @@ function CompanyDashboardContent() {
                         <span className="text-slate-300">
                           {step} <span className="text-slate-500">·</span> <span className="text-slate-400">{status}</span>
                       </span>
-                         <span className="text-slate-600 text-[10px]">
+                        <span className="text-slate-600 text-[10px]">
                            <FormattedDate 
                              date={log.created_at}
                              options={{
-                               month: "short",
-                               day: "numeric",
-                               hour: "2-digit",
-                               minute: "2-digit"
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit"
                              }}
                              fallback=""
                            />
-                       </span>
+                      </span>
                     </div>
 
                     {log.error && (
