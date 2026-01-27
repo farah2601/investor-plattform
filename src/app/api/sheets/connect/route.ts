@@ -55,24 +55,30 @@ export async function POST(req: Request) {
     // Support both old format (single sheet) and new format (array of sheets)
     let updateData: any = {};
 
-    if (sheets && Array.isArray(sheets) && sheets.length > 0) {
-      // New format: multiple sheets stored as JSON array
-      const sheetsArray = sheets.map((s: any) => ({
-        url: s.url?.trim() || "",
-        tab: s.tab?.trim() || "",
-      })).filter((s: any) => s.url);
+    if (sheets && Array.isArray(sheets)) {
+      if (sheets.length === 0) {
+        // Disconnect: clear Google Sheets integration
+        updateData.google_sheets_url = null;
+        updateData.google_sheets_tab = null;
+      } else {
+        // New format: multiple sheets stored as JSON array
+        const sheetsArray = sheets
+          .map((s: any) => ({
+            url: (s.url ?? "").trim(),
+            tab: (s.tab ?? "").trim(),
+          }))
+          .filter((s: any) => s.url);
 
-      if (sheetsArray.length === 0) {
-        return NextResponse.json(
-          { error: "At least one valid sheet URL is required" },
-          { status: 400 }
-        );
+        if (sheetsArray.length === 0) {
+          return NextResponse.json(
+            { error: "At least one valid sheet URL is required" },
+            { status: 400 }
+          );
+        }
+
+        updateData.google_sheets_url = JSON.stringify(sheetsArray);
+        updateData.google_sheets_tab = sheetsArray[0].tab || null;
       }
-
-      // Store as JSON string in google_sheets_url column
-      // For backward compatibility, also set the first sheet's tab in google_sheets_tab
-      updateData.google_sheets_url = JSON.stringify(sheetsArray);
-      updateData.google_sheets_tab = sheetsArray[0].tab || null;
     } else if (sheetUrl && typeof sheetUrl === "string") {
       // Old format: single sheet (backward compatibility)
       updateData.google_sheets_url = sheetUrl.trim();

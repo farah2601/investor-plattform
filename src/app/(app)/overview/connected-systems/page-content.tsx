@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useTransition, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -63,6 +63,8 @@ function ConnectedSystemsPageContentInner() {
     masked: null,
     pendingExpiresAt: null,
   });
+
+  const [, startTransition] = useTransition();
 
   useEffect(() => {
     if (userCompanyLoading) return;
@@ -135,137 +137,120 @@ function ConnectedSystemsPageContentInner() {
 
   async function handleSaveStripeKey() {
     if (!company?.id) {
-      alert("No company selected");
+      setTimeout(() => alert("No company selected"), 0);
       return;
     }
 
     if (!stripeKey.trim()) {
-      setStripeError("Please enter a Stripe secret key");
+      startTransition(() => {
+        setStripeError("Please enter a Stripe secret key");
+      });
       return;
     }
 
-    setSavingStripe(true);
-    setStripeError(null);
-
-    try {
-      const res = await authedFetch("/api/stripe/save-key", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          companyId: company.id,
-          secretKey: stripeKey.trim(),
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data?.ok) {
-        throw new Error(data?.error || "Failed to save Stripe key");
-      }
-
-      setStripeModalOpen(false);
-      setStripeKey("");
+    startTransition(() => {
+      setSavingStripe(true);
       setStripeError(null);
-      await loadStripeStatus(company.id);
-    } catch (e: any) {
-      if (e?.message === "Not authenticated") {
+    });
+
+    const cid = company.id;
+    const key = stripeKey.trim();
+    const doSave = async () => {
+      try {
+        const res = await authedFetch("/api/stripe/save-key", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: cid, secretKey: key }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data?.ok) {
+          throw new Error(data?.error || "Failed to save Stripe key");
+        }
         setStripeModalOpen(false);
+        setStripeKey("");
+        setStripeError(null);
+        await loadStripeStatus(cid);
+      } catch (e: any) {
+        if (e?.message === "Not authenticated") {
+          setStripeModalOpen(false);
+          return;
+        }
+        startTransition(() => setStripeError("Failed to save Stripe key. Please try again."));
+      } finally {
+        startTransition(() => setSavingStripe(false));
+      }
+    };
+    await new Promise<void>((r) => setTimeout(r, 0));
+    doSave();
+  }
+
+  function handleDisconnectStripe() {
+    if (!company?.id) {
+      setTimeout(() => alert("No company selected"), 0);
+      return;
+    }
+    setTimeout(async () => {
+      if (!confirm("Are you sure you want to disconnect Stripe? This will remove your Stripe key.")) {
         return;
       }
-      setStripeError("Failed to save Stripe key. Please try again.");
-    } finally {
-      setSavingStripe(false);
-    }
+      const cid = company.id;
+      try {
+        const res = await authedFetch("/api/stripe/disconnect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: cid }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data?.ok) {
+          throw new Error(data?.error || "Failed to disconnect Stripe");
+        }
+        await loadStripeStatus(cid);
+      } catch (e: any) {
+        console.error("Error disconnecting Stripe:", e);
+        setTimeout(() => alert("Error: " + (e?.message || "Failed to disconnect Stripe")), 0);
+      }
+    }, 0);
   }
 
-  async function handleDisconnectStripe() {
+  function handleConnectStripe() {
     if (!company?.id) {
-      alert("No company selected");
+      setTimeout(() => alert("No company selected"), 0);
       return;
     }
-
-    if (!confirm("Are you sure you want to disconnect Stripe? This will remove your Stripe key.")) {
-      return;
-    }
-
-    try {
-      const res = await authedFetch("/api/stripe/disconnect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId: company.id }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data?.ok) {
-        throw new Error(data?.error || "Failed to disconnect Stripe");
+    if (connectingStripe) return;
+    startTransition(() => setConnectingStripe(true));
+    const cid = company.id;
+    setTimeout(async () => {
+      try {
+        const res = await authedFetch(`/api/stripe/connect?companyId=${cid}`, {
+          cache: "no-store",
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.ok || !data?.authorizeUrl) {
+          const errorMsg = data?.error || "Failed to get Stripe authorization URL";
+          const detailsMsg = data?.details ? `\n\nDetails: ${data.details}` : "";
+          throw new Error(errorMsg + detailsMsg);
+        }
+        window.location.href = data.authorizeUrl;
+      } catch (e: any) {
+        console.error("Error connecting Stripe:", e);
+        const msg = e?.message || "Failed to connect Stripe. Please check your Stripe configuration.";
+        setTimeout(() => alert(msg), 0);
+        startTransition(() => setConnectingStripe(false));
       }
-
-      await loadStripeStatus(company.id);
-    } catch (e: any) {
-      console.error("Error disconnecting Stripe:", e);
-      alert("Error: " + (e?.message || "Failed to disconnect Stripe"));
-    }
-  }
-
-  async function handleConnectStripe() {
-    if (!company?.id) {
-      alert("No company selected");
-      return;
-    }
-
-    if (connectingStripe) {
-      return;
-    }
-
-    setConnectingStripe(true);
-
-    try {
-      const res = await authedFetch(`/api/stripe/connect?companyId=${company.id}`, {
-        cache: "no-store",
-      });
-
-      const data = await res.json();
-      
-      // Log full response for debugging
-      console.log("[handleConnectStripe] API response:", {
-        ok: res.ok,
-        status: res.status,
-        dataOk: data?.ok,
-        hasAuthorizeUrl: !!data?.authorizeUrl,
-        error: data?.error,
-        details: data?.details,
-        code: data?.code,
-      });
-
-      if (!res.ok || !data?.ok || !data?.authorizeUrl) {
-        // Use the error message from API, or fallback to a generic message
-        const errorMsg = data?.error || "Failed to get Stripe authorization URL";
-        const detailsMsg = data?.details ? `\n\nDetails: ${data.details}` : "";
-        throw new Error(errorMsg + detailsMsg);
-      }
-
-      window.location.href = data.authorizeUrl;
-    } catch (e: any) {
-      console.error("Error connecting Stripe:", e);
-      // Show the actual error message from API
-      const errorMessage = e?.message || "Failed to connect Stripe. Please check your Stripe configuration.";
-      alert(errorMessage);
-      setConnectingStripe(false);
-    }
+    }, 0);
   }
 
   function handleRequestIntegration() {
-    if (!requestSystemName.trim()) {
-      alert("Please enter a system name");
-      return;
-    }
-
-    // TODO: Implement API call to submit integration request
-    console.log("Integration request:", requestSystemName);
-    
-    // For now, use mailto as fallback
-    window.location.href = `mailto:support@valyxo.com?subject=Integration Request&body=Hi, I would like to request integration with the following system:%0D%0A%0D%0ASystem name: ${encodeURIComponent(requestSystemName)}%0D%0A%0D%0AAdditional details:`;
-    
-    setRequestSystemName("");
+    const name = requestSystemName.trim();
+    setTimeout(() => {
+      if (!name) {
+        alert("Please enter a system name");
+        return;
+      }
+      window.location.href = `mailto:support@valyxo.com?subject=Integration Request&body=Hi, I would like to request integration with the following system:%0D%0A%0D%0ASystem name: ${encodeURIComponent(name)}%0D%0A%0D%0AAdditional details:`;
+      setRequestSystemName("");
+    }, 0);
   }
 
   // Load Google Sheets data when manage modal opens
@@ -273,31 +258,48 @@ function ConnectedSystemsPageContentInner() {
     if (sheetsManageModalOpen && company) {
       // Parse existing sheets - support both old format (single sheet) and new format (array)
       let sheets: Array<{ url: string; tab: string; id: string }> = [];
-      
+
+      function withId(
+        s: { url?: string; tab?: string; id?: string },
+        i: number
+      ): { url: string; tab: string; id: string } {
+        const url = (s.url ?? "").trim();
+        const tab = (s.tab ?? "").trim();
+        const id =
+          (s as { id?: string }).id ||
+          `sheet-${i}-${encodeURIComponent(url.slice(0, 120))}`;
+        return { url, tab, id };
+      }
+
       if (company.google_sheets_url) {
-        // Try to parse as JSON array first (new format)
         try {
           const parsed = JSON.parse(company.google_sheets_url);
           if (Array.isArray(parsed)) {
-            sheets = parsed;
+            sheets = parsed.map((s: any, i: number) => withId(s, i));
           } else {
-            // Old format: single URL
-            sheets = [{
-              url: company.google_sheets_url,
-              tab: company.google_sheets_tab || "",
-              id: `sheet-${Date.now()}`,
-            }];
+            sheets = [
+              withId(
+                {
+                  url: company.google_sheets_url,
+                  tab: company.google_sheets_tab || "",
+                },
+                0
+              ),
+            ];
           }
         } catch {
-          // Not JSON, treat as single URL (old format)
-          sheets = [{
-            url: company.google_sheets_url,
-            tab: company.google_sheets_tab || "",
-            id: `sheet-${Date.now()}`,
-          }];
+          sheets = [
+            withId(
+              {
+                url: company.google_sheets_url,
+                tab: company.google_sheets_tab || "",
+              },
+              0
+            ),
+          ];
         }
       }
-      
+
       setGoogleSheets(sheets);
       setNewSheetUrl("");
       setNewSheetTab("");
@@ -305,97 +307,91 @@ function ConnectedSystemsPageContentInner() {
   }, [sheetsManageModalOpen, company]);
 
   function handleAddSheet() {
-    if (!newSheetUrl.trim()) {
-      alert("Please enter a Google Sheets URL");
+    const url = newSheetUrl.trim();
+    if (!url) {
+      setTimeout(() => alert("Please enter a Google Sheets URL"), 0);
       return;
     }
-
     const newSheet = {
-      url: newSheetUrl.trim(),
+      url,
       tab: newSheetTab.trim() || "",
       id: `sheet-${Date.now()}-${Math.random()}`,
     };
-
-    setGoogleSheets([...googleSheets, newSheet]);
-    setNewSheetUrl("");
-    setNewSheetTab("");
+    startTransition(() => {
+      setGoogleSheets((prev) => [...prev, newSheet]);
+      setNewSheetUrl("");
+      setNewSheetTab("");
+    });
   }
 
   function handleRemoveSheet(id: string) {
-    setGoogleSheets(googleSheets.filter((sheet) => sheet.id !== id));
+    startTransition(() => {
+      setGoogleSheets((prev) => prev.filter((sheet) => sheet.id !== id));
+    });
   }
 
-  async function handleSaveSheets() {
+  function handleSaveSheets() {
     if (!company?.id) {
-      alert("No company selected");
+      setTimeout(() => alert("No company selected"), 0);
       return;
     }
-
-    if (googleSheets.length === 0) {
-      alert("Please add at least one Google Sheet");
-      return;
-    }
-
-    setSavingSheets(true);
-    try {
-      const res = await authedFetch("/api/sheets/connect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          companyId: company.id,
-          sheets: googleSheets.map((s) => ({ url: s.url, tab: s.tab })),
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data?.ok) {
-        throw new Error(data?.error || "Failed to save Google Sheets configuration");
-      }
-
-      setSheetsManageModalOpen(false);
-      // Reload company data to reflect changes
-      window.location.reload();
-    } catch (e: any) {
-      console.error("Error saving Google Sheets:", e);
-      alert("Error: " + (e?.message || "Failed to save configuration"));
-    } finally {
-      setSavingSheets(false);
-    }
-  }
-
-  async function handleSyncKPIs() {
-    if (!company?.id) {
-      alert("No company selected");
-      return;
-    }
-
-    setSyncingKPIs(true);
-    setSyncSuccess(false);
-    try {
-      const res = await authedFetch("/api/sheets/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          companyId: company.id,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data?.ok) {
-        throw new Error(data?.error || "Failed to sync KPIs");
-      }
-
-      setSyncSuccess(true);
-      // Reload company data after sync
-      setTimeout(() => {
+    const cid = company.id;
+    const sheetsPayload = googleSheets.map((s) => ({ url: s.url, tab: s.tab }));
+    startTransition(() => setSavingSheets(true));
+    setTimeout(async () => {
+      try {
+        const res = await authedFetch("/api/sheets/connect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: cid, sheets: sheetsPayload }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data?.ok) {
+          throw new Error(data?.error || "Failed to save Google Sheets configuration");
+        }
+        setSheetsManageModalOpen(false);
         window.location.reload();
-      }, 1500);
-    } catch (e: any) {
-      console.error("Error syncing KPIs:", e);
-      alert("Error: " + (e?.message || "Failed to sync KPIs"));
-    } finally {
-      setSyncingKPIs(false);
+      } catch (e: any) {
+        console.error("Error saving Google Sheets:", e);
+        setTimeout(() => alert("Error: " + (e?.message || "Failed to save configuration")), 0);
+      } finally {
+        startTransition(() => setSavingSheets(false));
+      }
+    }, 0);
+  }
+
+  function handleSyncKPIs() {
+    if (!company?.id) {
+      setTimeout(() => alert("No company selected"), 0);
+      return;
     }
+    const cid = company.id;
+    startTransition(() => {
+      setSyncingKPIs(true);
+      setSyncSuccess(false);
+    });
+    setTimeout(async () => {
+      try {
+        const res = await authedFetch("/api/sheets/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: cid }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data?.ok) {
+          throw new Error(data?.error || "Failed to sync KPIs");
+        }
+        setSyncSuccess(true);
+        setTimeout(() => window.location.reload(), 1500);
+      } catch (e: any) {
+        console.error("Error syncing KPIs:", e);
+        setTimeout(() => alert("Error: " + (e?.message || "Failed to sync KPIs")), 0);
+      } finally {
+        startTransition(() => {
+          setSyncingKPIs(false);
+        });
+      }
+    }, 0);
   }
 
   if (userCompanyLoading || loading) {
@@ -523,28 +519,31 @@ function ConnectedSystemsPageContentInner() {
     sheets: !!(company?.metrics_excluded_sources as any)?.sheets,
   };
 
-  async function toggleExcluded(sourceId: "stripe" | "sheets") {
+  function toggleExcluded(sourceId: "stripe" | "sheets") {
     if (!company?.id) return;
-    setTogglingExcluded(sourceId);
     const next = !excluded[sourceId];
-    try {
-      const res = await authedFetch(`/api/companies/${company.id}/metrics-excluded`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [sourceId]: next }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.ok) {
-        throw new Error(data?.error || "Failed to update");
+    startTransition(() => setTogglingExcluded(sourceId));
+    const cid = company.id;
+    setTimeout(async () => {
+      try {
+        const res = await authedFetch(`/api/companies/${cid}/metrics-excluded`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ [sourceId]: next }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.ok) {
+          throw new Error(data?.error || "Failed to update");
+        }
+        await refetch();
+      } catch (e: any) {
+        if (e?.message !== "Not authenticated") {
+          setTimeout(() => alert(e?.message || "Could not update exclusion. Please try again."), 0);
+        }
+      } finally {
+        startTransition(() => setTogglingExcluded(null));
       }
-      await refetch();
-    } catch (e: any) {
-      if (e?.message !== "Not authenticated") {
-        alert(e?.message || "Could not update exclusion. Please try again.");
-      }
-    } finally {
-      setTogglingExcluded(null);
-    }
+    }, 0);
   }
 
   return (
@@ -577,34 +576,28 @@ function ConnectedSystemsPageContentInner() {
           </div>
           <Button
             onClick={() => {
-              // Find first not connected system
-              const firstNotConnected = visibleSystems.find((s) => !s.isConnected && !s.isPending);
-              
-              if (firstNotConnected) {
-                // Scroll to the first not connected system
-                const element = document.getElementById(`system-${firstNotConnected.id}`);
-                if (element) {
-                  element.scrollIntoView({ behavior: "smooth", block: "center" });
-                  // Add a subtle highlight effect
-                  element.classList.add("ring-2", "ring-[#2B74FF]", "ring-opacity-50");
-                  setTimeout(() => {
-                    element.classList.remove("ring-2", "ring-[#2B74FF]", "ring-opacity-50");
-                  }, 2000);
+              setTimeout(() => {
+                const firstNotConnected = visibleSystems.find((s) => !s.isConnected && !s.isPending);
+                if (firstNotConnected) {
+                  const element = document.getElementById(`system-${firstNotConnected.id}`);
+                  if (element) {
+                    element.scrollIntoView({ behavior: "smooth", block: "center" });
+                    element.classList.add("ring-2", "ring-[#2B74FF]", "ring-opacity-50");
+                    setTimeout(() => {
+                      element.classList.remove("ring-2", "ring-[#2B74FF]", "ring-opacity-50");
+                    }, 2000);
+                  }
+                } else {
+                  const requestSection = document.getElementById("request-integration");
+                  if (requestSection) {
+                    requestSection.scrollIntoView({ behavior: "smooth", block: "center" });
+                    setTimeout(() => {
+                      const input = requestSection.querySelector('input[type="text"]') as HTMLInputElement;
+                      if (input) input.focus();
+                    }, 500);
+                  }
                 }
-              } else {
-                // All systems are connected, scroll to request integration section
-                const requestSection = document.getElementById("request-integration");
-                if (requestSection) {
-                  requestSection.scrollIntoView({ behavior: "smooth", block: "center" });
-                  // Focus the input field
-                  setTimeout(() => {
-                    const input = requestSection.querySelector('input[type="text"]') as HTMLInputElement;
-                    if (input) {
-                      input.focus();
-                    }
-                  }, 500);
-                }
-              }
+              }, 0);
             }}
             className="bg-gradient-to-r from-[#2B74FF] to-[#4D9FFF] hover:from-[#2563EB] hover:to-[#3B82F6] text-white font-semibold shadow-lg shadow-[#2B74FF]/20 hover:shadow-[#4D9FFF]/30"
           >
@@ -1113,7 +1106,7 @@ function ConnectedSystemsPageContentInner() {
               </Button>
             </div>
 
-            {hasGoogleSheets && (
+            {googleSheets.length > 0 && (
               <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
                 <p className="text-sm text-emerald-300">
                   ✓ {googleSheets.length} sheet{googleSheets.length > 1 ? "s" : ""} connected
@@ -1134,7 +1127,7 @@ function ConnectedSystemsPageContentInner() {
           </div>
 
           <DialogFooter className="flex-col sm:flex-row gap-2">
-            {hasGoogleSheets && (
+            {googleSheets.length > 0 && (
               <Button
                 onClick={handleSyncKPIs}
                 disabled={syncingKPIs || !company?.id}
@@ -1145,7 +1138,7 @@ function ConnectedSystemsPageContentInner() {
             )}
             <Button
               onClick={handleSaveSheets}
-              disabled={savingSheets || !company?.id || googleSheets.length === 0}
+              disabled={savingSheets || !company?.id}
               className="bg-white text-slate-950 hover:bg-white/90 w-full sm:w-auto"
             >
               {savingSheets ? "Saving..." : "Save"}
