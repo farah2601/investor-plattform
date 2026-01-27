@@ -659,9 +659,12 @@ export default function InvestorCompanyPage() {
             <Card className="rounded-xl border border-slate-700/60 bg-slate-900/70 shadow-sm overflow-hidden">
               <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-slate-700/50">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <h2 className="text-sm font-semibold text-slate-200">
-                    Key metrics
-                  </h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-semibold text-slate-200">
+                      Key metrics
+                    </h2>
+                    <div className="h-px w-8 bg-gradient-to-r from-sky-500/40 to-transparent" aria-hidden />
+                  </div>
                   {latestSnapshotDate && (
                     <p className="text-[11px] text-slate-500">
                       Snapshot: {new Date(latestSnapshotDate).toLocaleDateString("en-US", {
@@ -678,7 +681,7 @@ export default function InvestorCompanyPage() {
                   {config.arrMrr && (
                     <>
                       {/* Primary: MRR */}
-                      <Card className="rounded-lg border border-slate-600/60 bg-gradient-to-br from-slate-950/95 via-slate-950/80 to-slate-900/60 p-3 sm:p-4 ring-1 ring-sky-500/20 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_0_24px_-6px_rgba(56,189,248,0.16)]">
+                      <Card className="rounded-lg border border-sky-500/25 bg-gradient-to-br from-slate-950/95 via-slate-950/80 to-slate-900/60 p-3 sm:p-4 ring-1 ring-sky-500/15 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_0_20px_-8px_rgba(56,189,248,0.12)]">
                         <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">MRR</p>
                         <p className="mt-0.5 text-xl sm:text-2xl font-bold text-white tabular-nums">
                           {formatMoney(latestMrr)}
@@ -700,7 +703,7 @@ export default function InvestorCompanyPage() {
                         </div>
                       </Card>
                       {/* Primary: ARR */}
-                      <Card className="rounded-lg border border-slate-600/60 bg-gradient-to-br from-slate-950/95 via-slate-950/80 to-slate-900/60 p-3 sm:p-4 ring-1 ring-sky-500/20 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_0_24px_-6px_rgba(56,189,248,0.16)]">
+                      <Card className="rounded-lg border border-sky-500/25 bg-gradient-to-br from-slate-950/95 via-slate-950/80 to-slate-900/60 p-3 sm:p-4 ring-1 ring-sky-500/15 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_0_20px_-8px_rgba(56,189,248,0.12)]">
                         <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">ARR</p>
                         <p className="mt-0.5 text-xl sm:text-2xl font-bold text-white tabular-nums">
                           {formatMoney(latestArr)}
@@ -773,9 +776,12 @@ export default function InvestorCompanyPage() {
           {config.growthCharts && (
           <Card className="rounded-xl border border-slate-700/60 border-t-slate-800/40 bg-slate-900/70 shadow-sm overflow-hidden">
             <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-slate-700/50">
-              <h2 className="text-sm font-semibold text-slate-200">
-                Trends
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-semibold text-slate-200">
+                  Trends
+                </h2>
+                <div className="h-px w-8 bg-gradient-to-r from-sky-500/40 to-transparent" aria-hidden />
+              </div>
             </div>
             <div className="p-4 sm:p-5">
               <div className="grid gap-4 lg:grid-cols-2">
@@ -898,7 +904,10 @@ export default function InvestorCompanyPage() {
           {config.aiInsights && (
           <Card className="rounded-xl border border-slate-700/60 border-t-slate-800/40 bg-slate-900/70 shadow-sm overflow-hidden">
             <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-slate-700/50">
-              <h2 className="text-sm font-semibold text-slate-200">Computed insights</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-semibold text-slate-200">Computed insights</h2>
+                <div className="h-px w-8 bg-gradient-to-r from-sky-500/40 to-transparent" aria-hidden />
+              </div>
               {company.latest_insights_generated_at && (
                 <p className="mt-0.5 text-[11px] text-slate-500">
                   Last generated: {new Date(company.latest_insights_generated_at).toLocaleDateString("en-US", {
