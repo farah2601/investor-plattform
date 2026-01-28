@@ -8,23 +8,15 @@ import Link from "next/link";
 
 import { supabase } from "../../lib/supabaseClient";
 import { cn } from "@/lib/utils";
-import { extractKpiNumber, normalizePercent } from "@/lib/kpi/kpi_extract";
-import { buildDenseSeries, type SnapshotRow } from "@/lib/kpi/kpi_series";
+import { buildDenseSeries, type SnapshotRow, type ChartPoint } from "@/lib/kpi/kpi_series";
+import { extendWithForecast } from "@/lib/kpi/forecast";
 
 import { Card } from "../../../components/ui/card";
 import { Badge } from "../../../../components/ui/badge";
 import { Avatar, AvatarFallback } from "../../../../components/ui/avatar";
-
-
-import {
-  Area,
-  AreaChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-} from "recharts";
+import { ArrChart, type ArrChartDataPoint } from "@/components/ui/ArrChart";
+import { BurnChart, type BurnChartDataPoint } from "@/components/ui/BurnChart";
+import { MrrChart, type MrrChartDataPoint } from "@/components/ui/MrrChart";
 
 type TeamMember = {
   name: string;
@@ -39,6 +31,7 @@ type InvestorViewConfig = {
   burnRunway: boolean;
   growthCharts: boolean;
   aiInsights: boolean;
+  showForecast: boolean;
 };
 
 const DEFAULT_INVESTOR_VIEW: InvestorViewConfig = {
@@ -46,6 +39,7 @@ const DEFAULT_INVESTOR_VIEW: InvestorViewConfig = {
   burnRunway: true,
   growthCharts: true,
   aiInsights: false,
+  showForecast: true,
 };
 
 function normalizeInvestorViewConfig(raw: unknown): InvestorViewConfig {
@@ -56,6 +50,7 @@ function normalizeInvestorViewConfig(raw: unknown): InvestorViewConfig {
     burnRunway: o.burnRunway !== false,
     growthCharts: o.growthCharts !== false,
     aiInsights: !!o.aiInsights,
+    showForecast: o.showForecast !== false,
   };
 }
 
@@ -138,98 +133,6 @@ function formatRunway(value: number | null) {
   return `${value.toFixed(1)} months`;
 }
 
-
-/**
- * Normalize burn_rate: if value < 1000, treat as "thousands" and multiply by 1000.
- * This handles the case where burn_rate is stored as 92 (meaning 92k) instead of 92000.
- */
-function normalizeBurnRate(value: number | null): number | null {
-  if (value == null) return null;
-  const num = Number(value);
-  if (isNaN(num)) return null;
-  // If value is less than 1000, assume it's in thousands and multiply by 1000
-  if (num < 1000 && num > 0) {
-    return num * 1000;
-  }
-  return num;
-}
-
-/**
- * Format currency for axis ticks (short format)
- * - < 1,000 => "$920"
- * - < 1,000,000 => "$92k" (round, no decimals)
- * - >= 1,000,000 => "$7.1M" (1 decimal max)
- * - 0 => "0" (never "Ok")
- */
-function formatCurrencyShort(value: number | null): string {
-  if (value == null || isNaN(value)) return "—";
-  const num = Math.abs(value);
-  
-  if (num === 0) return "0";
-  if (num < 1000) return `$${Math.round(num).toLocaleString("en-US")}`;
-  if (num < 1000000) return `$${Math.round(num / 1000)}k`;
-  return `$${(num / 1000000).toFixed(1)}M`;
-}
-
-/**
- * Format currency for tooltips (long format with commas)
- * e.g., "$92,000" or "$7,060,000"
- */
-function formatCurrencyLong(value: number | null): string {
-  if (value == null || isNaN(value)) return "—";
-  return `$${Math.round(value).toLocaleString("en-US")}`;
-}
-
-/**
- * Format month label for tooltip (e.g., "Dec 2026")
- */
-function formatMonthYearLabel(dateStr: string): string {
-  try {
-    const date = new Date(dateStr);
-    return new Intl.DateTimeFormat("en-US", { 
-      month: "short", 
-      year: "numeric" 
-    }).format(date);
-  } catch {
-    return dateStr.slice(0, 7);
-  }
-}
-
-/**
- * Custom Stripe-like tooltip component
- */
-function CustomTooltip({ 
-  active, 
-  payload, 
-  label, 
-  seriesName,
-  dateKey = "date"
-}: { 
-  active?: boolean; 
-  payload?: any[]; 
-  label?: string;
-  seriesName: string;
-  dateKey?: string;
-}) {
-  if (!active || !payload || !payload[0]) return null;
-  
-  const data = payload[0].payload;
-  const value = payload[0].value;
-  const date = data?.[dateKey] || label || "";
-  const formattedDate = date ? formatMonthYearLabel(date) : (label || "");
-  const formattedValue = value != null ? formatCurrencyLong(value) : "—";
-
-  return (
-    <div className="bg-slate-900/95 border border-slate-700/50 rounded-lg px-3 py-2 shadow-lg backdrop-blur-sm">
-      <div className="text-xs text-slate-300 font-medium mb-1">
-        {formattedDate}
-      </div>
-      <div className="text-sm text-white font-semibold">
-        {seriesName} • {formattedValue}
-      </div>
-    </div>
-  );
-}
 
 export default function InvestorCompanyPage() {
   const params = useParams();
@@ -485,37 +388,67 @@ export default function InvestorCompanyPage() {
   const latestGrowth = company?.growth_percent ?? null;
   const latestRunway = company?.runway_months ?? null;
 
-  // Build chart series using shared utility (dense monthly axis, proper null handling)
+  // Build chart series same as dashboard: dense series + forecast + toXxxChartData
+  const arrSeries = buildDenseSeries(snapshotRows, "arr");
   const mrrSeries = buildDenseSeries(snapshotRows, "mrr");
   const burnSeries = buildDenseSeries(snapshotRows, "burn_rate");
-  
-  // Check if series have any non-null data
+
+  const arrExtended = extendWithForecast(arrSeries, { monthsAhead: 6 });
+  const mrrExtended = extendWithForecast(mrrSeries, { monthsAhead: 6 });
+  const burnExtended = extendWithForecast(burnSeries, { monthsAhead: 6 });
+
+  function toArrChartData(series: ChartPoint[], includeForecast: boolean): ArrChartDataPoint[] {
+    if (!includeForecast) return series.map((p) => ({ month: p.label, arr: p.value }));
+    const lastHist = series.reduce<number>((acc, p, i) => (p.value != null ? i : acc), -1);
+    return series.map((p, i) => {
+      const arr = p.value;
+      let arrForecast: number | null | undefined;
+      if (p.forecast != null) arrForecast = p.forecast;
+      else if (i === lastHist && lastHist >= 0) arrForecast = (series[lastHist]!.value as number);
+      else arrForecast = undefined;
+      return { month: p.label, arr, ...(arrForecast != null && { arrForecast }) };
+    });
+  }
+  function toMrrChartData(series: ChartPoint[], includeForecast: boolean): MrrChartDataPoint[] {
+    if (!includeForecast) return series.map((p) => ({ month: p.label, mrr: p.value }));
+    const lastHist = series.reduce<number>((acc, p, i) => (p.value != null ? i : acc), -1);
+    return series.map((p, i) => {
+      const mrr = p.value;
+      let mrrForecast: number | null | undefined;
+      if (p.forecast != null) mrrForecast = p.forecast;
+      else if (i === lastHist && lastHist >= 0) mrrForecast = (series[lastHist]!.value as number);
+      else mrrForecast = undefined;
+      return { month: p.label, mrr, ...(mrrForecast != null && { mrrForecast }) };
+    });
+  }
+  function toBurnChartData(series: ChartPoint[], includeForecast: boolean): BurnChartDataPoint[] {
+    if (!includeForecast) return series.map((p) => ({ month: p.label, burn: p.value }));
+    const lastHist = series.reduce<number>((acc, p, i) => (p.value != null ? i : acc), -1);
+    return series.map((p, i) => {
+      const burn = p.value;
+      let burnForecast: number | null | undefined;
+      if (p.forecast != null) burnForecast = p.forecast;
+      else if (i === lastHist && lastHist >= 0) burnForecast = (series[lastHist]!.value as number);
+      else burnForecast = undefined;
+      return { month: p.label, burn, ...(burnForecast != null && { burnForecast }) };
+    });
+  }
+
+  const showForecast = config.showForecast;
+  const arrChartData = toArrChartData(showForecast ? arrExtended : arrSeries, showForecast);
+  const mrrChartData = toMrrChartData(showForecast ? mrrExtended : mrrSeries, showForecast);
+  const burnChartData = toBurnChartData(showForecast ? burnExtended : burnSeries, showForecast);
+
+  const hasArrData = arrSeries.some((p) => p.value !== null);
   const hasMrrData = mrrSeries.some((p) => p.value !== null);
   const hasBurnData = burnSeries.some((p) => p.value !== null);
 
-  // Transform to chart format (include date for tooltip)
-  // Recharts handles null values gracefully (skips rendering that point)
-  const mrrChartData = mrrSeries.map((p) => ({
-    month: p.label,
-    date: "", // Will be populated from period_date if needed
-    value: p.value,
-  }));
-
-  // burnSeries: normalize burn_rate values (if < 1000, treat as thousands and multiply by 1000)
-  const burnChartData = burnSeries.map((p) => {
-    const normalizedValue = p.value !== null ? normalizeBurnRate(p.value) : null;
-    return {
-      month: p.label,
-      date: "", // Will be populated from period_date if needed
-      value: normalizedValue,
-    };
-  });
-  
   const DEBUG = true;
   if (DEBUG) {
     console.log("[InvestorView] Chart series:", {
       snapshotsTotal: snapshotRows.length,
       validSnapshots: snapshotRows.filter((r) => r.period_date && r.kpis).length,
+      arrSeries: { length: arrSeries.length, hasData: hasArrData },
       mrrSeries: { length: mrrSeries.length, hasData: hasMrrData },
       burnSeries: { length: burnSeries.length, hasData: hasBurnData },
     });
@@ -789,130 +722,37 @@ export default function InvestorCompanyPage() {
               </div>
             </div>
             <div className="p-4 sm:p-5">
-              <div className="grid gap-4 lg:grid-cols-2">
-              {/* MRR chart */}
-              <div className="space-y-2">
-                <p className="text-xs text-slate-400">
-                  MRR {mrrChartData.length > 0 ? `(${mrrChartData.length} periods)` : ""}
-                </p>
-                {!hasMrrData ? (
-                  <div className="h-48 w-full flex items-center justify-center rounded-lg border border-slate-800 bg-slate-950/60">
-                    <p className="text-sm text-slate-400">No valid data yet</p>
-                  </div>
-                ) : (
-                  <div className="h-48 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart 
-                        data={mrrChartData}
-                        margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                      >
-                      <CartesianGrid 
-                        strokeDasharray="3 3" 
-                        stroke="#334155" 
-                        opacity={0.2}
-                        horizontal={true}
-                        vertical={false}
-                      />
-                      <XAxis
-                        dataKey="month"
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fontSize: 11, fill: "#94a3b8" }}
-                        padding={{ left: 8, right: 8 }}
-                      />
-                      <YAxis
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fontSize: 11, fill: "#94a3b8" }}
-                        tickFormatter={(v) => formatCurrencyShort(v)}
-                        width={60}
-                      />
-                      <Tooltip
-                        content={<CustomTooltip seriesName="MRR" />}
-                        cursor={{ stroke: "#64748b", strokeWidth: 1, strokeDasharray: "3 3" }}
-                      />
-                      <defs>
-                        <linearGradient id="mrrGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#38bdf8" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <Area
-                        type="monotone"
-                        dataKey="value"
-                        stroke="#38bdf8"
-                        fill="url(#mrrGradient)"
-                        strokeWidth={2}
-                        dot={{ fill: "#38bdf8", r: 3, strokeWidth: 2, stroke: "#0f172a" }}
-                        activeDot={{ r: 5, strokeWidth: 2, stroke: "#0f172a" }}
-                      />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-              </div>
-
-              {/* Burn chart */}
-              <div className="space-y-2">
-                <p className="text-xs text-slate-400">
-                  Burn {burnChartData.length > 0 ? `(${burnChartData.length} periods)` : ""}
-                </p>
-                {!hasBurnData ? (
-                  <div className="h-48 w-full flex items-center justify-center rounded-lg border border-slate-800 bg-slate-950/60">
-                    <p className="text-sm text-slate-400">No valid data yet</p>
-                  </div>
-                ) : (
-                  <div className="h-48 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart 
-                        data={burnChartData}
-                        margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                      >
-                      <CartesianGrid 
-                        strokeDasharray="3 3" 
-                        stroke="#334155" 
-                        opacity={0.2}
-                        horizontal={true}
-                        vertical={false}
-                      />
-                      <XAxis
-                        dataKey="month"
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fontSize: 11, fill: "#94a3b8" }}
-                        padding={{ left: 8, right: 8 }}
-                      />
-                      <YAxis
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fontSize: 11, fill: "#94a3b8" }}
-                        tickFormatter={(v) => formatCurrencyShort(v)}
-                        width={60}
-                      />
-                      <Tooltip
-                        content={<CustomTooltip seriesName="Burn" />}
-                        cursor={{ stroke: "#64748b", strokeWidth: 1, strokeDasharray: "3 3" }}
-                      />
-                      <defs>
-                        <linearGradient id="burnGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <Area
-                        type="monotone"
-                        dataKey="value"
-                        stroke="#f97373"
-                        fill="url(#burnGradient)"
-                        strokeWidth={2}
-                        dot={{ fill: "#f97373", r: 3, strokeWidth: 2, stroke: "#0f172a" }}
-                        activeDot={{ r: 5, strokeWidth: 2, stroke: "#0f172a" }}
-                      />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                {/* ARR – same as dashboard */}
+                <div>
+                  {!hasArrData ? (
+                    <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 flex items-center justify-center">
+                      <p className="text-sm text-slate-400">No valid data yet</p>
+                    </div>
+                  ) : (
+                    <ArrChart data={arrChartData} />
+                  )}
+                </div>
+                {/* MRR */}
+                <div>
+                  {!hasMrrData ? (
+                    <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 flex items-center justify-center">
+                      <p className="text-sm text-slate-400">No valid data yet</p>
+                    </div>
+                  ) : (
+                    <MrrChart data={mrrChartData} />
+                  )}
+                </div>
+                {/* Burn – full width */}
+                <div className="lg:col-span-2">
+                  {!hasBurnData ? (
+                    <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 flex items-center justify-center">
+                      <p className="text-sm text-slate-400">No valid data yet</p>
+                    </div>
+                  ) : (
+                    <BurnChart data={burnChartData} />
+                  )}
+                </div>
               </div>
             </div>
           </Card>

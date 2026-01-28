@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -8,17 +8,13 @@ import { supabase } from "@/app/lib/supabaseClient";
 import { authedFetch } from "@/lib/authedFetch";
 import { FormattedDate } from "@/components/ui/FormattedDate";
 import { KpiCard } from "@/components/ui/KpiCard";
-import { ArrChart, type ArrChartDataPoint } from "@/components/ui/ArrChart";
-import { MrrChart, type MrrChartDataPoint } from "@/components/ui/MrrChart";
+import { BurnChart } from "@/components/ui/BurnChart";
+import { MrrChart } from "@/components/ui/MrrChart";
+import { buildDenseSeries, type SnapshotRow, type ChartPoint } from "@/lib/kpi/kpi_series";
+import { extendWithForecast } from "@/lib/kpi/forecast";
 import { useCompanyData } from "@/hooks/useCompanyData";
 import { useUserCompany } from "@/lib/user-company-context";
 import { MetricsDetailsModal } from "@/components/metrics/MetricsDetailsModal";
-
-type ChartDataPoint = {
-  date: string;
-  label: string;
-  value: number | null;
-};
 
 // Helper functions for formatting metrics
 function formatMoney(value: number | null) {
@@ -85,10 +81,41 @@ function OverviewPageContentInner() {
   const [runningAgent, setRunningAgent] = useState(false);
   const [agentError, setAgentError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [arrSeries, setArrSeries] = useState<ChartDataPoint[]>([]);
-  const [mrrSeries, setMrrSeries] = useState<ChartDataPoint[]>([]);
+  const [snapshotRows, setSnapshotRows] = useState<SnapshotRow[]>([]);
   const [loadingKpiHistory, setLoadingKpiHistory] = useState(false);
-  const [activeChart, setActiveChart] = useState<"arr" | "mrr">("arr");
+  const [activeChart, setActiveChart] = useState<"mrr" | "burn">("mrr");
+
+  const mrrSeries = useMemo(() => buildDenseSeries(snapshotRows, "mrr"), [snapshotRows]);
+  const burnSeries = useMemo(() => buildDenseSeries(snapshotRows, "burn_rate"), [snapshotRows]);
+  const mrrExtended = useMemo(() => extendWithForecast(mrrSeries, { monthsAhead: 6 }), [mrrSeries]);
+  const burnExtended = useMemo(() => extendWithForecast(burnSeries, { monthsAhead: 6 }), [burnSeries]);
+
+  function toMrrChartData(series: ChartPoint[]) {
+    const lastHist = series.reduce<number>((acc, p, i) => (p.value != null ? i : acc), -1);
+    return series.map((p, i) => {
+      const mrr = p.value;
+      let mrrForecast: number | null | undefined;
+      if (p.forecast != null) mrrForecast = p.forecast;
+      else if (i === lastHist && lastHist >= 0) mrrForecast = (series[lastHist]!.value as number);
+      else mrrForecast = undefined;
+      return { month: p.label, mrr, ...(mrrForecast != null && { mrrForecast }) };
+    });
+  }
+
+  function toBurnChartData(series: ChartPoint[]) {
+    const lastHist = series.reduce<number>((acc, p, i) => (p.value != null ? i : acc), -1);
+    return series.map((p, i) => {
+      const burn = p.value;
+      let burnForecast: number | null | undefined;
+      if (p.forecast != null) burnForecast = p.forecast;
+      else if (i === lastHist && lastHist >= 0) burnForecast = (series[lastHist]!.value as number);
+      else burnForecast = undefined;
+      return { month: p.label, burn, ...(burnForecast != null && { burnForecast }) };
+    });
+  }
+
+  const mrrChartData = useMemo(() => toMrrChartData(mrrExtended), [mrrExtended]);
+  const burnChartData = useMemo(() => toBurnChartData(burnExtended), [burnExtended]);
 
   const [stripeStatus, setStripeStatus] = useState<{
     status: "not_connected" | "pending" | "connected";
@@ -118,28 +145,22 @@ function OverviewPageContentInner() {
       });
 
       if (!res.ok) {
-        // Silently handle errors - charts are optional, so we just show empty state
         const errorData = await res.json().catch(() => ({}));
         console.warn("[loadKpiHistory] API error:", res.status, errorData?.error || "Unknown error");
-        setArrSeries([]);
-        setMrrSeries([]);
+        setSnapshotRows([]);
         return;
       }
 
       const json = await res.json().catch(() => ({}));
 
-      if (json?.ok && Array.isArray(json.arrSeries) && Array.isArray(json.mrrSeries)) {
-        setArrSeries(json.arrSeries);
-        setMrrSeries(json.mrrSeries);
+      if (json?.ok && Array.isArray(json.rows)) {
+        setSnapshotRows(json.rows);
       } else {
-        setArrSeries([]);
-        setMrrSeries([]);
+        setSnapshotRows([]);
       }
     } catch (e) {
-      // Silently handle errors - charts are optional
       console.warn("Failed to load KPI history (charts will not be shown):", e);
-      setArrSeries([]);
-      setMrrSeries([]);
+      setSnapshotRows([]);
     } finally {
       setLoadingKpiHistory(false);
     }
@@ -486,18 +507,18 @@ function OverviewPageContentInner() {
           />
         </div>
 
-        {/* Chart Section - Carousel style */}
-        {!loadingKpiHistory && (arrSeries.length > 0 || mrrSeries.length > 0) && (
+        {/* Chart carousel — MRR · Burn (with prognose) */}
+        {!loadingKpiHistory && (mrrChartData.length > 0 || burnChartData.length > 0) && (
           <div className="mb-8">
             <div className="relative bg-slate-900/40 rounded-xl p-5 border border-slate-700/30 light:bg-white light:border-slate-200">
               {/* Arrow navigation - only show if both charts available */}
-              {arrSeries.length > 0 && mrrSeries.length > 0 && (
+              {mrrChartData.length > 0 && burnChartData.length > 0 && (
                 <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
                   <button
-                    onClick={() => setActiveChart("arr")}
-                    disabled={activeChart === "arr"}
+                    onClick={() => setActiveChart("mrr")}
+                    disabled={activeChart === "mrr"}
                     className={`p-2 rounded-md transition-all ${
-                      activeChart === "arr"
+                      activeChart === "mrr"
                         ? "opacity-40 cursor-not-allowed"
                         : "hover:bg-slate-800/50 text-slate-400 hover:text-white"
                     }`}
@@ -518,8 +539,8 @@ function OverviewPageContentInner() {
                     </svg>
                   </button>
                   <button
-                    onClick={() => setActiveChart("mrr")}
-                    disabled={activeChart === "mrr"}
+                    onClick={() => setActiveChart("burn")}
+                    disabled={activeChart === "burn"}
                     className={`p-2 rounded-md transition-all ${
                       activeChart === "mrr"
                         ? "opacity-40 cursor-not-allowed"
@@ -546,61 +567,46 @@ function OverviewPageContentInner() {
 
               {/* Chart content */}
               <div className="relative min-h-[280px]">
-                {/* ARR Chart */}
-                {arrSeries.length > 0 && (
+                {mrrChartData.length > 0 && (
                   <div
                     className={`transition-opacity duration-300 ${
-                      activeChart === "arr" || (arrSeries.length > 0 && mrrSeries.length === 0)
+                      activeChart === "mrr" || (mrrChartData.length > 0 && burnChartData.length === 0)
                         ? "opacity-100 relative"
                         : "opacity-0 absolute inset-0 pointer-events-none"
                     }`}
                   >
-                    <h3 className="text-sm font-medium text-white mb-4">ARR Over Time</h3>
-                    <ArrChart
-                      data={arrSeries.map((point) => ({
-                        month: point.label || point.date,
-                        arr: point.value != null && !isNaN(Number(point.value)) ? Number(point.value) : null,
-                      }))}
-                    />
+                    <MrrChart data={mrrChartData} />
                   </div>
                 )}
 
-                {/* MRR Chart */}
-                {mrrSeries.length > 0 && (
+                {burnChartData.length > 0 && (
                   <div
                     className={`transition-opacity duration-300 ${
-                      activeChart === "mrr" || (mrrSeries.length > 0 && arrSeries.length === 0)
+                      activeChart === "burn" || (burnChartData.length > 0 && mrrChartData.length === 0)
                         ? "opacity-100 relative"
                         : "opacity-0 absolute inset-0 pointer-events-none"
                     }`}
                   >
-                    <h3 className="text-sm font-medium text-white mb-4 light:text-slate-950">MRR Over Time</h3>
-                    <MrrChart
-                      data={mrrSeries.map((point) => ({
-                        month: point.label || point.date,
-                        mrr: point.value != null && !isNaN(Number(point.value)) ? Number(point.value) : null,
-                      }))}
-                    />
+                    <BurnChart data={burnChartData} />
                   </div>
                 )}
               </div>
 
-              {/* Dot indicators - only if both charts */}
-              {arrSeries.length > 0 && mrrSeries.length > 0 && (
+              {mrrChartData.length > 0 && burnChartData.length > 0 && (
                 <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t border-slate-700/30">
-                  <button
-                    onClick={() => setActiveChart("arr")}
-                    className={`h-2 rounded-full transition-all ${
-                      activeChart === "arr" ? "w-8 bg-[#2B74FF]" : "w-2 bg-slate-600 hover:bg-slate-500"
-                    }`}
-                    aria-label="Show ARR chart"
-                  />
                   <button
                     onClick={() => setActiveChart("mrr")}
                     className={`h-2 rounded-full transition-all ${
                       activeChart === "mrr" ? "w-8 bg-[#2B74FF]" : "w-2 bg-slate-600 hover:bg-slate-500"
                     }`}
                     aria-label="Show MRR chart"
+                  />
+                  <button
+                    onClick={() => setActiveChart("burn")}
+                    className={`h-2 rounded-full transition-all ${
+                      activeChart === "burn" ? "w-8 bg-[#2B74FF]" : "w-2 bg-slate-600 hover:bg-slate-500"
+                    }`}
+                    aria-label="Show Burn chart"
                   />
                 </div>
               )}

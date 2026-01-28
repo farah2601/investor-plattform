@@ -101,7 +101,7 @@ export async function GET(
         (company as any).logo_url = null;
         (company as any).header_style = "minimal";
         (company as any).brand_color = null;
-        (company as any).investor_view_config = { arrMrr: true, burnRunway: true, growthCharts: true, aiInsights: false };
+        (company as any).investor_view_config = { arrMrr: true, burnRunway: true, growthCharts: true, aiInsights: false, showForecast: true };
       }
     }
 
@@ -119,7 +119,7 @@ export async function GET(
 
     const c = company as any;
     if (!c.investor_view_config || typeof c.investor_view_config !== "object") {
-      c.investor_view_config = { arrMrr: true, burnRunway: true, growthCharts: true, aiInsights: false };
+      c.investor_view_config = { arrMrr: true, burnRunway: true, growthCharts: true, aiInsights: false, showForecast: true };
     }
 
     return NextResponse.json(
@@ -215,6 +215,7 @@ const DEFAULT_INVESTOR_VIEW = {
   burnRunway: true,
   growthCharts: true,
   aiInsights: false,
+  showForecast: true,
 };
 
 export async function PATCH(
@@ -260,6 +261,7 @@ export async function PATCH(
       burnRunway: typeof body.burnRunway === "boolean" ? body.burnRunway : DEFAULT_INVESTOR_VIEW.burnRunway,
       growthCharts: typeof body.growthCharts === "boolean" ? body.growthCharts : DEFAULT_INVESTOR_VIEW.growthCharts,
       aiInsights: typeof body.aiInsights === "boolean" ? body.aiInsights : DEFAULT_INVESTOR_VIEW.aiInsights,
+      showForecast: typeof body.showForecast === "boolean" ? body.showForecast : DEFAULT_INVESTOR_VIEW.showForecast,
     };
 
     const { error: updateError } = await supabaseAdmin

@@ -12,25 +12,45 @@ import {
 export type ArrChartDataPoint = {
   month: string;
   arr: number | null;
+  /** Forecasted value (future months); shown as dashed line */
+  arrForecast?: number | null;
 };
 
 type ArrChartProps = {
   data?: ArrChartDataPoint[];
 };
 
-function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) {
+function fmt(v: number) {
+  return v >= 1000000
+    ? `$${(v / 1000000).toFixed(2)}M`
+    : `$${(v / 1000).toFixed(0)}k`;
+}
+
+function CustomTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: { dataKey?: string; value?: number }[];
+  label?: string;
+}) {
   if (!active || !payload || !payload.length) return null;
 
-  const value = payload[0].value;
-  const formatted = value >= 1000000 
-    ? `$${(value / 1000000).toFixed(2)}M`
-    : `$${(value / 1000).toFixed(0)}k`;
+  const arr = payload.find((p) => p.dataKey === "arr")?.value;
+  const f = payload.find((p) => p.dataKey === "arrForecast")?.value;
+  const isForecast = arr == null && f != null;
 
   return (
     <div className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-100 shadow-lg">
       <div className="font-medium mb-1">{label}</div>
-      <div className="text-slate-300">
-        ARR: {formatted}
+      <div className="text-slate-300 space-y-0.5">
+        {arr != null && <div>ARR: {fmt(arr)}</div>}
+        {f != null && (isForecast || arr != null) && (
+          <div className={isForecast ? "text-amber-300" : ""}>
+            Prognose: {fmt(f)}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -80,7 +100,22 @@ export function ArrChart({ data = [] }: ArrChartProps) {
               strokeWidth={2}
               dot={false}
               activeDot={{ r: 4 }}
+              connectNulls
             />
+            {data.some((d) => d.arrForecast != null) && (
+              <Line
+                type="monotone"
+                dataKey="arrForecast"
+                stroke="#2B74FF"
+                strokeWidth={2}
+                strokeDasharray="6 4"
+                strokeOpacity={0.7}
+                dot={false}
+                activeDot={{ r: 4 }}
+                connectNulls
+                name="Prognose"
+              />
+            )}
           </LineChart>
         </ResponsiveContainer>
       </div>

@@ -14,7 +14,8 @@ import { Input } from "@/components/ui/input";
 import { ArrChart, type ArrChartDataPoint } from "@/components/ui/ArrChart";
 import { BurnChart, type BurnChartDataPoint } from "@/components/ui/BurnChart";
 import { MrrChart, type MrrChartDataPoint } from "@/components/ui/MrrChart";
-import { buildDenseSeries, type SnapshotRow } from "@/lib/kpi/kpi_series";
+import { buildDenseSeries, type SnapshotRow, type ChartPoint } from "@/lib/kpi/kpi_series";
+import { extendWithForecast } from "@/lib/kpi/forecast";
 import {
   Dialog,
   DialogContent,
@@ -71,6 +72,7 @@ type CompanyKpi = {
     burnRunway?: boolean;
     growthCharts?: boolean;
     aiInsights?: boolean;
+    showForecast?: boolean;
   } | null;
 };
 
@@ -150,6 +152,7 @@ function CompanyDashboardContent() {
   const [kpiSources, setKpiSources] = useState<Record<string, string> | null>(null); // Source metadata from latest snapshot
 
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [showForecast, setShowForecast] = useState(true);
 
   // Stripe integration
   const [stripeModalOpen, setStripeModalOpen] = useState(false);
@@ -184,6 +187,7 @@ function CompanyDashboardContent() {
     burnRunway: true,
     growthCharts: true,
     aiInsights: false,
+    showForecast: true,
   });
   const [, startTransition] = useTransition();
 
@@ -517,7 +521,7 @@ function CompanyDashboardContent() {
       console.error("Error fetching company KPI", companyError);
       setError(companyError.message);
       setCompany(null);
-      setInvestorView({ arrMrr: true, burnRunway: true, growthCharts: true, aiInsights: false });
+      setInvestorView({ arrMrr: true, burnRunway: true, growthCharts: true, aiInsights: false, showForecast: true });
       setInsights([]);
       setAgentLogs([]);
       return;
@@ -534,8 +538,9 @@ function CompanyDashboardContent() {
             burnRunway: cfg.burnRunway !== false,
             growthCharts: cfg.growthCharts !== false,
             aiInsights: !!cfg.aiInsights,
+            showForecast: (cfg as { showForecast?: boolean }).showForecast !== false,
           }
-        : { arrMrr: true, burnRunway: true, growthCharts: true, aiInsights: false };
+        : { arrMrr: true, burnRunway: true, growthCharts: true, aiInsights: false, showForecast: true };
       setInvestorView(c);
       setKpiForm({
         mrr: selectedCompany.mrr != null ? String(selectedCompany.mrr) : "",
@@ -585,23 +590,53 @@ function CompanyDashboardContent() {
   const hasMrrData = mrrSeries.some((p) => p.value !== null);
   const hasBurnData = burnSeries.some((p) => p.value !== null);
 
-  // Transform to chart component format
-  // Charts expect { month: string, arr/mrr/burn: number | null }
-  // Recharts handles null values gracefully (skips rendering that point)
-  const arrChartData: ArrChartDataPoint[] = arrSeries.map((p) => ({
-    month: p.label,
-    arr: p.value,
-  }));
+  // Transform to chart component format; optionally add forecast (dashed line) for ARR, MRR & Burn
+  const arrExtended = extendWithForecast(arrSeries, { monthsAhead: 6 });
+  const mrrExtended = extendWithForecast(mrrSeries, { monthsAhead: 6 });
+  const burnExtended = extendWithForecast(burnSeries, { monthsAhead: 6 });
 
-  const mrrChartData: MrrChartDataPoint[] = mrrSeries.map((p) => ({
-    month: p.label,
-    mrr: p.value,
-  }));
+  function toArrChartData(series: ChartPoint[], includeForecast: boolean): ArrChartDataPoint[] {
+    if (!includeForecast) return series.map((p) => ({ month: p.label, arr: p.value }));
+    const lastHist = series.reduce<number>((acc, p, i) => (p.value != null ? i : acc), -1);
+    return series.map((p, i) => {
+      const arr = p.value;
+      let arrForecast: number | null | undefined;
+      if (p.forecast != null) arrForecast = p.forecast;
+      else if (i === lastHist && lastHist >= 0) arrForecast = (series[lastHist]!.value as number);
+      else arrForecast = undefined;
+      return { month: p.label, arr, ...(arrForecast != null && { arrForecast }) };
+    });
+  }
 
-  const burnChartData: BurnChartDataPoint[] = burnSeries.map((p) => ({
-    month: p.label,
-    burn: p.value,
-  }));
+  function toMrrChartData(series: ChartPoint[], includeForecast: boolean): MrrChartDataPoint[] {
+    if (!includeForecast) return series.map((p) => ({ month: p.label, mrr: p.value }));
+    const lastHist = series.reduce<number>((acc, p, i) => (p.value != null ? i : acc), -1);
+    return series.map((p, i) => {
+      const mrr = p.value;
+      let mrrForecast: number | null | undefined;
+      if (p.forecast != null) mrrForecast = p.forecast;
+      else if (i === lastHist && lastHist >= 0) mrrForecast = (series[lastHist]!.value as number);
+      else mrrForecast = undefined;
+      return { month: p.label, mrr, ...(mrrForecast != null && { mrrForecast }) };
+    });
+  }
+
+  function toBurnChartData(series: ChartPoint[], includeForecast: boolean): BurnChartDataPoint[] {
+    if (!includeForecast) return series.map((p) => ({ month: p.label, burn: p.value }));
+    const lastHist = series.reduce<number>((acc, p, i) => (p.value != null ? i : acc), -1);
+    return series.map((p, i) => {
+      const burn = p.value;
+      let burnForecast: number | null | undefined;
+      if (p.forecast != null) burnForecast = p.forecast;
+      else if (i === lastHist && lastHist >= 0) burnForecast = (series[lastHist]!.value as number);
+      else burnForecast = undefined;
+      return { month: p.label, burn, ...(burnForecast != null && { burnForecast }) };
+    });
+  }
+
+  const arrChartData = toArrChartData(showForecast ? arrExtended : arrSeries, showForecast);
+  const mrrChartData = toMrrChartData(showForecast ? mrrExtended : mrrSeries, showForecast);
+  const burnChartData = toBurnChartData(showForecast ? burnExtended : burnSeries, showForecast);
 
   const DEBUG = true;
   if (DEBUG) {
@@ -834,7 +869,7 @@ function CompanyDashboardContent() {
     }
   }
 
-  async function handleInvestorViewToggle(key: "arrMrr" | "burnRunway" | "growthCharts" | "aiInsights") {
+  async function handleInvestorViewToggle(key: "arrMrr" | "burnRunway" | "growthCharts" | "aiInsights" | "showForecast") {
     if (!company?.id) return;
     const prev = { ...investorView };
     const next = { ...investorView, [key]: !investorView[key] };
@@ -1150,11 +1185,33 @@ function CompanyDashboardContent() {
           {/* CHARTS SECTION - mobile: stack, desktop: 2 columns */}
           {company && (
             <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 shadow-xl space-y-4 sm:space-y-6 light:border-slate-200 light:bg-white light:shadow-sm">
-              <div>
-                <h2 className="text-sm sm:text-base font-medium text-slate-200 light:text-slate-950">Trends</h2>
-                <p className="text-xs text-slate-500 mt-1 light:text-slate-600">
-                  Revenue and burn metrics over time
-                </p>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <h2 className="text-sm sm:text-base font-medium text-slate-200 light:text-slate-950">Trends</h2>
+                  <p className="text-xs text-slate-500 mt-1 light:text-slate-600">
+                    Revenue and burn metrics over time
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-sm text-slate-400 light:text-slate-600">Show forecast</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={showForecast}
+                    onClick={() => setShowForecast((v) => !v)}
+                    className={cn(
+                      "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-[#2B74FF]/50 focus:ring-offset-2 focus:ring-offset-slate-900 light:focus:ring-offset-white",
+                      showForecast ? "bg-[#2B74FF]" : "bg-slate-700 light:bg-slate-300"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "pointer-events-none block h-5 w-5 rounded-full bg-white shadow transition-transform",
+                        showForecast ? "translate-x-5" : "translate-x-0"
+                      )}
+                    />
+                  </button>
+                </div>
               </div>
 
               {/* mobile: stack, desktop: 2 columns */}
@@ -1358,6 +1415,7 @@ function CompanyDashboardContent() {
                   { key: "burnRunway" as const, label: "Burn & Runway" },
                   { key: "growthCharts" as const, label: "Growth charts" },
                   { key: "aiInsights" as const, label: "AI insights" },
+                  { key: "showForecast" as const, label: "Show forecast" },
                 ].map(({ key, label }) => (
                   <div key={key} className="flex items-center justify-between gap-3">
                     <span className="text-sm text-slate-200 light:text-slate-800">{label}</span>

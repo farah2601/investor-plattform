@@ -20,6 +20,10 @@ export type Point = {
 export type ChartPoint = {
   label: string; // Formatted label like "Jan 2026"
   value: number | null; // Value or null for missing data
+  /** YYYY-MM-01, set by buildDenseSeries for use in forecast */
+  period_date?: string;
+  /** Forecasted value for future months (extends series) */
+  forecast?: number;
 };
 
 type BuildSeriesOptions = {
@@ -226,6 +230,7 @@ export function buildDenseSeries(
     return {
       label,
       value,
+      period_date,
     };
   });
 

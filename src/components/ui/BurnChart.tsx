@@ -1,34 +1,54 @@
 "use client";
 
 import {
-  BarChart,
-  Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  Cell,
 } from "recharts";
 
 export type BurnChartDataPoint = {
   month: string;
   burn: number | null;
+  /** Forecasted value (future months); shown as dashed line */
+  burnForecast?: number | null;
 };
 
 type BurnChartProps = {
   data?: BurnChartDataPoint[];
 };
 
-function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) {
+function fmtBurn(v: number) {
+  return v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : "$" + v.toLocaleString("en-US");
+}
+
+function CustomTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: { dataKey?: string; value?: number }[];
+  label?: string;
+}) {
   if (!active || !payload || !payload.length) return null;
 
-  const value = payload[0].value;
+  const burn = payload.find((p) => p.dataKey === "burn")?.value;
+  const f = payload.find((p) => p.dataKey === "burnForecast")?.value;
+  const isForecast = burn == null && f != null;
 
   return (
     <div className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-100 shadow-lg">
       <div className="font-medium mb-1">{label}</div>
-      <div className="text-slate-300">
-        Monthly burn: ${value >= 1000 ? `${(value / 1000).toFixed(0)}k` : value.toLocaleString("en-US")}
+      <div className="text-slate-300 space-y-0.5">
+        {burn != null && <div>Monthly burn: {fmtBurn(burn)}</div>}
+        {f != null && (isForecast || burn != null) && (
+          <div className={isForecast ? "text-amber-300" : ""}>
+            Prognose: {fmtBurn(f)}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -46,12 +66,6 @@ export function BurnChart({ data = [] }: BurnChartProps) {
     );
   }
 
-  // Calculate average burn for color coding (only if we have data with non-null values)
-  const validData = data.filter((d) => d.burn !== null && d.burn !== undefined);
-  const avgBurn = validData.length > 0 
-    ? validData.reduce((sum, d) => sum + (d.burn || 0), 0) / validData.length 
-    : 0;
-  
   return (
     <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3">
       <div className="flex items-center justify-between mb-3">
@@ -64,48 +78,48 @@ export function BurnChart({ data = [] }: BurnChartProps) {
       </div>
       <div className="w-full h-[80%]">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart
+          <LineChart
             data={data}
-            margin={{ top: 5, right: 10, left: 0, bottom: 0 }}
+            margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
           >
             <XAxis
               dataKey="month"
               tickLine={false}
               axisLine={false}
-              tick={{ fill: "rgba(148, 163, 184, 0.9)", fontSize: 10 }}
+              tick={{ fill: "rgba(148, 163, 184, 0.9)", fontSize: 11 }}
             />
             <YAxis
               tickLine={false}
               axisLine={false}
-              tick={{ fill: "rgba(148, 163, 184, 0.9)", fontSize: 10 }}
+              tick={{ fill: "rgba(148, 163, 184, 0.9)", fontSize: 11 }}
               tickFormatter={(v) => `${Math.round(v / 1000)}k`}
-              width={40}
             />
             <Tooltip content={<CustomTooltip />} />
-            <Bar dataKey="burn" radius={[4, 4, 0, 0]}>
-              {data.map((entry, index) => {
-                const burnValue = entry.burn ?? 0;
-                return (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={burnValue > avgBurn ? "#ef4444" : "#2B74FF"}
-                    opacity={entry.burn === null ? 0.3 : 1}
-                  />
-                );
-              })}
-            </Bar>
-          </BarChart>
+            <Line
+              type="monotone"
+              dataKey="burn"
+              stroke="#2B74FF"
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4 }}
+              connectNulls
+            />
+            {data.some((d) => d.burnForecast != null) && (
+              <Line
+                type="monotone"
+                dataKey="burnForecast"
+                stroke="#2B74FF"
+                strokeWidth={2}
+                strokeDasharray="6 4"
+                strokeOpacity={0.7}
+                dot={false}
+                activeDot={{ r: 4 }}
+                connectNulls
+                name="Prognose"
+              />
+            )}
+          </LineChart>
         </ResponsiveContainer>
-      </div>
-      <div className="flex items-center gap-4 mt-2 pt-2 border-t border-slate-800">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded bg-[#2B74FF]" />
-          <span className="text-xs text-slate-400">Below average</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded bg-[#ef4444]" />
-          <span className="text-xs text-slate-400">Above average</span>
-        </div>
       </div>
     </div>
   );
