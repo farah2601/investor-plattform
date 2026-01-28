@@ -4,6 +4,7 @@ import { verifySecret } from "../auth/verify";
 import { runAgent } from "../agent/orchestrator";
 import { runAll } from "../agent/tools/run_all";
 import { runAllCompanies } from "../agent/tools/run_all_companies";
+import { getAgentLogs } from "../agent/tools/get_agent_logs";
 
 export async function toolsRoutes(app: FastifyInstance) {
   app.addHook("preHandler", verifySecret);
@@ -39,5 +40,15 @@ export async function toolsRoutes(app: FastifyInstance) {
 
   app.post("/run_all_companies", async (request) => {
     return await runAllCompanies(request.body);
+  });
+
+  app.post("/get_agent_logs", async (request, reply) => {
+    const body = (request.body as any) || {};
+    const companyId = body.companyId as string | undefined;
+    if (!companyId) {
+      return reply.status(400).send({ ok: false, error: "Missing companyId" });
+    }
+    const result = await getAgentLogs({ companyId });
+    return reply.send(result);
   });
 }

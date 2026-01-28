@@ -1011,6 +1011,11 @@ function ConnectedSystemsPageContentInner() {
             <DialogDescription className="text-sm text-slate-400">
               Add multiple Google Sheets to sync KPIs from different sources.
             </DialogDescription>
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 mt-3">
+              <p className="text-xs text-amber-200/90">
+                <strong>Important:</strong> The link to each sheet must be <strong>shared publicly</strong> (e.g. &quot;Anyone with the link can view&quot;) for the Valyxo agent to access and sync your metrics.
+              </p>
+            </div>
           </DialogHeader>
 
           <div className="space-y-4 py-4 overflow-x-hidden">
@@ -1069,7 +1074,7 @@ function ConnectedSystemsPageContentInner() {
                   }}
                 />
                 <p className="text-xs text-slate-500">
-                  Make sure the sheet is publicly accessible or shared with the service account.
+                  Share the sheet with &quot;Anyone with the link can view&quot; so the agent can read it.
                 </p>
               </div>
 
