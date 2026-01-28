@@ -23,6 +23,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { MetricsDetailsModal } from "@/components/metrics/MetricsDetailsModal";
 import { FormattedDate } from "@/components/ui/FormattedDate";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -147,6 +148,8 @@ function CompanyDashboardContent() {
   // Store raw snapshot rows for client-side series building
   const [snapshotRows, setSnapshotRows] = useState<Array<{ period_date: string; kpis: unknown }>>([]);
   const [kpiSources, setKpiSources] = useState<Record<string, string> | null>(null); // Source metadata from latest snapshot
+
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   // Stripe integration
   const [stripeModalOpen, setStripeModalOpen] = useState(false);
@@ -1102,7 +1105,16 @@ function CompanyDashboardContent() {
                   )}
                 </p>
                 </div>
-                <div className="text-left sm:text-right">
+                <div className="text-left sm:text-right flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs border-slate-600 text-slate-300 hover:bg-slate-800/50 hover:text-white light:border-slate-300 light:text-slate-700 light:hover:bg-slate-100"
+                    onClick={() => setDetailsOpen(true)}
+                  >
+                    Details
+                  </Button>
                   <p className="text-xs text-slate-500 light:text-slate-600">
                     Powered by <span className="font-medium text-slate-300 light:text-slate-900">Valyxo Agent</span>
                   </p>
@@ -1126,6 +1138,14 @@ function CompanyDashboardContent() {
                 />
                 <KpiCard label="Churn" value={formatPercent(company.churn)} sublabel="MRR churn rate" />
               </div>
+              {company && (
+                <MetricsDetailsModal
+                  companyId={company.id}
+                  open={detailsOpen}
+                  onOpenChange={setDetailsOpen}
+                  companyName={company.name}
+                />
+              )}
             </section>
           )}
 

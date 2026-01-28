@@ -12,6 +12,7 @@ import { ArrChart, type ArrChartDataPoint } from "@/components/ui/ArrChart";
 import { MrrChart, type MrrChartDataPoint } from "@/components/ui/MrrChart";
 import { useCompanyData } from "@/hooks/useCompanyData";
 import { useUserCompany } from "@/lib/user-company-context";
+import { MetricsDetailsModal } from "@/components/metrics/MetricsDetailsModal";
 
 type ChartDataPoint = {
   date: string;
@@ -92,6 +93,7 @@ function OverviewPageContentInner() {
   const [stripeStatus, setStripeStatus] = useState<{
     status: "not_connected" | "pending" | "connected";
   }>({ status: "not_connected" });
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   useEffect(() => {
     if (userCompanyLoading) return;
@@ -443,6 +445,15 @@ function OverviewPageContentInner() {
           {hasGoogleSheets && (
             <span className="text-[#2B74FF] font-medium">Auto-sync enabled</span>
           )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="text-xs border-slate-600 text-slate-300 hover:bg-slate-800/50 hover:text-white light:border-slate-300 light:text-slate-700 light:hover:bg-slate-100"
+            onClick={() => setDetailsOpen(true)}
+          >
+            Details
+          </Button>
         </div>
 
         {/* All 6 Key Metrics - Split into multiple rows (3x2 layout) */}
@@ -467,6 +478,12 @@ function OverviewPageContentInner() {
             />
             <KpiCard label="Churn" value={formatPercent(company.churn)} sublabel="MRR churn rate" />
           </div>
+          <MetricsDetailsModal
+            companyId={company.id}
+            open={detailsOpen}
+            onOpenChange={setDetailsOpen}
+            companyName={company.name}
+          />
         </div>
 
         {/* Chart Section - Carousel style */}
