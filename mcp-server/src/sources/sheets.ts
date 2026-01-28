@@ -24,6 +24,17 @@ const KPI_KEYS = [
 
 type KpiKey = typeof KPI_KEYS[number];
 
+// Type definitions for sheet parsing
+type SheetRow = Array<string | number | null | undefined>;
+type SheetRows = SheetRow[];
+type ParsedRow = { periodDate: string; values: Record<string, number | null> };
+type ParseDebug = {
+  detectedLayout: string;
+  totalRows: number;
+  parsedRows: number;
+  skippedRows: number;
+};
+
 // Header mapping: normalized header -> KPI key
 const HEADER_MAP: Record<string, KpiKey | "month"> = {
   // Month/Date
@@ -254,7 +265,7 @@ function parseNumber(value: unknown, isPercent = false): number | null {
  * Score a row as a potential header row
  */
 function scoreHeaderRow(
-  row: any[],
+  row: SheetRow,
   knownKpiKeys: readonly string[]
 ): { score: number; columnMap: Map<number, KpiKey> } {
   let score = 0;
@@ -288,7 +299,7 @@ function scoreHeaderRow(
  * Find best header row in horizontal layout
  */
 function findBestHeaderRow(
-  rows: any[][],
+  rows: SheetRows,
   maxRowsToCheck = 20
 ): { headerRowIndex: number; columnMap: Map<number, KpiKey> } | null {
   let bestScore = 0;
@@ -321,11 +332,11 @@ function findBestHeaderRow(
  * Extract data region from header row
  */
 function extractDataRegion(
-  rows: any[][],
+  rows: SheetRows,
   headerRowIndex: number,
   monthColumnIndex: number
-): any[][] {
-  const dataRows: any[][] = [];
+): SheetRows {
+  const dataRows: SheetRows = [];
   let emptyMonthCount = 0;
 
   for (let i = headerRowIndex + 1; i < rows.length; i++) {
@@ -354,8 +365,8 @@ function extractDataRegion(
  * Parse horizontal layout
  */
 function parseHorizontalLayout(
-  rows: any[][]
-): { parsed: Array<{ periodDate: string; values: Record<string, number | null> }>; debug: any } {
+  rows: SheetRows
+): { parsed: ParsedRow[]; debug: ParseDebug } {
   const parsed: Array<{ periodDate: string; values: Record<string, number | null> }> = [];
   let skippedRows = 0;
 
@@ -401,6 +412,10 @@ function parseHorizontalLayout(
 
   for (const row of dataRows) {
     const monthValue = row[monthColumnIndex];
+    if (monthValue === null || monthValue === undefined) {
+      skippedRows++;
+      continue;
+    }
     const periodDate = parseMonthToPeriodDate(monthValue);
     
     if (!periodDate) {
@@ -439,7 +454,7 @@ function parseHorizontalLayout(
 /**
  * Detect vertical layout
  */
-function detectVerticalLayout(rows: any[][]): boolean {
+function detectVerticalLayout(rows: SheetRows): boolean {
   if (rows.length < 2) return false;
 
   const firstRow = rows[0];
@@ -475,8 +490,8 @@ function detectVerticalLayout(rows: any[][]): boolean {
  * Parse vertical layout
  */
 function parseVerticalLayout(
-  rows: any[][]
-): { parsed: Array<{ periodDate: string; values: Record<string, number | null> }>; debug: any } {
+  rows: SheetRows
+): { parsed: ParsedRow[]; debug: ParseDebug } {
   const parsed: Array<{ periodDate: string; values: Record<string, number | null> }> = [];
   let skippedRows = 0;
 
@@ -497,6 +512,7 @@ function parseVerticalLayout(
   const monthColumns: Array<{ index: number; periodDate: string }> = [];
   for (let i = 1; i < firstRow.length; i++) {
     const cell = firstRow[i];
+    if (cell === null || cell === undefined) continue;
     const periodDate = parseMonthToPeriodDate(cell);
     if (periodDate) {
       monthColumns.push({ index: i, periodDate });
@@ -574,9 +590,9 @@ function parseVerticalLayout(
 /**
  * Parse sheet rows
  */
-function parseSheetRows(rows: any[][]): {
-  parsed: Array<{ periodDate: string; values: Record<string, number | null> }>;
-  debug: any;
+function parseSheetRows(rows: SheetRows): {
+  parsed: ParsedRow[];
+  debug: ParseDebug;
 } {
   if (!rows || rows.length === 0) {
     return {
@@ -618,7 +634,7 @@ function parseSheetRows(rows: any[][]): {
 /**
  * Convert Google Sheets URL to CSV export URL
  */
-function getSheetsCsvUrl(sheetUrl: string, tabName?: string | null): string {
+function getSheetsCsvUrl(sheetUrl: string, tabName?: string | null, range?: string | null): string {
   const match = sheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
   if (!match) {
     throw new Error("Invalid Google Sheets URL format");
@@ -638,21 +654,25 @@ function getSheetsCsvUrl(sheetUrl: string, tabName?: string | null): string {
     }
   }
 
+  if (range && range.trim()) {
+    csvUrl += `&range=${encodeURIComponent(range.trim())}`;
+  }
+
   return csvUrl;
 }
 
 /**
  * Parse CSV text into 2D array
  */
-function parseCSV(csvText: string): any[][] {
-  const rows: any[][] = [];
+function parseCSV(csvText: string): SheetRows {
+  const rows: SheetRows = [];
   const lines = csvText.split("\n");
   
   for (const line of lines) {
     if (!line.trim()) continue;
     
     // Simple CSV parsing (handles quoted fields)
-    const cells: any[] = [];
+    const cells: SheetRow = [];
     let current = "";
     let inQuotes = false;
     
@@ -696,7 +716,7 @@ export async function loadSheetsKpisForCompany(companyId: string): Promise<Array
   // Fetch company's Google Sheets config
   const { data: company, error: companyError } = await supabase
     .from("companies")
-    .select("id, google_sheets_url, google_sheets_tab, google_sheets_range")
+    .select("id, google_sheets_url, google_sheets_tab")
     .eq("id", companyId)
     .maybeSingle();
 
@@ -720,7 +740,14 @@ export async function loadSheetsKpisForCompany(companyId: string): Promise<Array
   const sheetId = sheetIdMatch ? sheetIdMatch[1] : undefined;
 
   // Get CSV export URL
-  const csvUrl = getSheetsCsvUrl(company.google_sheets_url, company.google_sheets_tab);
+  const range: string | null = null;
+  const csvUrl = getSheetsCsvUrl(company.google_sheets_url, company.google_sheets_tab, range);
+
+  console.log(`[loadSheetsKpisForCompany] Loading Google Sheet for company ${companyId}:`, {
+    hasUrl: true,
+    tabProvided: !!company.google_sheets_tab,
+    rangeProvided: !!range,
+  });
 
   // Fetch CSV data
   let csvText: string;
@@ -734,9 +761,10 @@ export async function loadSheetsKpisForCompany(companyId: string): Promise<Array
     }
 
     csvText = await response.text();
-  } catch (fetchError: any) {
-    console.error(`[loadSheetsKpisForCompany] Fetch error for company ${companyId}:`, fetchError.message);
-    throw new Error(`Failed to fetch Google Sheet: ${fetchError.message}`);
+  } catch (fetchError: unknown) {
+    const errorMsg = fetchError instanceof Error ? fetchError.message : String(fetchError);
+    console.error(`[loadSheetsKpisForCompany] Fetch error for company ${companyId}:`, errorMsg);
+    throw new Error(`Failed to fetch Google Sheet: ${errorMsg}`);
   }
 
   // Parse CSV
@@ -769,8 +797,10 @@ export async function loadSheetsKpisForCompany(companyId: string): Promise<Array
     meta: {
       sheetId,
       tab: company.google_sheets_tab || undefined,
-      range: company.google_sheets_range || undefined,
-      detectedLayout: debug.detectedLayout,
+      range: range || undefined,
+      detectedLayout: (debug.detectedLayout === "horizontal" || debug.detectedLayout === "vertical" || debug.detectedLayout === "none") 
+        ? debug.detectedLayout 
+        : undefined,
       parsedRows: debug.parsedRows,
       skippedRows: debug.skippedRows,
       mapping_used: mappingUsed,

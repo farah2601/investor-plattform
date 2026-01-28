@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
 import { supabase, isSupabaseConfigured } from "../lib/supabaseClient";
+import { routeUserAfterAuth } from "@/lib/auth/routeUserAfterAuth";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 
@@ -32,9 +33,9 @@ export default function LoginPage() {
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session?.user) {
-          // User is already logged in, redirect through callback for proper routing
-          console.log("[Login] User already logged in, redirecting to callback");
-          router.replace("/auth/callback");
+          // User is already logged in, route directly using shared function
+          console.log("[Login] User already logged in, routing directly");
+          await routeUserAfterAuth(router, supabase);
         }
       } catch (err) {
         console.error("[Login] Error checking session:", err);
@@ -174,7 +175,8 @@ export default function LoginPage() {
     try {
       // Always use window.location.origin for redirectTo (never hardcode localhost)
       const origin = window.location.origin;
-      const redirectTo = `${origin}/auth/callback`;
+      const next = searchParams.get("next") || "/overview";
+      const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(next)}`;
 
       console.log("[Login] Initiating Google OAuth, redirectTo:", redirectTo);
 
@@ -213,15 +215,22 @@ export default function LoginPage() {
       password: form.password,
     });
 
-    setLoading(false);
-
     if (error) {
+      setLoading(false);
       setError(error.message);
       return;
     }
 
-    // After successful login, route through callback for consistent routing logic
-    router.push("/auth/callback");
+    // After successful login, route directly using shared function
+    // Do NOT redirect to /auth/callback (that's only for OAuth)
+    try {
+      await routeUserAfterAuth(router, supabase);
+      // Note: setLoading(false) is not needed here as we're redirecting
+    } catch (err) {
+      console.error("[Login] Error routing after login:", err);
+      setLoading(false);
+      setError("Login successful but routing failed. Please refresh the page.");
+    }
   }
 
   return (

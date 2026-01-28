@@ -4,6 +4,8 @@
  * Handles merging, computing derived metrics, and snapshot operations.
  */
 
+import { supabase } from "../db/supabase";
+
 type KpiSource = "stripe" | "sheet" | "manual" | "computed";
 
 type KpiValue = {
@@ -423,5 +425,79 @@ export function applySourcePriority(
   return {
     mergedKpis: result as KpiSnapshotKpis,
     kpiSources,
+  };
+}
+
+/**
+ * Check if a snapshot is valid (has at least one key KPI)
+ */
+function isValidSnapshotByKpis(kpis: unknown): boolean {
+  if (!kpis || typeof kpis !== "object" || kpis === null) {
+    return false;
+  }
+
+  const kpisObj = kpis as Record<string, unknown>;
+  const mrr = extractKpiValue(kpisObj.mrr);
+  const netRevenue = extractKpiValue(kpisObj.net_revenue);
+  const burnRate = extractKpiValue(kpisObj.burn_rate);
+  const cashBalance = extractKpiValue(kpisObj.cash_balance);
+  const customers = extractKpiValue(kpisObj.customers);
+
+  return (
+    mrr !== null ||
+    netRevenue !== null ||
+    burnRate !== null ||
+    cashBalance !== null ||
+    customers !== null
+  );
+}
+
+/**
+ * Get the latest valid snapshot for a company
+ * A snapshot is valid if at least one of mrr, net_revenue, burn_rate, cash_balance, or customers is non-null
+ */
+export async function getLatestValidSnapshot(companyId: string): Promise<{
+  found: {
+    period_date: string;
+    kpis: Record<string, unknown>;
+    created_at: string | null;
+    effective_date: string | null;
+  } | null;
+  scannedCount: number;
+}> {
+  // Fetch all snapshots ordered by period_date descending (newest first)
+  const { data, error } = await supabase
+    .from("kpi_snapshots")
+    .select("period_date, kpis, created_at, effective_date")
+    .eq("company_id", companyId)
+    .order("period_date", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  const snapshots = data || [];
+  let scannedCount = 0;
+
+  // Find the first valid snapshot
+  for (const snapshot of snapshots) {
+    scannedCount++;
+    if (isValidSnapshotByKpis(snapshot.kpis)) {
+      return {
+        found: {
+          period_date: snapshot.period_date,
+          kpis: snapshot.kpis as Record<string, unknown>,
+          created_at: snapshot.created_at,
+          effective_date: snapshot.effective_date,
+        },
+        scannedCount,
+      };
+    }
+  }
+
+  // No valid snapshot found
+  return {
+    found: null,
+    scannedCount,
   };
 }

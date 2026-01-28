@@ -1,42 +1,34 @@
 "use client";
 
-import { useEffect, Suspense, useState } from "react";
+import { useEffect, Suspense, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { supabase, isSupabaseConfigured } from "../../lib/supabaseClient";
+import { routeUserAfterAuth } from "@/lib/auth/routeUserAfterAuth";
 
 /**
- * OAuth callback handler
+ * OAuth callback handler - Client-side implementation
  * 
- * This page handles authentication callbacks from:
- * - Google OAuth (redirects with ?code=)
- * - Email/password login (session refresh)
+ * Handles OAuth redirects with ?code= parameter.
+ * After successful exchange, routes user using shared routeUserAfterAuth function.
  * 
- * ROUTING LOGIC:
- * - No company → /overview (user can create company from there)
- * - Company but profile_published = false → /company-profile
- * - Company and profile_published = true → /overview
- * 
- * ERROR HANDLING:
- * - OAuth exchange fails → /login?error=oauth_failed&details=...
- * - Session missing → /login
- * - Configuration missing → /login?error=config_missing
- * 
- * SUPABASE AUTH URL CONFIGURATION CHECKLIST:
- * 1. Site URL: https://www.valyxo.com
- * 2. Redirect URLs (in Supabase Dashboard > Authentication > URL Configuration):
- *    - http://localhost:3000/auth/callback (for local development)
- *    - https://www.valyxo.com/auth/callback (for production)
- * 3. Vercel Environment Variables (must be set in Vercel dashboard):
- *    - NEXT_PUBLIC_SUPABASE_URL
- *    - NEXT_PUBLIC_SUPABASE_ANON_KEY
+ * Anti-loop: Uses useRef to ensure callback logic runs only once.
  */
 function AuthCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [error, setError] = useState<string | null>(null);
+  const ranRef = useRef<boolean>(false);
 
   useEffect(() => {
+    // Anti-loop: Prevent multiple executions
+    if (ranRef.current) {
+      return;
+    }
+
     const handleCallback = async () => {
+      // Mark as running immediately
+      ranRef.current = true;
+
       // Check if Supabase is configured
       if (!isSupabaseConfigured()) {
         console.error("[AuthCallback] Supabase not configured");
@@ -44,40 +36,12 @@ function AuthCallbackContent() {
         return;
       }
 
-      // Check for hash fragment (access_token from Supabase OAuth redirect)
-      // Supabase sometimes redirects with hash fragment instead of query params
-      if (typeof window !== "undefined" && window.location.hash) {
-        try {
-          const hashParams = new URLSearchParams(window.location.hash.substring(1));
-          const accessToken = hashParams.get("access_token");
-          const refreshToken = hashParams.get("refresh_token");
-          
-          if (accessToken && refreshToken) {
-            console.log("[AuthCallback] Found access_token in hash, setting session");
-            // Supabase will automatically handle the hash and set the session
-            // Wait a bit for Supabase to process the hash
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-            
-            if (sessionError || !session?.user) {
-              console.error("[AuthCallback] Failed to get session from hash:", sessionError);
-              router.replace("/login?error=oauth_failed&details=session_error");
-              return;
-            }
-            
-            console.log("[AuthCallback] Session from hash, routing user:", session.user.id);
-            await routeUser(session.user.id);
-            return;
-          }
-        } catch (err) {
-          console.error("[AuthCallback] Error parsing hash:", err);
-        }
-      }
-
       const code = searchParams.get("code");
       const errorParam = searchParams.get("error");
       const errorDescription = searchParams.get("error_description");
+
+      // Debug logging (no secrets)
+      console.log("[Auth] callback code?", !!code);
 
       // Handle OAuth error from provider
       if (errorParam) {
@@ -85,11 +49,13 @@ function AuthCallbackContent() {
           error: errorParam,
           description: errorDescription,
         });
-        router.replace(`/login?error=oauth_failed&details=${encodeURIComponent(errorDescription || errorParam)}`);
+        router.replace(
+          `/login?error=oauth_failed&details=${encodeURIComponent(errorDescription || errorParam)}`
+        );
         return;
       }
 
-      // 1. OAuth redirect (Google) - exchange code for session
+      // FLOW 1: OAuth with ?code= parameter
       if (code) {
         try {
           const { data, error: exchangeError } =
@@ -97,7 +63,9 @@ function AuthCallbackContent() {
 
           if (exchangeError) {
             console.error("[AuthCallback] Failed to exchange code for session:", exchangeError);
-            router.replace(`/login?error=oauth_failed&details=${encodeURIComponent(exchangeError.message)}`);
+            router.replace(
+              `/login?error=oauth_failed&details=${encodeURIComponent(exchangeError.message)}`
+            );
             return;
           }
 
@@ -107,114 +75,84 @@ function AuthCallbackContent() {
             return;
           }
 
-          console.log("[AuthCallback] OAuth successful, routing user:", data.session.user.id);
-          await routeUser(data.session.user.id);
+          // Remove query string to prevent re-triggering on refresh
+          window.history.replaceState({}, "", "/auth/callback");
+
+          // Get session to ensure it's set
+          const { data: sessionData } = await supabase.auth.getSession();
+          
+          // Debug logging
+          console.log("[Auth] has session?", !!sessionData?.session?.user);
+
+          if (!sessionData?.session?.user) {
+            router.replace("/login?error=oauth_failed&details=no_session");
+            return;
+          }
+
+          // Route user using shared function
+          await routeUserAfterAuth(router, supabase);
           return;
         } catch (err) {
           console.error("[AuthCallback] Unexpected error during code exchange:", err);
-          router.replace(`/login?error=oauth_failed&details=${encodeURIComponent(err instanceof Error ? err.message : "unknown_error")}`);
+          router.replace(
+            `/login?error=oauth_failed&details=${encodeURIComponent(
+              err instanceof Error ? err.message : "unknown_error"
+            )}`
+          );
           return;
         }
       }
 
-      // 2. Normal session refresh / reload (email/password login)
+      // FLOW 2: No code - check if user already has a session (safety fallback)
+      // This handles edge cases where user might land here without code
       try {
-        const { data, error: sessionError } = await supabase.auth.getSession();
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        // Debug logging
+        console.log("[Auth] has session?", !!session?.user);
 
-        if (sessionError) {
-          console.error("[AuthCallback] Failed to get session:", sessionError);
-          router.replace("/login?error=session_error");
+        if (session?.user) {
+          // User has session, route them
+          await routeUserAfterAuth(router, supabase);
           return;
         }
 
-        if (!data?.session?.user) {
-          console.error("[AuthCallback] No session found");
-          router.replace("/login");
-          return;
-        }
-
-        console.log("[AuthCallback] Session found, routing user:", data.session.user.id);
-        await routeUser(data.session.user.id);
+        // No session and no code -> redirect to login
+        console.error("[AuthCallback] No code and no session");
+        router.replace("/login");
       } catch (err) {
         console.error("[AuthCallback] Unexpected error during session check:", err);
-        router.replace(`/login?error=session_error&details=${encodeURIComponent(err instanceof Error ? err.message : "unknown_error")}`);
-      }
-    };
-
-    const routeUser = async (userId: string) => {
-      try {
-        // Check if user has a company and its publication status
-        const { data: company, error: companyError } = await supabase
-          .from("companies")
-          .select("id, profile_published")
-          .eq("owner_id", userId)
-          .maybeSingle();
-
-        if (companyError) {
-          console.error("[AuthCallback] Error checking company:", companyError);
-          // Default to overview on error
-          router.replace("/overview");
-          return;
-        }
-
-        // No company → overview (user can create company from there)
-        if (!company?.id) {
-          console.log("[AuthCallback] No company found, routing to overview:", userId);
-          router.replace("/overview");
-          return;
-        }
-
-        // Company exists but not published → company profile (edit mode)
-        if (company.profile_published === false) {
-          console.log("[AuthCallback] Company not published, routing to company-profile:", userId);
-          router.replace("/company-profile");
-          return;
-        }
-
-        // Company exists and published → overview
-        console.log("[AuthCallback] Company published, routing to overview:", userId);
-        router.replace(`/overview`);
-      } catch (err) {
-        console.error("[AuthCallback] Unexpected error during routing:", err);
-        // Default to overview on error
-        router.replace("/overview");
+        router.replace("/login");
       }
     };
 
     handleCallback();
   }, [router, searchParams]);
 
-  // Show error message if error state is set (shouldn't happen often, but good UX)
-  if (error) {
-    return (
-      <main className="min-h-screen flex items-center justify-center text-slate-400">
-        <div className="text-center space-y-4">
-          <p className="text-rose-400">Error: {error}</p>
-          <button
-            onClick={() => router.push("/login")}
-            className="text-[#2B74FF] hover:underline"
-          >
-            Return to login
-          </button>
-        </div>
-      </main>
-    );
-  }
-
   return (
     <main className="min-h-screen flex items-center justify-center text-slate-400">
-      Completing sign in…
+      <div className="text-center space-y-4">
+        <p>Completing sign in…</p>
+        <p className="text-xs text-slate-500">
+          If this takes too long,{" "}
+          <Link href="/login" className="text-[#2B74FF] hover:underline">
+            return to login
+          </Link>
+        </p>
+      </div>
     </main>
   );
 }
 
 export default function AuthCallbackPage() {
   return (
-    <Suspense fallback={
-      <main className="min-h-screen flex items-center justify-center text-slate-400">
-        Loading…
-      </main>
-    }>
+    <Suspense
+      fallback={
+        <main className="min-h-screen flex items-center justify-center text-slate-400">
+          Loading…
+        </main>
+      }
+    >
       <AuthCallbackContent />
     </Suspense>
   );

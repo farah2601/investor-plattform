@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
 import { supabase, isSupabaseConfigured } from "../lib/supabaseClient";
+import { routeUserAfterAuth } from "@/lib/auth/routeUserAfterAuth";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 
@@ -217,18 +218,25 @@ export default function SignUpPage() {
       return;
     }
 
-    // After successful sign-up, route through callback for consistent routing logic
-    // If email confirmation is required, user will be redirected via email link
-    // Otherwise, we can check session and route directly
+    // After successful sign-up, route directly if session exists
+    // If email confirmation is required, user will be redirected via email link to /auth/callback
     const { data: { session } } = await supabase.auth.getSession();
     
     if (session?.user) {
       // User is immediately signed in (no email confirmation required)
-      // Route through callback for consistent logic
-      router.push("/auth/callback");
+      // Route directly using shared function (do NOT redirect to /auth/callback)
+      try {
+        await routeUserAfterAuth(router, supabase);
+        // Note: setLoading(false) is not needed here as we're redirecting
+      } catch (err) {
+        console.error("[SignUp] Error routing after sign-up:", err);
+        setLoading(false);
+        setError("Sign-up successful but routing failed. Please refresh the page.");
+      }
     } else {
       // Email confirmation required - user will be redirected via email link to /auth/callback
       // Show success message
+      setLoading(false);
       setError(null);
       // Could show a success message here, but for now just redirect to login with message
       router.push("/login?message=check_email");
