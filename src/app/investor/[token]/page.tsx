@@ -433,32 +433,7 @@ export default function InvestorCompanyPage() {
         // Store raw snapshot rows for client-side series building
         const rows = json.rows as SnapshotRow[];
         setSnapshotRows(rows);
-        
-        // Get latest snapshot's full kpis object - single source of truth for all KPI values
-        // The API returns latest snapshot directly
-        if (json.latest?.kpis) {
-          // Extract ALL KPI values from the latest snapshot's kpis JSONB object
-          // Use shared utility for consistency (handles both flat and nested formats)
-          const kpis = json.latest.kpis;
-          const rawBurnRate = extractKpiNumber(kpis, "burn_rate");
-          const rawChurn = extractKpiNumber(kpis, "churn");
-          const rawGrowth = extractKpiNumber(kpis, "mrr_growth_mom");
-          
-          setLatestKpis({
-            mrr: extractKpiNumber(kpis, "mrr"),
-            arr: extractKpiNumber(kpis, "arr"),
-            burn_rate: normalizeBurnRate(rawBurnRate),
-            churn: normalizePercent(rawChurn, false), // Churn cannot be negative
-            growth_percent: normalizePercent(rawGrowth, true), // Growth can be negative
-            runway_months: extractKpiNumber(kpis, "runway_months"),
-            cash_balance: extractKpiNumber(kpis, "cash_balance"),
-            customers: extractKpiNumber(kpis, "customers"),
-          });
-          setLatestSnapshotDate(json.latest.period_date || null);
-        } else {
-          setLatestKpis(null);
-          setLatestSnapshotDate(null);
-        }
+        setLatestSnapshotDate(json.latest?.period_date || null);
         
         const DEBUG = true;
         if (DEBUG) {
@@ -470,13 +445,11 @@ export default function InvestorCompanyPage() {
         }
       } else {
         setSnapshotRows([]);
-        setLatestKpis(null);
         setLatestSnapshotDate(null);
       }
     } catch (e) {
       console.error("Failed to load KPI history", e);
       setSnapshotRows([]);
-      setLatestKpis(null);
       setLatestSnapshotDate(null);
     } finally {
       setLoadingKpiHistory(false);

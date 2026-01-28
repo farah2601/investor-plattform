@@ -319,9 +319,8 @@ function CompanyDashboardContent() {
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         console.error("[loadKpiHistory] API error:", res.status, errorData);
-        setArrSeries([]);
-        setMrrSeries([]);
-        setBurnSeries([]);
+        setSnapshotRows([]);
+        setKpiSources(null);
         return;
       }
       
@@ -559,9 +558,8 @@ function CompanyDashboardContent() {
     } else {
       setInsights([]);
       setAgentLogs([]);
-      setArrSeries([]);
-      setMrrSeries([]);
-      setBurnSeries([]);
+      setSnapshotRows([]);
+      setKpiSources(null);
       setError("Company not found");
     }
   }
