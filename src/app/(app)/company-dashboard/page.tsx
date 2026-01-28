@@ -373,26 +373,10 @@ function CompanyDashboardContent() {
     setAgentError(null);
 
     try {
-      // Get session and extract access_token for Bearer authentication
-      // Using Bearer token instead of cookies for explicit auth flow
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError || !session?.access_token) {
-        setAgentError("Not authenticated");
-        alert("Error: Not authenticated. Please refresh the page and try again.");
-        return;
-      }
-
-      const requestBody = { companyId: targetCompanyId };
-      console.log("[Dashboard] Sending request to /api/agent/run with body:", requestBody);
-      
-      const res = await fetch("/api/agent/run", {
+      const res = await authedFetch("/api/agent/run-all", {
         method: "POST",
-        headers: { 
-          "content-type": "application/json",
-          "Authorization": `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify(requestBody),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: targetCompanyId }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -408,7 +392,7 @@ function CompanyDashboardContent() {
       console.error(e);
       const msg = e?.message || "Unknown error";
       setAgentError(msg);
-      alert("Error: " + msg);
+      alert("Error: " + msg.replace("Not authenticated", "Please refresh and try again"));
     } finally {
       setRunningAgent(false);
     }
