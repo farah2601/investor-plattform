@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { extractKpiValue } from "@/lib/server/kpiSnapshot";
+import { requireAuthAndCompanyAccess } from "@/lib/server/auth";
 
 export async function POST(
   req: Request,
@@ -14,6 +16,9 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    const { res: authRes } = await requireAuthAndCompanyAccess(req, companyId);
+    if (authRes) return authRes;
 
     // Get latest snapshot from kpi_snapshots
     const { data: latestSnapshot, error: snapshotError } = await supabaseAdmin
@@ -39,37 +44,40 @@ export async function POST(
       );
     }
 
-    // Extract KPI values from kpis JSONB
-    const kpis = latestSnapshot.kpis as any;
-    const updatePayload: any = {};
+    // Extract KPI values from kpis JSONB (handles both flat numbers and {value, source} format)
+    const kpis = latestSnapshot.kpis as Record<string, unknown>;
+    const updatePayload: Record<string, number> = {};
 
-    if (kpis.mrr !== null && kpis.mrr !== undefined) {
-      updatePayload.mrr = Math.round(Number(kpis.mrr));
-    }
-    if (kpis.arr !== null && kpis.arr !== undefined) {
-      updatePayload.arr = Math.round(Number(kpis.arr));
-    }
-    if (kpis.burn_rate !== null && kpis.burn_rate !== undefined) {
-      updatePayload.burn_rate = Math.round(Number(kpis.burn_rate));
-    }
-    if (kpis.churn !== null && kpis.churn !== undefined) {
-      updatePayload.churn = Number(kpis.churn);
-    }
-    if (kpis.growth_percent !== null && kpis.growth_percent !== undefined) {
-      updatePayload.growth_percent = Number(kpis.growth_percent);
-    }
-    if (kpis.runway_months !== null && kpis.runway_months !== undefined) {
-      updatePayload.runway_months = Number(kpis.runway_months);
-    }
-    if (kpis.lead_velocity !== null && kpis.lead_velocity !== undefined) {
-      updatePayload.lead_velocity = Math.round(Number(kpis.lead_velocity));
-    }
+    const mrr = extractKpiValue(kpis?.mrr);
+    if (mrr != null) updatePayload.mrr = Math.round(mrr);
+    const arr = extractKpiValue(kpis?.arr);
+    if (arr != null) updatePayload.arr = Math.round(arr);
+    const burnRate = extractKpiValue(kpis?.burn_rate);
+    if (burnRate != null) updatePayload.burn_rate = Math.round(burnRate);
+    const churn = extractKpiValue(kpis?.churn);
+    if (churn != null) updatePayload.churn = churn;
+    const growthPercent = extractKpiValue(kpis?.growth_percent);
+    if (growthPercent != null) updatePayload.growth_percent = growthPercent;
+    const runwayMonths = extractKpiValue(kpis?.runway_months);
+    if (runwayMonths != null) updatePayload.runway_months = runwayMonths;
+    const leadVelocity = extractKpiValue(kpis?.lead_velocity);
+    if (leadVelocity != null) updatePayload.lead_velocity = Math.round(leadVelocity);
 
     console.log("[refresh-from-snapshots] Updating companies with:", {
       companyId,
       periodDate: latestSnapshot.period_date,
       updatePayload,
     });
+
+    if (Object.keys(updatePayload).length === 0) {
+      return NextResponse.json({
+        ok: true,
+        companyId,
+        periodDate: latestSnapshot.period_date,
+        updated: {},
+        message: "No KPI values to update in latest snapshot",
+      });
+    }
 
     // Update companies table
     const { data: updatedCompany, error: updateError } = await supabaseAdmin

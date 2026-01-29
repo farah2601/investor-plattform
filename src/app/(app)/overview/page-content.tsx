@@ -12,6 +12,7 @@ import { BurnChart } from "@/components/ui/BurnChart";
 import { MrrChart } from "@/components/ui/MrrChart";
 import { buildDenseSeries, type SnapshotRow, type ChartPoint } from "@/lib/kpi/kpi_series";
 import { extendWithForecast } from "@/lib/kpi/forecast";
+import { extractKpiNumber } from "@/lib/kpi/kpi_extract";
 import { useCompanyData } from "@/hooks/useCompanyData";
 import { useUserCompany } from "@/lib/user-company-context";
 import { MetricsDetailsModal } from "@/components/metrics/MetricsDetailsModal";
@@ -376,6 +377,26 @@ function OverviewPageContentInner() {
 
   const latestUpdateTime = getLatestUpdateTime();
 
+  // Key Metrics: samme kilde som Details — bruk siste rad som har mrr/arr/burn (unngår tomme fremtidige rader)
+  const latestSnapshotRow = (() => {
+    if (snapshotRows.length === 0) return null;
+    for (let i = snapshotRows.length - 1; i >= 0; i--) {
+      const row = snapshotRows[i];
+      const k = row?.kpis;
+      if (k != null && (extractKpiNumber(k, "mrr") != null || extractKpiNumber(k, "arr") != null || extractKpiNumber(k, "burn_rate") != null)) {
+        return row;
+      }
+    }
+    return snapshotRows[snapshotRows.length - 1] ?? null;
+  })();
+  const kpis = latestSnapshotRow?.kpis ?? null;
+  const displayArr = kpis != null ? extractKpiNumber(kpis, "arr") : null;
+  const displayMrr = kpis != null ? extractKpiNumber(kpis, "mrr") : null;
+  const displayGrowth = kpis != null ? (extractKpiNumber(kpis, "mrr_growth_mom") ?? extractKpiNumber(kpis, "growth_percent")) : null;
+  const displayBurnRate = kpis != null ? extractKpiNumber(kpis, "burn_rate") : null;
+  const displayRunwayMonths = kpis != null ? extractKpiNumber(kpis, "runway_months") : null;
+  const displayChurn = kpis != null ? extractKpiNumber(kpis, "churn") : null;
+
   return (
     <div className="mx-auto max-w-[1000px] space-y-6">
       {/* Welcome Section */}
@@ -477,27 +498,27 @@ function OverviewPageContentInner() {
           </Button>
         </div>
 
-        {/* All 6 Key Metrics - Split into multiple rows (3x2 layout) */}
+        {/* All 6 Key Metrics - same source as Details (latest snapshot when available) */}
         <div className="mb-8">
           {/* First row: ARR, MRR, Growth */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-            <KpiCard label="ARR" value={formatMoney(company.arr)} sublabel="Annual recurring revenue" />
-            <KpiCard label="MRR" value={formatMoney(company.mrr)} sublabel="Monthly recurring revenue" />
+            <KpiCard label="ARR" value={formatMoney(displayArr)} sublabel="Annual recurring revenue" />
+            <KpiCard label="MRR" value={formatMoney(displayMrr)} sublabel="Monthly recurring revenue" />
             <KpiCard
               label="Growth"
-              value={formatPercent(company.growth_percent)}
+              value={formatPercent(displayGrowth)}
               sublabel="MRR growth (last 12 months)"
             />
           </div>
           {/* Second row: Burn Rate, Runway, Churn */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <KpiCard label="Burn rate" value={formatMoney(company.burn_rate)} sublabel="Monthly burn" />
+            <KpiCard label="Burn rate" value={formatMoney(displayBurnRate)} sublabel="Monthly burn" />
             <KpiCard
               label="Runway"
-              value={formatRunway(company.runway_months)}
+              value={formatRunway(displayRunwayMonths)}
               sublabel="Estimated runway at current burn"
             />
-            <KpiCard label="Churn" value={formatPercent(company.churn)} sublabel="MRR churn rate" />
+            <KpiCard label="Churn" value={formatPercent(displayChurn)} sublabel="MRR churn rate" />
           </div>
           <MetricsDetailsModal
             companyId={company.id}

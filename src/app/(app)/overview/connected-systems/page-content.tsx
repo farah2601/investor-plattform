@@ -814,8 +814,8 @@ function ConnectedSystemsPageContentInner() {
                       <Button
                         size="sm"
                         variant="outline"
-                        disabled
-                        className="w-full border-slate-700 text-slate-400 bg-slate-800/40 cursor-not-allowed"
+                        onClick={() => setSheetsManageModalOpen(true)}
+                        className="w-full border-slate-700 text-slate-300 bg-slate-800/40 hover:bg-slate-700/50"
                       >
                         Connect
                       </Button>

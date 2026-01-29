@@ -16,6 +16,7 @@ import { BurnChart, type BurnChartDataPoint } from "@/components/ui/BurnChart";
 import { MrrChart, type MrrChartDataPoint } from "@/components/ui/MrrChart";
 import { buildDenseSeries, type SnapshotRow, type ChartPoint } from "@/lib/kpi/kpi_series";
 import { extendWithForecast } from "@/lib/kpi/forecast";
+import { extractKpiNumber } from "@/lib/kpi/kpi_extract";
 import {
   Dialog,
   DialogContent,
@@ -373,6 +374,12 @@ function CompanyDashboardContent() {
     setAgentError(null);
 
     try {
+      // Refresh session so we send a valid access_token (avoids 401 when token expired)
+      const { error: refreshErr } = await supabase.auth.refreshSession();
+      if (refreshErr) {
+        console.warn("[runAgent] Session refresh failed:", refreshErr.message);
+      }
+
       const res = await authedFetch("/api/agent/run-all", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -384,6 +391,19 @@ function CompanyDashboardContent() {
         throw new Error(data?.error || "Agent failed");
       }
 
+      // Update companies from latest kpi_snapshots so metrics match agent output
+      try {
+        const refreshRes = await authedFetch(`/api/companies/${targetCompanyId}/refresh-from-snapshots`, {
+          method: "POST",
+        });
+        const refreshData = await refreshRes.json().catch(() => ({}));
+        if (!refreshRes.ok || !refreshData?.ok) {
+          console.warn("[runAgent] refresh-from-snapshots failed:", refreshRes.status, refreshData?.error || refreshData);
+        }
+      } catch (e) {
+        console.warn("[runAgent] refresh-from-snapshots failed:", e);
+      }
+
       // ✅ Refresh ALL (company + insights + logs)
       await loadData(targetCompanyId);
 
@@ -392,7 +412,11 @@ function CompanyDashboardContent() {
       console.error(e);
       const msg = e?.message || "Unknown error";
       setAgentError(msg);
-      alert("Error: " + msg.replace("Not authenticated", "Please refresh and try again"));
+      const friendly =
+        msg === "Not authenticated" || msg === "Unauthorized"
+          ? "Session may have expired. Please refresh the page and try again."
+          : msg;
+      alert("Error: " + friendly);
     } finally {
       setRunningAgent(false);
     }
@@ -512,10 +536,24 @@ function CompanyDashboardContent() {
     }
 
     const selectedCompany = companiesData?.[0] || null;
-    setCompany(selectedCompany);
+
+    // Key Metrics come from agent output: refresh company from latest snapshot (written by agent run)
+    let companyToUse = selectedCompany;
+    if (selectedCompany?.id) {
+      try {
+        const refreshRes = await authedFetch(`/api/companies/${selectedCompany.id}/refresh-from-snapshots`, { method: "POST" });
+        const refreshData = await refreshRes.json().catch(() => ({}));
+        if (refreshRes.ok && refreshData?.company) {
+          companyToUse = refreshData.company as CompanyKpi;
+        }
+      } catch (_) {
+        // keep selectedCompany
+      }
+    }
+    setCompany(companyToUse);
 
     if (selectedCompany) {
-      const cfg = (selectedCompany as CompanyKpi).investor_view_config;
+      const cfg = (companyToUse as CompanyKpi).investor_view_config;
       const c = cfg && typeof cfg === "object"
         ? {
             arrMrr: cfg.arrMrr !== false,
@@ -527,14 +565,14 @@ function CompanyDashboardContent() {
         : { arrMrr: true, burnRunway: true, growthCharts: true, aiInsights: false, showForecast: true };
       setInvestorView(c);
       setKpiForm({
-        mrr: selectedCompany.mrr != null ? String(selectedCompany.mrr) : "",
-        arr: selectedCompany.arr != null ? String(selectedCompany.arr) : "",
-        burn_rate: selectedCompany.burn_rate != null ? String(selectedCompany.burn_rate) : "",
-        runway_months: selectedCompany.runway_months != null ? String(selectedCompany.runway_months) : "",
-        churn: selectedCompany.churn != null ? String(selectedCompany.churn) : "",
-        growth_percent: selectedCompany.growth_percent != null ? String(selectedCompany.growth_percent) : "",
-        kpi_currency: (selectedCompany as any).kpi_currency || "USD",
-        kpi_scale: ((selectedCompany as any).kpi_scale as "unit" | "k" | "m") || "unit",
+        mrr: companyToUse.mrr != null ? String(companyToUse.mrr) : "",
+        arr: companyToUse.arr != null ? String(companyToUse.arr) : "",
+        burn_rate: companyToUse.burn_rate != null ? String(companyToUse.burn_rate) : "",
+        runway_months: companyToUse.runway_months != null ? String(companyToUse.runway_months) : "",
+        churn: companyToUse.churn != null ? String(companyToUse.churn) : "",
+        growth_percent: companyToUse.growth_percent != null ? String(companyToUse.growth_percent) : "",
+        kpi_currency: (companyToUse as any).kpi_currency || "USD",
+        kpi_scale: ((companyToUse as any).kpi_scale as "unit" | "k" | "m") || "unit",
       });
 
       // ✅ load simultaneously
@@ -621,6 +659,26 @@ function CompanyDashboardContent() {
   const arrChartData = toArrChartData(showForecast ? arrExtended : arrSeries, showForecast);
   const mrrChartData = toMrrChartData(showForecast ? mrrExtended : mrrSeries, showForecast);
   const burnChartData = toBurnChartData(showForecast ? burnExtended : burnSeries, showForecast);
+
+  // Key Metrics: samme kilde som Details — bruk siste rad som har mrr/arr/burn (unngår tomme fremtidige rader)
+  const latestSnapshotRow = (() => {
+    if (snapshotRows.length === 0) return null;
+    for (let i = snapshotRows.length - 1; i >= 0; i--) {
+      const row = snapshotRows[i];
+      const k = row?.kpis;
+      if (k != null && (extractKpiNumber(k, "mrr") != null || extractKpiNumber(k, "arr") != null || extractKpiNumber(k, "burn_rate") != null)) {
+        return row;
+      }
+    }
+    return snapshotRows[snapshotRows.length - 1] ?? null;
+  })();
+  const kpis = latestSnapshotRow?.kpis ?? null;
+  const displayArr = kpis != null ? extractKpiNumber(kpis, "arr") : null;
+  const displayMrr = kpis != null ? extractKpiNumber(kpis, "mrr") : null;
+  const displayGrowth = kpis != null ? (extractKpiNumber(kpis, "mrr_growth_mom") ?? extractKpiNumber(kpis, "growth_percent")) : null;
+  const displayBurnRate = kpis != null ? extractKpiNumber(kpis, "burn_rate") : null;
+  const displayRunwayMonths = kpis != null ? extractKpiNumber(kpis, "runway_months") : null;
+  const displayChurn = kpis != null ? extractKpiNumber(kpis, "churn") : null;
 
   const DEBUG = true;
   if (DEBUG) {
@@ -749,11 +807,25 @@ function CompanyDashboardContent() {
         throw new Error(data?.error || "Failed to sync data via MCP");
       }
 
-      // Refetch Stripe status and KPI snapshots to refresh charts/cards
+      // Update companies from latest snapshots so metric cards reflect new data
+      try {
+        const refreshRes = await authedFetch(`/api/companies/${currentCompanyId}/refresh-from-snapshots`, {
+          method: "POST",
+        });
+        const refreshData = await refreshRes.json().catch(() => ({}));
+        if (!refreshRes.ok || !refreshData?.ok) {
+          console.warn("[handleSyncStripe] refresh-from-snapshots failed:", refreshRes.status, refreshData?.error || refreshData);
+        }
+      } catch (e) {
+        console.warn("[handleSyncStripe] refresh-from-snapshots failed:", e);
+      }
+
+      // Refetch Stripe status, KPI history, and company (metrics) to refresh charts/cards
       await Promise.all([
         loadStripeStatus(currentCompanyId),
         loadKpiHistory(currentCompanyId),
       ]);
+      await loadData(currentCompanyId);
 
       // Show success message
       const message = data.message || `Data synced successfully! ${data.stripeProcessed || 0} Stripe period(s) processed.`;
@@ -1138,22 +1210,22 @@ function CompanyDashboardContent() {
                 </div>
               </div>
 
-              {/* mobile: 2 cols, tablet: 3 cols, desktop: 6 cols */}
+              {/* mobile: 2 cols, tablet: 3 cols, desktop: 6 cols — values from latest snapshot (same as Details) */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-                <KpiCard label="ARR" value={formatMoney(company.arr)} sublabel="Annual recurring revenue" />
-                <KpiCard label="MRR" value={formatMoney(company.mrr)} sublabel="Monthly recurring revenue" />
+                <KpiCard label="ARR" value={formatMoney(displayArr)} sublabel="Annual recurring revenue" />
+                <KpiCard label="MRR" value={formatMoney(displayMrr)} sublabel="Monthly recurring revenue" />
                 <KpiCard
                   label="Growth"
-                  value={formatPercent(company.growth_percent)}
+                  value={formatPercent(displayGrowth)}
                   sublabel="MRR growth (last 12 months)"
                 />
-                <KpiCard label="Burn rate" value={formatMoney(company.burn_rate)} sublabel="Monthly burn" />
+                <KpiCard label="Burn rate" value={formatMoney(displayBurnRate)} sublabel="Monthly burn" />
                 <KpiCard
                   label="Runway"
-                  value={formatRunway(company.runway_months)}
+                  value={formatRunway(displayRunwayMonths)}
                   sublabel="Estimated runway at current burn"
                 />
-                <KpiCard label="Churn" value={formatPercent(company.churn)} sublabel="MRR churn rate" />
+                <KpiCard label="Churn" value={formatPercent(displayChurn)} sublabel="MRR churn rate" />
               </div>
               {company && (
                 <MetricsDetailsModal
