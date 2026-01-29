@@ -136,88 +136,41 @@ export async function loadStripeMetrics(
     : undefined;
 
   try {
-    // 1) Net Revenue: Sum of successful charges minus refunds for the period
-    // Strategy: Use charges API (simpler than balance transactions)
+    // 1) Net Revenue: by available_on (when funds have arrived/settled), not by charge created
     let netRevenue = 0;
     let totalCharges = 0;
     let totalRefunds = 0;
-    
-    // Fetch charges (paid=true) created in period
-    const charges = await stripe.charges.list(
-      {
-        created: { gte: periodStart, lt: periodEnd },
-        limit: 100, // Stripe default pagination
-      },
-      requestOptions
-    );
-    
-    // Paginate through all charges
-    let allCharges = [...charges.data];
-    let hasMore = charges.has_more;
-    let lastChargeId = charges.data[charges.data.length - 1]?.id;
-    
-    while (hasMore && lastChargeId) {
-      const nextPage = await stripe.charges.list(
+    const createdFrom = periodStart - 14 * 24 * 3600;
+    const createdTo = periodEnd + 24 * 3600;
+    let hasMore = true;
+    let startingAfter: string | undefined;
+    while (hasMore) {
+      const list = await stripe.balanceTransactions.list(
         {
-          created: { gte: periodStart, lt: periodEnd },
-          starting_after: lastChargeId,
+          created: { gte: createdFrom, lt: createdTo },
           limit: 100,
+          ...(startingAfter && { starting_after: startingAfter }),
         },
         requestOptions
       );
-      allCharges.push(...nextPage.data);
-      hasMore = nextPage.has_more;
-      lastChargeId = nextPage.data[nextPage.data.length - 1]?.id;
-    }
-    
-    // Sum successful charges (paid=true, status=succeeded)
-    for (const charge of allCharges) {
-      if (charge.paid && charge.status === "succeeded") {
-        totalCharges += charge.amount; // Amount is in cents
+      for (const tx of list.data) {
+        if (tx.available_on != null && tx.available_on >= periodStart && tx.available_on < periodEnd) {
+          if (tx.type === "charge") {
+            totalCharges += tx.amount;
+          } else if (tx.type === "refund") {
+            totalRefunds += Math.abs(tx.amount);
+          }
+        }
       }
+      hasMore = list.has_more;
+      startingAfter = list.data[list.data.length - 1]?.id;
+      if (!list.data.length || !hasMore) break;
     }
-    
-    // Fetch refunds created in period
-    const refunds = await stripe.refunds.list(
-      {
-        created: { gte: periodStart, lt: periodEnd },
-        limit: 100,
-      },
-      requestOptions
-    );
-    
-    // Paginate refunds
-    let allRefunds = [...refunds.data];
-    hasMore = refunds.has_more;
-    let lastRefundId = refunds.data[refunds.data.length - 1]?.id;
-    
-    while (hasMore && lastRefundId) {
-      const nextPage = await stripe.refunds.list(
-        {
-          created: { gte: periodStart, lt: periodEnd },
-          starting_after: lastRefundId,
-          limit: 100,
-        },
-        requestOptions
-      );
-      allRefunds.push(...nextPage.data);
-      hasMore = nextPage.has_more;
-      lastRefundId = nextPage.data[nextPage.data.length - 1]?.id;
-    }
-    
-    // Sum refund amounts (amount is in cents, already negative in refunds API)
-    for (const refund of allRefunds) {
-      totalRefunds += Math.abs(refund.amount); // Refund amount is positive in refunds API
-    }
-    
-    // Net revenue = charges - refunds (convert cents to dollars, round to 2 decimals)
     netRevenue = totalCharges > 0 || totalRefunds > 0
       ? Math.round((totalCharges - totalRefunds) / 100 * 100) / 100
       : 0;
-    
-    // Refund rate = refunds / total charges (as percentage)
     const refundRate = totalCharges > 0
-      ? Math.round((totalRefunds / totalCharges) * 100 * 10) / 10 // Round to 1 decimal
+      ? Math.round((totalRefunds / totalCharges) * 100 * 10) / 10
       : null;
     
     // 2) Failed Payment Rate: Use invoices to detect failed payment attempts

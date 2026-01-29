@@ -99,7 +99,7 @@ export async function GET(req: Request) {
       const result: Record<string, string> = {};
       
       // Check each KPI - if it's new format {value, source, updated_at}, extract source
-      const kpiKeys = ["mrr", "arr", "mrr_growth_mom", "churn", "net_revenue", "failed_payment_rate", "refund_rate", "burn_rate", "cash_balance", "customers", "runway_months"] as const;
+      const kpiKeys = ["mrr", "arr", "mrr_growth_mom", "churn", "net_revenue", "net_revenue_booked", "failed_payment_rate", "refund_rate", "burn_rate", "cash_balance", "customers", "runway_months"] as const;
       
       for (const key of kpiKeys) {
         const kpi = kpis[key as keyof typeof kpis];

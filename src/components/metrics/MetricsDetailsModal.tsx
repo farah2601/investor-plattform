@@ -84,6 +84,8 @@ const TABLE_COLS = [
   "MRR",
   "ARR",
   "Burn",
+  "Net revenue",
+  "Booked",
   "Runway",
   "Churn",
   "Growth",
@@ -191,6 +193,8 @@ export function MetricsDetailsModal({
                     { k: "mrr" as const, label: "MRR" },
                     { k: "arr" as const, label: "ARR" },
                     { k: "burn_rate" as const, label: "Burn" },
+                    { k: "net_revenue" as const, label: "Net revenue" },
+                    { k: "net_revenue_booked" as const, label: "Booked" },
                     { k: "runway_months" as const, label: "Runway" },
                     { k: "churn" as const, label: "Churn" },
                     { k: "growth" as const, label: "Growth" },
@@ -226,6 +230,8 @@ export function MetricsDetailsModal({
                       const mrr = extractKpiValue(k.mrr);
                       const arr = extractKpiValue(k.arr);
                       const burn = extractKpiValue(k.burn_rate);
+                      const netRevenue = extractKpiValue(k.net_revenue);
+                      const netRevenueBooked = extractKpiValue(k.net_revenue_booked);
                       const runway = extractKpiValue(k.runway_months);
                       const churn = extractKpiValue(k.churn);
                       const growth =
@@ -247,6 +253,12 @@ export function MetricsDetailsModal({
                           </td>
                           <td className="px-3 py-2.5 text-slate-300">
                             {formatMoney(burn)}
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-300">
+                            {formatMoney(netRevenue)}
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-300">
+                            {formatMoney(netRevenueBooked)}
                           </td>
                           <td className="px-3 py-2.5 text-slate-300">
                             {formatRunway(runway)}

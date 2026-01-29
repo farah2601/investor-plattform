@@ -20,6 +20,7 @@ export type KpiSnapshotKpis = {
   mrr_growth_mom: KpiValue;
   churn: KpiValue;
   net_revenue: KpiValue;
+  net_revenue_booked: KpiValue;
   failed_payment_rate: KpiValue;
   refund_rate: KpiValue;
   burn_rate: KpiValue;
@@ -34,6 +35,7 @@ const KPI_KEYS: Array<keyof KpiSnapshotKpis> = [
   "mrr_growth_mom",
   "churn",
   "net_revenue",
+  "net_revenue_booked",
   "failed_payment_rate",
   "refund_rate",
   "burn_rate",
@@ -231,6 +233,7 @@ export function getDefaultKpiSnapshot(): KpiSnapshotKpis {
     mrr_growth_mom: createKpiValue(null, "computed"),
     churn: createKpiValue(null, "computed"),
     net_revenue: createKpiValue(null, "computed"),
+    net_revenue_booked: createKpiValue(null, "computed"),
     failed_payment_rate: createKpiValue(null, "computed"),
     refund_rate: createKpiValue(null, "computed"),
     burn_rate: createKpiValue(null, "computed"),
@@ -309,7 +312,7 @@ export function applySourcePriority(
           finalUpdatedAt = existingKpi.updated_at as string | null;
         }
       }
-    } else if (key === "net_revenue" || key === "refund_rate" || key === "failed_payment_rate") {
+    } else if (key === "net_revenue" || key === "net_revenue_booked" || key === "refund_rate" || key === "failed_payment_rate") {
       // Revenue metrics: Stripe > Sheets > existing
       if (stripeValue !== null) {
         finalValue = stripeValue;

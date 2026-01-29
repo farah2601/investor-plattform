@@ -1,9 +1,20 @@
 import { NextResponse } from "next/server";
+import { appendFileSync } from "fs";
+import { join } from "path";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { requireAuthAndCompanyAccess } from "@/lib/server/auth";
 import { getStripeClient } from "@/lib/stripe/server";
 
 export const dynamic = "force-dynamic";
+
+function writeDebugLog(payload: Record<string, unknown>) {
+  try {
+    const logPath = join(process.cwd(), ".cursor", "debug.log");
+    appendFileSync(logPath, JSON.stringify(payload) + "\n", "utf8");
+  } catch {
+    // ignore
+  }
+}
 
 /**
  * Get base URL for redirects
@@ -166,6 +177,7 @@ export async function GET(req: Request) {
       });
     } else {
       // Account Links mode (default): use server-side Stripe SDK
+      let accountIdPrefix: string | null = null;
       try {
         // Validate Stripe is configured before attempting API calls
         if (!process.env.STRIPE_SECRET_KEY) {
@@ -192,6 +204,12 @@ export async function GET(req: Request) {
           .maybeSingle();
 
         let stripeAccountId = existingIntegration?.stripe_account_id;
+        accountIdPrefix = stripeAccountId ? String(stripeAccountId).slice(0, 12) + "…" : null;
+
+        // #region agent log
+        const p1 = {location:'connect/route.ts:existingIntegration',message:'existing integration check',data:{companyId,hasExisting:!!existingIntegration,stripeAccountIdPrefix:accountIdPrefix,branch:stripeAccountId?'reusing':'creating_new'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'};
+        writeDebugLog(p1); fetch('http://127.0.0.1:7242/ingest/d791096d-e9b3-45ec-a7c6-17c4fea0a92c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p1)}).catch(()=>{});
+        // #endregion
 
         // Create or reuse Stripe Express account
         if (!stripeAccountId) {
@@ -203,14 +221,23 @@ export async function GET(req: Request) {
             { idempotencyKey: accountIdempotencyKey }
           );
           stripeAccountId = account.id;
+          accountIdPrefix = stripeAccountId ? String(stripeAccountId).slice(0, 12) + "…" : null;
         } else {
           console.log(`[api/stripe/connect] Reusing existing Stripe account ${stripeAccountId} for company ${companyId}`);
+          // #region agent log
+          const p2 = {location:'connect/route.ts:reusing',message:'reusing existing account',data:{companyId,stripeAccountIdPrefix:accountIdPrefix},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'};
+          writeDebugLog(p2); fetch('http://127.0.0.1:7242/ingest/d791096d-e9b3-45ec-a7c6-17c4fea0a92c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p2)}).catch(()=>{});
+          // #endregion
         }
 
         // Create Account Link for onboarding
         // CRITICAL: return_url and refresh_url MUST include companyId
         // Use idempotency key to prevent duplicate links on retries
         const linkIdempotencyKey = `create-link-${companyId}-${nonce}`;
+        // #region agent log
+        const p3 = {location:'connect/route.ts:beforeAccountLinksCreate',message:'calling accountLinks.create',data:{companyId,stripeAccountIdPrefix:accountIdPrefix},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'};
+        writeDebugLog(p3); fetch('http://127.0.0.1:7242/ingest/d791096d-e9b3-45ec-a7c6-17c4fea0a92c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p3)}).catch(()=>{});
+        // #endregion
         const accountLink = await stripe.accountLinks.create(
           {
             account: stripeAccountId,
@@ -253,17 +280,26 @@ export async function GET(req: Request) {
           code: errorCode,
           details: stripeError?.raw?.message || null,
         });
+        // #region agent log
+        const p4 = {location:'connect/route.ts:stripeError',message:'Stripe API error',data:{companyId,errorMessage:errorMessage.slice(0,120),errorCode,stripeAccountIdPrefix:accountIdPrefix},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'};
+        writeDebugLog(p4); fetch('http://127.0.0.1:7242/ingest/d791096d-e9b3-45ec-a7c6-17c4fea0a92c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p4)}).catch(()=>{});
+        // #endregion
         
-        // Update integration with error status
+        // Update integration with error status; clear stale stripe_account_id so next Connect creates a new account
+        const isAccountNotOnPlatform = errorMessage.includes("not connected to your platform") || errorMessage.includes("does not exist");
         try {
           await supabaseAdmin
             .from("integrations")
             .update({
               status: "not_connected",
+              ...(isAccountNotOnPlatform ? { stripe_account_id: null } : {}),
               updated_at: new Date().toISOString(),
             })
             .eq("company_id", companyId)
             .eq("provider", "stripe");
+          if (isAccountNotOnPlatform) {
+            console.log("[api/stripe/connect] Cleared stale stripe_account_id for company", companyId, "- next Connect will create a new account");
+          }
         } catch (dbError) {
           console.error("[api/stripe/connect] Failed to update error status:", dbError);
         }

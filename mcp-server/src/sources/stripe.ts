@@ -15,6 +15,7 @@ type KpiKey =
   | "mrr_growth_mom" 
   | "churn" 
   | "net_revenue" 
+  | "net_revenue_booked" 
   | "failed_payment_rate" 
   | "refund_rate" 
   | "burn_rate" 
@@ -190,9 +191,10 @@ async function calculateMRRFromSubscriptions(
 }
 
 /**
- * Calculate net revenue from charges and refunds
+ * Net revenue based on when funds become available (available_on), not when charge was created.
+ * Uses Balance Transactions so "incoming" counts as arrived (settled).
  */
-async function calculateNetRevenue(
+async function calculateNetRevenueByAvailableOn(
   stripe: Stripe,
   periodStart: number,
   periodEnd: number,
@@ -200,76 +202,110 @@ async function calculateNetRevenue(
 ): Promise<{ netRevenue: number; totalCharges: number; totalRefunds: number }> {
   let totalCharges = 0;
   let totalRefunds = 0;
+  // List by created with wide window (settlement often T+2–T+7), then filter by available_on
+  const createdFrom = periodStart - 14 * 24 * 3600;
+  const createdTo = periodEnd + 24 * 3600;
 
-  // Fetch charges
-  const charges = await stripe.charges.list(
-    {
-      created: { gte: periodStart, lt: periodEnd },
-      limit: 100,
-    },
-    requestOptions
-  );
+  let allTx: Stripe.BalanceTransaction[] = [];
+  let hasMore = true;
+  let startingAfter: string | undefined;
 
-  let allCharges = [...charges.data];
-  let hasMore = charges.has_more;
-  let lastChargeId = charges.data[charges.data.length - 1]?.id;
-
-  while (hasMore && lastChargeId) {
-    const nextPage = await stripe.charges.list(
+  while (hasMore) {
+    const list = await stripe.balanceTransactions.list(
       {
-        created: { gte: periodStart, lt: periodEnd },
-        starting_after: lastChargeId,
+        created: { gte: createdFrom, lt: createdTo },
         limit: 100,
+        ...(startingAfter && { starting_after: startingAfter }),
       },
       requestOptions
     );
-    allCharges.push(...nextPage.data);
-    hasMore = nextPage.has_more;
-    lastChargeId = nextPage.data[nextPage.data.length - 1]?.id;
+    allTx = allTx.concat(list.data);
+    hasMore = list.has_more;
+    startingAfter = list.data[list.data.length - 1]?.id;
+    if (!list.data.length || !hasMore) break;
   }
 
-  // Sum successful charges
-  for (const charge of allCharges) {
-    if (charge.paid && charge.status === "succeeded") {
-      totalCharges += charge.amount; // In cents
+  for (const tx of allTx) {
+    const availableOn = tx.available_on;
+    if (availableOn == null || availableOn < periodStart || availableOn >= periodEnd) continue;
+    if (tx.type === "charge") {
+      totalCharges += tx.amount;
+    } else if (tx.type === "refund") {
+      totalRefunds += Math.abs(tx.amount);
     }
   }
 
-  // Fetch refunds
-  const refunds = await stripe.refunds.list(
-    {
-      created: { gte: periodStart, lt: periodEnd },
-      limit: 100,
-    },
+  const netRevenue = Math.round((totalCharges - totalRefunds) / 100 * 100) / 100;
+  return { netRevenue, totalCharges, totalRefunds };
+}
+
+/**
+ * Net revenue by created date (loggført) – charges/refunds when they were logged, includes pending.
+ */
+async function calculateNetRevenueByCreated(
+  stripe: Stripe,
+  periodStart: number,
+  periodEnd: number,
+  requestOptions?: any
+): Promise<number> {
+  let totalCharges = 0;
+  let totalRefunds = 0;
+
+  const charges = await stripe.charges.list(
+    { created: { gte: periodStart, lt: periodEnd }, limit: 100 },
     requestOptions
   );
-
-  let allRefunds = [...refunds.data];
-  hasMore = refunds.has_more;
-  let lastRefundId = refunds.data[refunds.data.length - 1]?.id;
-
-  while (hasMore && lastRefundId) {
-    const nextPage = await stripe.refunds.list(
-      {
-        created: { gte: periodStart, lt: periodEnd },
-        starting_after: lastRefundId,
-        limit: 100,
-      },
+  let allCharges = [...charges.data];
+  let hasMore = charges.has_more;
+  let lastId = charges.data[charges.data.length - 1]?.id;
+  while (hasMore && lastId) {
+    const next = await stripe.charges.list(
+      { created: { gte: periodStart, lt: periodEnd }, starting_after: lastId, limit: 100 },
       requestOptions
     );
-    allRefunds.push(...nextPage.data);
-    hasMore = nextPage.has_more;
-    lastRefundId = nextPage.data[nextPage.data.length - 1]?.id;
+    allCharges = allCharges.concat(next.data);
+    hasMore = next.has_more;
+    lastId = next.data[next.data.length - 1]?.id;
+  }
+  for (const c of allCharges) {
+    // Booked: include succeeded and pending (loggført when created)
+    if (c.status === "succeeded" || c.status === "pending") totalCharges += c.amount;
   }
 
-  // Sum refunds
-  for (const refund of allRefunds) {
-    totalRefunds += Math.abs(refund.amount); // In cents
+  const refunds = await stripe.refunds.list(
+    { created: { gte: periodStart, lt: periodEnd }, limit: 100 },
+    requestOptions
+  );
+  let allRefunds = [...refunds.data];
+  hasMore = refunds.has_more;
+  lastId = refunds.data[refunds.data.length - 1]?.id;
+  while (hasMore && lastId) {
+    const next = await stripe.refunds.list(
+      { created: { gte: periodStart, lt: periodEnd }, starting_after: lastId, limit: 100 },
+      requestOptions
+    );
+    allRefunds = allRefunds.concat(next.data);
+    hasMore = next.has_more;
+    lastId = next.data[next.data.length - 1]?.id;
+  }
+  for (const r of allRefunds) {
+    totalRefunds += Math.abs(r.amount);
   }
 
-  const netRevenue = Math.round((totalCharges - totalRefunds) / 100 * 100) / 100; // Convert to dollars, round to 2 decimals
+  return Math.round((totalCharges - totalRefunds) / 100 * 100) / 100;
+}
 
-  return { netRevenue, totalCharges, totalRefunds };
+/**
+ * Calculate net revenue from charges and refunds (by created date – legacy).
+ * Prefer calculateNetRevenueByAvailableOn for "incoming as arrived".
+ */
+async function calculateNetRevenue(
+  stripe: Stripe,
+  periodStart: number,
+  periodEnd: number,
+  requestOptions?: any
+): Promise<{ netRevenue: number; totalCharges: number; totalRefunds: number }> {
+  return calculateNetRevenueByAvailableOn(stripe, periodStart, periodEnd, requestOptions);
 }
 
 /**
@@ -496,9 +532,11 @@ export async function loadStripeKpisForCompany(
         requestOptions
       );
 
-      if (netRevenue > 0) {
-        kpis.net_revenue = netRevenue;
-      }
+      kpis.net_revenue = netRevenue;
+
+      // Net revenue (loggført) – by created date, includes pending
+      const netRevenueBooked = await calculateNetRevenueByCreated(stripe, periodStart, periodEnd, requestOptions);
+      kpis.net_revenue_booked = netRevenueBooked;
 
       // Refund rate
       if (totalCharges > 0) {
