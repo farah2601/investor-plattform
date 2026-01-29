@@ -346,13 +346,13 @@ export async function loadStripeMetrics(
       console.warn("[loadStripeMetrics] Failed to fetch customer count:", err instanceof Error ? err.message : "Unknown error");
     }
     
-    // Log summary (safe - no secrets, only counts)
+    // Log summary (safe - no secrets, only counts/amounts)
     console.log("[loadStripeMetrics] Fetched metrics for period", periodDate, {
       companyId,
-      chargesCount: allCharges.length,
-      refundsCount: allRefunds.length,
+      totalChargesCents: totalCharges,
+      totalRefundsCents: totalRefunds,
       invoicesCount: allInvoices.length,
-      subscriptionsCount: canceledInPeriod.length,
+      canceledSubscriptionsCount: canceledInPeriod.length,
       hasAccountId: !!accountId,
     });
     
