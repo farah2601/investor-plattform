@@ -1,20 +1,15 @@
 // mcp-server/src/agent/tools/generate_insights.ts
 import { supabase } from "../../db/supabase";
+import { extractKpiValue } from "../../utils/kpi_snapshots";
 
-type KPIMap = Record<string, number | null | undefined>;
+type KPIMap = Record<string, unknown>;
 
 type SnapshotRow = {
   period_date: string; // YYYY-MM-DD
-  kpis: KPIMap;        // jsonb
+  kpis: KPIMap;        // jsonb (nested { value, source, updated_at } or flat number)
 };
 
 const PREFIX = "VALYXO:";
-
-function n(v: any): number | null {
-  if (v === null || v === undefined) return null;
-  const num = typeof v === "number" ? v : Number(v);
-  return Number.isFinite(num) ? num : null;
-}
 
 function fmt(v: number | null, digits = 0): string {
   if (v === null) return "n/a";
@@ -22,7 +17,7 @@ function fmt(v: number | null, digits = 0): string {
 }
 
 function getKpi(kpis: KPIMap, key: string): number | null {
-  return n(kpis?.[key]);
+  return extractKpiValue(kpis?.[key]);
 }
 
 function trend(values: Array<number | null>): "up" | "down" | "flat" | "unknown" {
@@ -46,13 +41,13 @@ function buildDeterministicInsights(
   const burnSeries = history.map(h => getKpi(h.kpis, "burn_rate"));
   const churnSeries = history.map(h => getKpi(h.kpis, "churn"));
   const runwaySeries = history.map(h => getKpi(h.kpis, "runway_months"));
-  const growthSeries = history.map(h => getKpi(h.kpis, "growth_percent"));
+  const growthSeries = history.map(h => getKpi(h.kpis, "growth_percent") ?? getKpi(h.kpis, "mrr_growth_mom"));
 
   const mrr = getKpi(latestKpis, "mrr");
   const burn = getKpi(latestKpis, "burn_rate");
   const churn = getKpi(latestKpis, "churn");
   const runway = getKpi(latestKpis, "runway_months");
-  const growth = getKpi(latestKpis, "growth_percent");
+  const growth = getKpi(latestKpis, "growth_percent") ?? getKpi(latestKpis, "mrr_growth_mom");
   const arr = getKpi(latestKpis, "arr");
 
   // 1) MRR trend

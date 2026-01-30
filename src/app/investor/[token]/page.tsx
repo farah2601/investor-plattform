@@ -492,7 +492,7 @@ export default function InvestorCompanyPage() {
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden text-slate-50">
-      <main className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 lg:px-8 space-y-0">
+      <main className="mx-auto w-full max-w-7xl px-4 py-2 sm:px-6 lg:px-8 space-y-0">
         {/* Slim context bar – not a hero section */}
         <header
           className={cn(
@@ -500,7 +500,7 @@ export default function InvestorCompanyPage() {
             "mb-0"
           )}
         >
-          <div className="flex flex-col gap-3 px-3 py-3 sm:px-4 sm:py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2 px-3 py-2 sm:px-4 sm:py-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
               {token === "demo" && (
                 <Link
@@ -543,7 +543,7 @@ export default function InvestorCompanyPage() {
             </div>
           </div>
           {/* Tabs + read-only indicator */}
-          <div className="border-t border-slate-800/80 px-3 py-2 sm:px-4">
+          <div className="border-t border-slate-800/80 px-3 py-1.5 sm:px-4">
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
               <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
                 <span
@@ -581,7 +581,7 @@ export default function InvestorCompanyPage() {
         />
 
         {/* KPI CONTENT – primary focus; visibility from investor_view_config */}
-        <div className="space-y-8 pb-12 pt-8">
+        <div className="space-y-2 pb-12 pt-3">
           {!hasAnyKpiContent && (
             <Card className="rounded-xl border border-slate-700/60 bg-slate-900/70 shadow-sm p-6 text-center">
               <p className="text-sm text-slate-400">No metrics shared for this link.</p>
@@ -590,7 +590,7 @@ export default function InvestorCompanyPage() {
 
           {(config.arrMrr || config.burnRunway) && (
             <Card className="rounded-xl border border-slate-700/60 bg-slate-900/70 shadow-sm overflow-hidden">
-              <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-slate-700/50">
+              <div className="px-4 py-2 sm:px-5 sm:py-3 border-b border-slate-700/50">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-2">
                     <h2 className="text-sm font-semibold text-slate-200">
@@ -608,7 +608,7 @@ export default function InvestorCompanyPage() {
                   )}
                 </div>
               </div>
-              <div className="p-4 sm:p-5">
+              <div className="p-3 sm:p-4">
                 {/* Row 1: MRR, ARR, Runway (revenue → sustainability) | Row 2: Burn, Churn, Growth (efficiency) */}
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {config.arrMrr && (
@@ -708,7 +708,7 @@ export default function InvestorCompanyPage() {
 
           {config.growthCharts && (
           <Card className="rounded-xl border border-slate-700/60 border-t-slate-800/40 bg-slate-900/70 shadow-sm overflow-hidden">
-            <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-slate-700/50">
+            <div className="px-4 py-2 sm:px-5 sm:py-3 border-b border-slate-700/50">
               <div className="flex items-center gap-2">
                 <h2 className="text-sm font-semibold text-slate-200">
                   Trends
@@ -716,10 +716,11 @@ export default function InvestorCompanyPage() {
                 <div className="h-px w-8 bg-gradient-to-r from-sky-500/40 to-transparent" aria-hidden />
               </div>
             </div>
-            <div className="p-4 sm:p-5">
+            <div className="p-3 sm:p-4">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-                {/* ARR – same as dashboard */}
+                {/* ARR */}
                 <div>
+                  <h3 className="text-sm font-medium text-slate-200 mb-2">ARR</h3>
                   {!hasArrData ? (
                     <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 flex items-center justify-center">
                       <p className="text-sm text-slate-400">No valid data yet</p>
@@ -730,6 +731,7 @@ export default function InvestorCompanyPage() {
                 </div>
                 {/* MRR */}
                 <div>
+                  <h3 className="text-sm font-medium text-slate-200 mb-2">MRR</h3>
                   {!hasMrrData ? (
                     <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 flex items-center justify-center">
                       <p className="text-sm text-slate-400">No valid data yet</p>
@@ -738,8 +740,9 @@ export default function InvestorCompanyPage() {
                     <MrrChart data={mrrChartData} />
                   )}
                 </div>
-                {/* Burn – full width */}
+                {/* Burn rate */}
                 <div className="lg:col-span-2">
+                  <h3 className="text-sm font-medium text-slate-200 mb-2">Burn rate</h3>
                   {!hasBurnData ? (
                     <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 flex items-center justify-center">
                       <p className="text-sm text-slate-400">No valid data yet</p>
@@ -755,7 +758,7 @@ export default function InvestorCompanyPage() {
 
           {config.aiInsights && (
           <Card className="rounded-xl border border-slate-700/60 border-t-slate-800/40 bg-slate-900/70 shadow-sm overflow-hidden">
-            <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-slate-700/50">
+            <div className="px-4 py-2 sm:px-5 sm:py-3 border-b border-slate-700/50">
               <div className="flex items-center gap-2">
                 <h2 className="text-sm font-semibold text-slate-200">Computed insights</h2>
                 <div className="h-px w-8 bg-gradient-to-r from-sky-500/40 to-transparent" aria-hidden />
@@ -776,7 +779,7 @@ export default function InvestorCompanyPage() {
                 </p>
               )}
             </div>
-            <div className="p-4 sm:p-5">
+            <div className="p-3 sm:p-4">
               {insights.length > 0 ? (
                 <ul className="space-y-3.5 max-w-3xl">
                   {insights.map((x, i) => (

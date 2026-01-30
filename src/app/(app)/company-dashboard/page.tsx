@@ -11,9 +11,7 @@ import { cn } from "@/lib/utils";
 import { KpiCard } from "@/components/ui/KpiCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrChart, type ArrChartDataPoint } from "@/components/ui/ArrChart";
-import { BurnChart, type BurnChartDataPoint } from "@/components/ui/BurnChart";
-import { MrrChart, type MrrChartDataPoint } from "@/components/ui/MrrChart";
+import { MetricChart, type MetricChartDataPoint, type MetricFormat } from "@/components/ui/MetricChart";
 import { buildDenseSeries, type SnapshotRow, type ChartPoint } from "@/lib/kpi/kpi_series";
 import { extendWithForecast } from "@/lib/kpi/forecast";
 import { extractKpiNumber } from "@/lib/kpi/kpi_extract";
@@ -28,23 +26,6 @@ import {
 import { MetricsDetailsModal } from "@/components/metrics/MetricsDetailsModal";
 import { FormattedDate } from "@/components/ui/FormattedDate";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-
-type RequestItem = {
-  id: string;
-  created_at: string;
-  company_id: string;
-  investor_name: string;
-  investor_email: string;
-  investor_company: string | null;
-  message: string | null;
-  status: string;
-  companies?: { name: string } | null;
-  link?: {
-    id: string;
-    access_token: string;
-    expires_at: string;
-  } | null;
-};
 
 type CompanyKpi = {
   id: string;
@@ -110,7 +91,7 @@ function CompanyDashboardContent() {
   const { company: userCompany, loading: userCompanyLoading, isAuthenticated } = useUserCompany();
   const currentCompanyId = userCompany?.id ?? null;
 
-  const [requests, setRequests] = useState<RequestItem[]>([]);
+  const [investorLinks, setInvestorLinks] = useState<Array<{ id: string; access_token: string; expires_at: string | null }>>([]);
   const [company, setCompany] = useState<CompanyKpi | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -149,6 +130,10 @@ function CompanyDashboardContent() {
 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [showForecast, setShowForecast] = useState(true);
+
+  // Drag-and-drop: which metric is shown in each chart slot (default: ARR, MRR, Burn rate)
+  const [chartSlots, setChartSlots] = useState<[string, string, string]>(["arr", "mrr", "burn_rate"]);
+  const [dragOverSlot, setDragOverSlot] = useState<number | null>(null);
 
   // Chat with agent (under metrics)
   type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -429,9 +414,9 @@ function CompanyDashboardContent() {
     // 3) Require explicit companyId - no fallback
     const targetCompanyId = companyIdParam || currentCompanyId;
     
-    // If no companyId provided, don't fetch requests or KPIs
+    // If no companyId provided, don't fetch KPIs
     if (!targetCompanyId) {
-      setRequests([]);
+      setInvestorLinks([]);
       setCompany(null);
       setInsights([]);
       setAgentLogs([]);
@@ -448,20 +433,7 @@ function CompanyDashboardContent() {
       return;
     }
 
-    // 1) access_requests + company name - filter by company_id
-    const { data: reqs, error: reqError } = await supabase
-      .from("access_requests")
-      .select("*, companies(name)")
-      .eq("company_id", targetCompanyId)
-      .order("created_at", { ascending: false });
-
-    if (reqError) {
-      console.error("Error fetching requests", reqError);
-      setError(reqError.message);
-      return;
-    }
-
-    // 2) investor_links - filter by company_id
+    // investor_links - filter by company_id (each company has a link by default; we create one if missing)
     const { data: links, error: linkError } = await supabase
       .from("investor_links")
       .select("*")
@@ -473,13 +445,24 @@ function CompanyDashboardContent() {
       return;
     }
 
-    const withLinks: RequestItem[] =
-      (reqs ?? []).map((r: any) => ({
-        ...r,
-        link: links?.find((l: any) => l.request_id === r.id) ?? null,
-      })) ?? [];
+    const linkList = links ?? [];
+    setInvestorLinks(linkList.map((l: any) => ({ id: l.id, access_token: l.access_token, expires_at: l.expires_at ?? null })));
 
-    setRequests(withLinks);
+    // If company has no investor link yet, create one so there is always a link
+    if (linkList.length === 0 && targetCompanyId) {
+      const token =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 30);
+      const { error: insertErr } = await supabase.from("investor_links").insert([
+        { access_token: token, company_id: targetCompanyId, expires_at: expiresAt.toISOString(), request_id: null },
+      ]);
+      if (!insertErr) {
+        await loadData(targetCompanyId);
+      }
+    }
 
     // If no companyId provided, don't fetch KPIs
     if (!targetCompanyId) {
@@ -592,74 +575,92 @@ function CompanyDashboardContent() {
     }
   }
 
-  const approvedWithLink = requests.filter((r) => r.status === "approved" && r.link);
-  const latestLink = approvedWithLink[0]?.link ?? null;
+  const now = Date.now();
+  const latestLink =
+    investorLinks.find((l) => !l.expires_at || new Date(l.expires_at).getTime() > now) ??
+    investorLinks[0] ??
+    null;
 
   const baseUrl =
     typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
 
   const investorUrl = latestLink ? `${baseUrl}/investor/${latestLink.access_token}` : null;
 
-  // Build chart series using shared utility (dense monthly axis, proper null handling)
+  // Metrics available for drag-and-drop charts
+  const DASHBOARD_METRICS: Array<{ key: string; label: string; format: MetricFormat }> = [
+    { key: "arr", label: "ARR", format: "currency" },
+    { key: "mrr", label: "MRR", format: "currency" },
+    { key: "burn_rate", label: "Burn rate", format: "currency" },
+    { key: "net_revenue", label: "Net revenue", format: "currency" },
+    { key: "runway_months", label: "Runway", format: "number" },
+    { key: "churn", label: "Churn", format: "percent" },
+    { key: "mrr_growth_mom", label: "Growth", format: "percent" },
+  ];
+
+  // Build chart series for all metrics
   const arrSeries = buildDenseSeries(snapshotRows, "arr");
   const mrrSeries = buildDenseSeries(snapshotRows, "mrr");
   const burnSeries = buildDenseSeries(snapshotRows, "burn_rate");
   const netRevenueSeries = buildDenseSeries(snapshotRows, "net_revenue");
+  const runwaySeries = buildDenseSeries(snapshotRows, "runway_months");
   const churnSeries = buildDenseSeries(snapshotRows, "churn", { percent: true, allowNegative: false });
   const growthSeries = buildDenseSeries(snapshotRows, "mrr_growth_mom", { percent: true, allowNegative: true });
 
-  // Check if series have any non-null data
-  const hasArrData = arrSeries.some((p) => p.value !== null);
-  const hasMrrData = mrrSeries.some((p) => p.value !== null);
-  const hasBurnData = burnSeries.some((p) => p.value !== null);
+  const seriesByKey: Record<string, ChartPoint[]> = {
+    arr: arrSeries,
+    mrr: mrrSeries,
+    burn_rate: burnSeries,
+    net_revenue: netRevenueSeries,
+    runway_months: runwaySeries,
+    churn: churnSeries,
+    mrr_growth_mom: growthSeries,
+  };
 
-  // Transform to chart component format; optionally add forecast (dashed line) for ARR, MRR & Burn
+  // Extend with forecast for currency/number metrics (optional)
   const arrExtended = extendWithForecast(arrSeries, { monthsAhead: 6 });
   const mrrExtended = extendWithForecast(mrrSeries, { monthsAhead: 6 });
   const burnExtended = extendWithForecast(burnSeries, { monthsAhead: 6 });
+  const netRevenueExtended = extendWithForecast(netRevenueSeries, { monthsAhead: 6 });
+  const runwayExtended = extendWithForecast(runwaySeries, { monthsAhead: 6 });
 
-  function toArrChartData(series: ChartPoint[], includeForecast: boolean): ArrChartDataPoint[] {
-    if (!includeForecast) return series.map((p) => ({ month: p.label, arr: p.value }));
-    const lastHist = series.reduce<number>((acc, p, i) => (p.value != null ? i : acc), -1);
-    return series.map((p, i) => {
-      const arr = p.value;
-      let arrForecast: number | null | undefined;
-      if (p.forecast != null) arrForecast = p.forecast;
-      else if (i === lastHist && lastHist >= 0) arrForecast = (series[lastHist]!.value as number);
-      else arrForecast = undefined;
-      return { month: p.label, arr, ...(arrForecast != null && { arrForecast }) };
+  const extendedByKey: Record<string, ChartPoint[]> = {
+    arr: arrExtended,
+    mrr: mrrExtended,
+    burn_rate: burnExtended,
+    net_revenue: netRevenueExtended,
+    runway_months: runwayExtended,
+    churn: churnSeries,
+    mrr_growth_mom: growthSeries,
+  };
+
+  function toMetricChartData(
+    series: ChartPoint[],
+    useExtended: boolean,
+    extended: ChartPoint[]
+  ): MetricChartDataPoint[] {
+    const src = useExtended ? extended : series;
+    const lastHist = src.reduce<number>((acc, p, i) => (p.value != null ? i : acc), -1);
+    return src.map((p, i) => {
+      const value = p.value;
+      let valueForecast: number | null | undefined;
+      if (p.forecast != null) valueForecast = p.forecast;
+      else if (i === lastHist && lastHist >= 0) valueForecast = (src[lastHist]!.value as number);
+      else valueForecast = undefined;
+      return { month: p.label, value, ...(valueForecast != null && { valueForecast }) };
     });
   }
 
-  function toMrrChartData(series: ChartPoint[], includeForecast: boolean): MrrChartDataPoint[] {
-    if (!includeForecast) return series.map((p) => ({ month: p.label, mrr: p.value }));
-    const lastHist = series.reduce<number>((acc, p, i) => (p.value != null ? i : acc), -1);
-    return series.map((p, i) => {
-      const mrr = p.value;
-      let mrrForecast: number | null | undefined;
-      if (p.forecast != null) mrrForecast = p.forecast;
-      else if (i === lastHist && lastHist >= 0) mrrForecast = (series[lastHist]!.value as number);
-      else mrrForecast = undefined;
-      return { month: p.label, mrr, ...(mrrForecast != null && { mrrForecast }) };
-    });
+  function getChartDataForMetric(metricKey: string): MetricChartDataPoint[] {
+    const series = seriesByKey[metricKey] ?? [];
+    const extended = extendedByKey[metricKey];
+    const useForecast = showForecast && extended != null;
+    return toMetricChartData(series, useForecast, extended ?? series);
   }
 
-  function toBurnChartData(series: ChartPoint[], includeForecast: boolean): BurnChartDataPoint[] {
-    if (!includeForecast) return series.map((p) => ({ month: p.label, burn: p.value }));
-    const lastHist = series.reduce<number>((acc, p, i) => (p.value != null ? i : acc), -1);
-    return series.map((p, i) => {
-      const burn = p.value;
-      let burnForecast: number | null | undefined;
-      if (p.forecast != null) burnForecast = p.forecast;
-      else if (i === lastHist && lastHist >= 0) burnForecast = (series[lastHist]!.value as number);
-      else burnForecast = undefined;
-      return { month: p.label, burn, ...(burnForecast != null && { burnForecast }) };
-    });
+  function hasDataForMetric(metricKey: string): boolean {
+    const series = seriesByKey[metricKey] ?? [];
+    return series.some((p) => p.value !== null);
   }
-
-  const arrChartData = toArrChartData(showForecast ? arrExtended : arrSeries, showForecast);
-  const mrrChartData = toMrrChartData(showForecast ? mrrExtended : mrrSeries, showForecast);
-  const burnChartData = toBurnChartData(showForecast ? burnExtended : burnSeries, showForecast);
 
   // Key Metrics: samme kilde som Details — bruk siste rad som har mrr/arr/burn (unngår tomme fremtidige rader)
   const latestSnapshotRow = (() => {
@@ -686,12 +687,8 @@ function CompanyDashboardContent() {
     console.log("[Dashboard] Chart series:", {
       snapshotsTotal: snapshotRows.length,
       validSnapshots: snapshotRows.filter((r) => r.period_date && r.kpis).length,
-      arrSeries: { length: arrSeries.length, hasData: hasArrData },
-      mrrSeries: { length: mrrSeries.length, hasData: hasMrrData },
-      burnSeries: { length: burnSeries.length, hasData: hasBurnData },
-      netRevenueSeries: { length: netRevenueSeries.length, hasData: netRevenueSeries.some((p) => p.value !== null) },
-      churnSeries: { length: churnSeries.length, hasData: churnSeries.some((p) => p.value !== null) },
-      growthSeries: { length: growthSeries.length, hasData: growthSeries.some((p) => p.value !== null) },
+      chartSlots,
+      seriesByKey: Object.keys(seriesByKey).reduce((acc, k) => ({ ...acc, [k]: (seriesByKey[k]?.length ?? 0) }), {}),
     });
   }
   async function loadStripeStatus(companyId: string) {
@@ -1365,40 +1362,78 @@ function CompanyDashboardContent() {
                 </div>
               </div>
 
-              {/* mobile: stack, desktop: 2 columns */}
+              {/* Draggable metrics: drag a metric onto a chart to show it */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                <span className="text-xs text-slate-500 self-center mr-1 light:text-slate-600">Drag to chart:</span>
+                {DASHBOARD_METRICS.map((m) => (
+                  <span
+                    key={m.key}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("metric", m.key);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
+                    className="cursor-grab active:cursor-grabbing rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 light:border-slate-400 light:bg-slate-200 light:text-slate-800 light:hover:bg-slate-300"
+                  >
+                    {m.label}
+                  </span>
+                ))}
+              </div>
+
+              {/* Chart drop zones */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-                {/* ARR Chart */}
-                <div>
-                  {!hasArrData ? (
-                    <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 flex items-center justify-center">
-                      <p className="text-sm text-slate-400">No valid data yet</p>
+                {([0, 1, 2] as const).map((slotIndex) => {
+                  const metricKey = chartSlots[slotIndex];
+                  const metric = DASHBOARD_METRICS.find((m) => m.key === metricKey) ?? DASHBOARD_METRICS[0];
+                  const chartData = getChartDataForMetric(metricKey);
+                  const hasData = hasDataForMetric(metricKey);
+                  return (
+                    <div
+                      key={slotIndex}
+                      className={cn(
+                        "rounded-xl border-2 border-dashed transition-colors",
+                        slotIndex === 2 && "lg:col-span-2",
+                        dragOverSlot === slotIndex
+                          ? "border-[#2B74FF] bg-slate-800/50"
+                          : "border-slate-700 light:border-slate-300"
+                      )}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                        setDragOverSlot(slotIndex);
+                      }}
+                      onDragLeave={() => setDragOverSlot(null)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDragOverSlot(null);
+                        const key = e.dataTransfer.getData("metric");
+                        if (!key) return;
+                        setChartSlots((prev) => {
+                          const next = [...prev] as [string, string, string];
+                          next[slotIndex] = key;
+                          return next;
+                        });
+                      }}
+                    >
+                      <div className="p-2">
+                        <h3 className="text-sm font-medium text-slate-200 mb-2 light:text-slate-800">
+                          {metric.label}
+                        </h3>
+                        {!hasData ? (
+                          <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 flex items-center justify-center">
+                            <p className="text-sm text-slate-400">No valid data yet. Drag a metric above to change.</p>
+                          </div>
+                        ) : (
+                          <MetricChart
+                            data={chartData}
+                            metricLabel={metric.label}
+                            format={metric.format}
+                          />
+                        )}
+                      </div>
                     </div>
-                  ) : (
-                    <ArrChart data={arrChartData} />
-                  )}
-                </div>
-
-                {/* MRR Chart */}
-                <div>
-                  {!hasMrrData ? (
-                    <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 flex items-center justify-center">
-                      <p className="text-sm text-slate-400">No valid data yet</p>
-                    </div>
-                  ) : (
-                    <MrrChart data={mrrChartData} />
-                  )}
-                </div>
-
-                {/* Burn/Runway Chart - full width on desktop */}
-                <div className="lg:col-span-2">
-                  {!hasBurnData ? (
-                    <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 flex items-center justify-center">
-                      <p className="text-sm text-slate-400">No valid data yet</p>
-                    </div>
-                  ) : (
-                    <BurnChart data={burnChartData} />
-                  )}
-                </div>
+                  );
+                })}
               </div>
             </section>
           )}
@@ -1620,7 +1655,7 @@ function CompanyDashboardContent() {
                   </>
                 ) : (
                   <p className="text-sm text-slate-400 light:text-slate-600">
-                    Approve a request in Overview to generate an investor link.
+                    Loading link…
                   </p>
                 )}
               </div>

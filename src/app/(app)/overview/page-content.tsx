@@ -589,6 +589,10 @@ function OverviewPageContentInner() {
                 </div>
               )}
 
+              {/* Chart title: MRR or Burn rate */}
+              <h3 className="text-sm font-medium text-slate-200 mb-2 light:text-slate-800">
+                {activeChart === "mrr" ? "MRR" : "Burn rate"}
+              </h3>
               {/* Chart content */}
               <div className="relative min-h-[280px]">
                 {mrrChartData.length > 0 && (

@@ -68,15 +68,8 @@ export function BurnChart({ data = [] }: BurnChartProps) {
 
   return (
     <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-slate-200">
-          Monthly Burn Rate
-        </h3>
-        <p className="text-xs text-slate-400">
-          Historical data
-        </p>
-      </div>
-      <div className="w-full h-[80%]">
+      <div className="h-6 mb-2" aria-hidden />
+      <div className="w-full h-[85%]">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={data}
@@ -92,7 +85,11 @@ export function BurnChart({ data = [] }: BurnChartProps) {
               tickLine={false}
               axisLine={false}
               tick={{ fill: "rgba(148, 163, 184, 0.9)", fontSize: 11 }}
-              tickFormatter={(v) => `${Math.round(v / 1000)}k`}
+              tickFormatter={(v) => {
+                if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
+                if (v >= 1000) return `$${Math.round(v / 1000)}k`;
+                return "$" + Math.round(v).toLocaleString("en-US");
+              }}
             />
             <Tooltip content={<CustomTooltip />} />
             <Line

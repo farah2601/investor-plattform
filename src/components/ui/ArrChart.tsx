@@ -88,8 +88,9 @@ export function ArrChart({ data = [] }: ArrChartProps) {
               axisLine={false}
               tick={{ fill: "rgba(148, 163, 184, 0.9)", fontSize: 11 }}
               tickFormatter={(v) => {
-                if (v >= 1000000) return `$${(v / 1000000).toFixed(1)}M`;
-                return `$${(v / 1000).toFixed(0)}k`;
+                if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
+                if (v >= 1000) return `$${Math.round(v / 1000)}k`;
+                return "$" + Math.round(v).toLocaleString("en-US");
               }}
             />
             <Tooltip content={<CustomTooltip />} />
