@@ -263,6 +263,24 @@ export async function runKpiRefresh(input: unknown) {
     console.log(`[runKpiRefresh] Upserted ${upsertedCount} snapshots for company ${companyId}`);
   }
 
+  // Delete old snapshots: keep only periods that are in the current run (sheet + stripe)
+  const keepPeriods = Array.from(allPeriodDates);
+  if (keepPeriods.length > 0) {
+    const keepList = `("${keepPeriods.join('","')}")`;
+    const { data: deleted, error: delError } = await supabase
+      .from("kpi_snapshots")
+      .delete()
+      .eq("company_id", companyId)
+      .not("period_date", "in", keepList)
+      .select("period_date");
+
+    if (delError) {
+      console.warn("[runKpiRefresh] Failed to delete old snapshots:", delError);
+    } else if (deleted && deleted.length > 0) {
+      console.log(`[runKpiRefresh] Deleted ${deleted.length} old snapshots for company ${companyId}`);
+    }
+  }
+
   // Update companies sync metadata
   const updates: CompanyUpdates = {};
   if (sheetRows.length > 0) {

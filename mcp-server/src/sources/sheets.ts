@@ -113,10 +113,9 @@ const HEADER_MAP: Record<string, KpiKey | "month"> = {
 };
 
 /**
- * UNDO: Set to false to use static HEADER_MAP + findBestHeaderRow again.
- * When true: only LLM is used for recognition (row 0 = header, AI returns column map + month column index).
+ * All sheet recognition is via LLM: find numbers, find information, interpret information.
+ * No static HEADER_MAP or findBestHeaderRow – semantic extraction first, then index-based LLM fallback.
  */
-const USE_LLM_ONLY_FOR_SHEET_RECOGNITION = true;
 
 /**
  * Normalize header string for matching
@@ -209,34 +208,34 @@ async function matchColumnsWithAI(grid: SheetRows): Promise<MatchColumnsAIResult
 
   try {
     const openai = getOpenAI();
-    const prompt = `Du ser på et rutenett fra Google Sheets. Størrelsen kan variere: rader 0 til ${rowsToSend.length - 1}, kolonner 0 til ${colsToSend - 1}. Bruk det som faktisk er vist—header-raden kan være hvor som helst (f.eks. rad 0 eller noen rader nede).
+    const prompt = `You are looking at a grid from Google Sheets. The size may vary: rows 0 to ${rowsToSend.length - 1}, columns 0 to ${colsToSend - 1}. Use what is actually shown—the header row can be anywhere (e.g. row 0 or a few rows down).
 
-Oppgave: Skann rutenettet og finn den raden som inneholder kolonneheadere (navn på feltene). Map kolonner etter betydning, ikke nøyaktig ordlyd—f.eks. "Monthly recurring revenue (USD)", "MRR", "Månedlig inntekt" skal mappes til mrr. Finn også hvilken kolonne som er måned/periode/dato.
+Task: Scan the grid and find the row that contains column headers (field names). Map columns by meaning, not exact wording—e.g. "Monthly recurring revenue (USD)", "MRR", "Månedlig inntekt" should map to mrr. Also identify which column is month/period/date.
 
-KPI-felt (bruk nøyaktig disse strengene i JSON):
-- mrr: monthly recurring revenue, MRR, inntekt per måned
+KPI fields (use these exact strings in JSON):
+- mrr: monthly recurring revenue, MRR
 - arr: annual recurring revenue, ARR
-- mrr_growth_mom: MRR Growth %, Growth %, MoM-vekst
-- burn_rate: burn, burn rate, utgifter per måned
-- cash_balance: cash, cash balance, kontantbeholdning
-- runway_months: runway, runway i måneder
+- mrr_growth_mom: MRR Growth %, Growth %, MoM growth
+- burn_rate: burn, burn rate, monthly spend
+- cash_balance: cash, cash balance
+- runway_months: runway, runway in months
 - churn: churn, Churn %
 - customers: customers, users, subscribers
-- net_revenue: netto inntekt
-- failed_payment_rate: mislykkede betalinger
-- refund_rate: refusjonsrate
+- net_revenue: net revenue
+- failed_payment_rate: failed payments
+- refund_rate: refund rate
 
-Rutenett (rad 0–${rowsToSend.length - 1}, kol 0–${colsToSend - 1}):
+Grid (row 0–${rowsToSend.length - 1}, col 0–${colsToSend - 1}):
 ${gridLines}
 
-Returner JSON med:
-- header_row_index: (tall) 0-basert rad for header-raden.
-- month_column: (tall) 0-basert kolonne for måned/periode. Hvis usikker, bruk 0.
-- Mapping fra kolonneindeks (streng "0", "1", …) til KPI-felt. Eksempel: "0": "mrr", "1": "arr".
+Return JSON with:
+- header_row_index: (number) 0-based row index of the header row.
+- month_column: (number) 0-based column index for month/period.
+- Mapping from column index (string "0", "1", …) to KPI field. Map ONLY data columns to KPI—the month/period column (month_column) must NOT be mapped to mrr, arr or any other KPI field.
 
-Eksempel: {"header_row_index": 0, "month_column": 0, "0": "mrr", "1": "arr", "2": "burn_rate"}
+Example when column 0 is month: {"header_row_index": 0, "month_column": 0, "1": "mrr", "2": "arr", "3": "mrr_growth_mom", "4": "burn_rate"}
 
-Du MÅ inkludere minst én kolonne til KPI i mappingen. Kun header_row_index og month_column er ugyldig.`;
+You MUST include at least one column in the mapping. Only header_row_index and month_column alone is invalid.`;
 
     console.log("[matchColumnsWithAI] Sending grid rows 0–" + (rowsToSend.length - 1) + ", cols 0–" + (colsToSend - 1));
     const completion = await openai.chat.completions.create({
@@ -438,37 +437,23 @@ async function extractSheetDataWithAI(grid: SheetRows): Promise<{ parsed: Parsed
     return `row ${rowIdx}: ${cells.join(", ")}`;
   }).join("\n");
 
-  const kpiList = KPI_KEYS.join(", ");
-  const maxDataRows = Math.max(0, rowsToSend.length - 1); // at least one row is header
-  const prompt = `Du ser på et rutenett fra Google Sheets. Oppgaven er semantisk: finn ut hvor disse metricene er (måned/periode, MRR, ARR, MRR growth %, Burn, Cash balance, Runway, Churn, Customers, osv.) og les av verdiene for hver datarad.
+  const maxDataRows = Math.max(0, rowsToSend.length - 1);
+  const systemPrompt = `You are Valyxo's sheet parser. You receive a grid from a Google Sheet and must find the KPI values (month/period, MRR, ARR, Burn, Cash, Runway, Churn, Customers, etc.) and return them in the specified JSON format. Use only what appears in the grid—do not invent rows or numbers.`;
 
-Rutenett:
+  const userPrompt = `Here is an excerpt from a Google Sheet (rows are numbered, cells are columnIndex="value"):
+
 ${gridLines}
 
-Gjør følgende:
-1) Finn hvilken rad som er header-rad (kolonnenavn).
-2) Finn hvilken kolonne som er måned/periode (for period_date).
-3) For hver datarad under header: les av verdiene for hver metric du gjenkjenner, og sett dem inn på riktig sted.
-
-Returner JSON med nøyaktig dette formatet:
-{
-  "rows": [
-    { "period_date": "YYYY-MM-01", "mrr": tall eller null, "arr": tall eller null, "mrr_growth_mom": null, "burn_rate": null, "cash_balance": null, "runway_months": null, "churn": null, "customers": null, "net_revenue": null, "failed_payment_rate": null, "refund_rate": null },
-    ...
-  ]
-}
-
-Regler:
-- period_date: alltid YYYY-MM-01 (avled fra månedsnavn eller år-måned).
-- Kun disse nøklene i hvert objekt: period_date, ${kpiList}. Bruk null der du ikke finner verdi.
-- Prosent (churn, mrr_growth_mom) som tall (f.eks. 10.5 for 10,5%), ikke 0.105.
-- Bruk KUN det som står i rutenettet. Legg IKKE til rader, ekstrapoler ikke, fyll ikke inn fremtidige måneder. Én datarad i rutenettet = én rad i "rows". Maks ${maxDataRows} rader i "rows".`;
+Identify where month/period, MRR, ARR, Burn, Cash, Runway, Churn and Customers are, and for each data row: read the values and fill an object with the keys period_date (YYYY-MM-01), mrr, arr, mrr_growth_mom, burn_rate, cash_balance, runway_months, churn, customers, net_revenue, failed_payment_rate, refund_rate. Use null where there is no value. Return a single JSON object with a "rows" array of such objects—only what actually appears in the sheet, max ${maxDataRows} rows. Percentages as numbers (e.g. 10.5 for 10.5%).`;
 
   try {
     const openai = getOpenAI();
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
       temperature: 0.2,
       response_format: { type: "json_object" },
     });
@@ -786,8 +771,7 @@ function extractDataRegion(
 
 /**
  * Parse horizontal layout
- * When USE_LLM_ONLY_FOR_SHEET_RECOGNITION: only LLM is used (row 0 = header, AI returns column map + month column).
- * Otherwise: findBestHeaderRow + optional AI override + static HEADER_MAP for month.
+ * All recognition via LLM: semantic extraction first, then index-based LLM fallback.
  */
 async function parseHorizontalLayout(
   rows: SheetRows
@@ -799,76 +783,37 @@ async function parseHorizontalLayout(
   let columnMap: Map<number, KpiKey>;
   let monthColumnIndex: number;
 
-  if (USE_LLM_ONLY_FOR_SHEET_RECOGNITION) {
-    // Semantic path first: AI finds metrics and returns extracted rows directly (no column indices)
-    if (rows.length < 2) {
-      return {
-        parsed: [],
-        debug: { detectedLayout: "none", totalRows: rows.length, parsedRows: 0, skippedRows: rows.length },
-      };
-    }
-    const grid = rows.slice(0, MAX_GRID_ROWS_CAP);
-    const semanticResult = await extractSheetDataWithAI(grid);
-    if (semanticResult && semanticResult.parsed.length > 0) {
-      return {
-        parsed: semanticResult.parsed,
-        debug: {
-          detectedLayout: "horizontal",
-          totalRows: rows.length,
-          parsedRows: semanticResult.parsed.length,
-          skippedRows: rows.length - semanticResult.parsed.length,
-        },
-      };
-    }
-    // Fallback: index-based column mapping
-    const aiResult = await matchColumnsWithAI(grid);
-    if (!aiResult || aiResult.columnMap.size < 2) {
-      return {
-        parsed: [],
-        debug: { detectedLayout: "horizontal", totalRows: rows.length, parsedRows: 0, skippedRows: rows.length },
-      };
-    }
-    headerRowIndex = aiResult.headerRowIndex;
-    columnMap = aiResult.columnMap;
-    monthColumnIndex = aiResult.monthColumnIndex ?? 0;
-  } else {
-    // Original path: findBestHeaderRow (static) + optional AI override + static month detection
-    const headerInfo = findBestHeaderRow(rows);
-    if (!headerInfo) {
-      return {
-        parsed: [],
-        debug: { detectedLayout: "none", totalRows: rows.length, parsedRows: 0, skippedRows: rows.length },
-      };
-    }
-    let { headerRowIndex: hri, columnMap: cm } = headerInfo;
-    headerRowIndex = hri;
-    const headerRow = rows[headerRowIndex];
-    const grid = rows.slice(0, MAX_GRID_ROWS_CAP);
-    const aiResult = await matchColumnsWithAI(grid);
-    monthColumnIndex = -1;
-    if (aiResult && aiResult.columnMap.size >= 2) {
-      headerRowIndex = aiResult.headerRowIndex;
-      cm = aiResult.columnMap;
-      if (aiResult.monthColumnIndex != null) monthColumnIndex = aiResult.monthColumnIndex;
-    }
-    columnMap = cm;
-    const headerRowForMonth = rows[headerRowIndex] ?? [];
-    if (monthColumnIndex < 0) {
-      for (let i = 0; i < headerRowForMonth.length; i++) {
-        const normalized = normalizeHeader(String(headerRowForMonth[i] || ""));
-        if (HEADER_MAP[normalized] === "month") {
-          monthColumnIndex = i;
-          break;
-        }
-      }
-    }
-    if (monthColumnIndex < 0) {
-      return {
-        parsed: [],
-        debug: { detectedLayout: "horizontal", totalRows: rows.length, parsedRows: 0, skippedRows: rows.length },
-      };
-    }
+  // All via LLM: find numbers, find information, interpret – no static HEADER_MAP or findBestHeaderRow
+  if (rows.length < 2) {
+    return {
+      parsed: [],
+      debug: { detectedLayout: "none", totalRows: rows.length, parsedRows: 0, skippedRows: rows.length },
+    };
   }
+  const grid = rows.slice(0, MAX_GRID_ROWS_CAP);
+  const semanticResult = await extractSheetDataWithAI(grid);
+  if (semanticResult && semanticResult.parsed.length > 0) {
+    return {
+      parsed: semanticResult.parsed,
+      debug: {
+        detectedLayout: "horizontal",
+        totalRows: rows.length,
+        parsedRows: semanticResult.parsed.length,
+        skippedRows: rows.length - semanticResult.parsed.length,
+      },
+    };
+  }
+  // Fallback: LLM returns column indices, we read cells
+  const aiResult = await matchColumnsWithAI(grid);
+  if (!aiResult || aiResult.columnMap.size < 2) {
+    return {
+      parsed: [],
+      debug: { detectedLayout: "horizontal", totalRows: rows.length, parsedRows: 0, skippedRows: rows.length },
+    };
+  }
+  headerRowIndex = aiResult.headerRowIndex;
+  columnMap = aiResult.columnMap;
+  monthColumnIndex = aiResult.monthColumnIndex ?? 0;
 
   const dataRows = extractDataRegion(rows, headerRowIndex, monthColumnIndex);
 

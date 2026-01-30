@@ -96,13 +96,55 @@ export async function POST(req: Request) {
       context += " No KPI snapshots yet.";
     }
 
+    // Fetch recent agent run events so the AI can answer "what happened in the last run"
+    const { data: agentLogs } = await supabaseAdmin
+      .from("agent_logs")
+      .select("tool_name, status, message, meta, created_at")
+      .eq("company_id", companyId)
+      .order("created_at", { ascending: false })
+      .limit(25);
+
+    if (agentLogs && agentLogs.length > 0) {
+      const logLines = agentLogs.map((log) => {
+        const at = log.created_at
+          ? new Date(log.created_at).toISOString().replace("T", " ").slice(0, 19)
+          : "?";
+        const meta = log.meta as Record<string, unknown> | null;
+        const err = meta?.error && typeof meta.error === "object" && "message" in meta.error
+          ? String((meta.error as { message?: unknown }).message ?? "")
+          : "";
+        let extra = err ? ` (error: ${err})` : "";
+        if (log.status === "success" && meta?.result && typeof meta.result === "object") {
+          const res = meta.result as Record<string, unknown>;
+          if (typeof res.message === "string") {
+            extra = ` (${res.message})`;
+          } else if (res.sheetsProcessed != null || res.snapshotsUpserted != null || res.stripeProcessed != null) {
+            const parts: string[] = [];
+            if (res.sheetsProcessed != null) parts.push(`${res.sheetsProcessed} sheet rows`);
+            if (res.stripeProcessed != null) parts.push(`${res.stripeProcessed} stripe rows`);
+            if (res.snapshotsUpserted != null) parts.push(`${res.snapshotsUpserted} snapshots written`);
+            if (parts.length) extra = ` (${parts.join(", ")})`;
+          } else if (res.kpiRefreshed === true || res.insightsGenerated === true) {
+            const parts: string[] = [];
+            if (res.kpiRefreshed === true) parts.push("KPI refreshed");
+            if (res.insightsGenerated === true) parts.push("insights generated");
+            if (parts.length) extra = ` (${parts.join(", ")})`;
+          }
+        }
+        return `[${at}] ${log.tool_name} ${log.status}: ${log.message ?? ""}${extra}`;
+      });
+      context += ` Last agent run events (newest first): ${logLines.join("; ")}.`;
+    } else {
+      context += " No agent run events yet.";
+    }
+
     const openai = new OpenAI({ apiKey });
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
-          content: `You are the Valyxo assistant. You help founders with metrics, Google Sheets sync, KPI data, and the Valyxo platform. Context for this company: ${context} Answer briefly and helpfully. If the user reports something wrong (e.g. wrong numbers, sync issues), suggest checking the sheet layout, re-running sync, or that metrics come from Google Sheets (and optionally Stripe). Reply in the same language as the user.`,
+          content: `You are the Valyxo assistant. You help founders with metrics, Google Sheets sync, KPI data, and the Valyxo platform. Context for this company: ${context} You have access to "Last agent run events" above—use them to explain what happened in the last run. When the user asks what happened in the last run (e.g. "hva skjedde i siste kjøring?"), give a clear, step-by-step explanation: which steps ran (KPI refresh, insights, etc.), what each step did, and the outcome (e.g. how many sheet rows were processed, how many snapshots were written, whether insights were generated). Be explanatory and concrete, not just brief. If something failed, explain which step failed and why from the error message. For other questions, answer helpfully. Reply in the same language as the user.`,
         },
         { role: "user", content: message.trim() },
       ],

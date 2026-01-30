@@ -20,13 +20,8 @@ import { MetricsDetailsModal } from "@/components/metrics/MetricsDetailsModal";
 // Helper functions for formatting metrics
 function formatMoney(value: number | null) {
   if (value == null) return "—";
-  if (value >= 1000000) {
-    return `$${(value / 1000000).toFixed(2)}M`;
-  }
-  if (value >= 1000) {
-    return `$${(value / 1000).toFixed(0)}k`;
-  }
-  return "$" + value.toLocaleString("en-US");
+  const whole = Math.round(value);
+  return "$" + whole.toLocaleString("en-US", { maximumFractionDigits: 0, minimumFractionDigits: 0 });
 }
 
 function formatRunway(value: number | null) {

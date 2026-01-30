@@ -37,9 +37,8 @@ function extractKpiValue(kpi: unknown): number | null {
 
 function formatMoney(value: number | null): string {
   if (value == null) return "—";
-  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
-  if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}k`;
-  return "$" + value.toLocaleString("en-US");
+  const whole = Math.round(value);
+  return "$" + whole.toLocaleString("en-US", { maximumFractionDigits: 0, minimumFractionDigits: 0 });
 }
 
 function formatPercent(value: number | null): string {

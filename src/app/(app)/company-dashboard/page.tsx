@@ -89,13 +89,8 @@ type AgentLog = {
 
 function formatMoney(value: number | null) {
   if (value == null) return "—";
-  if (value >= 1000000) {
-    return `$${(value / 1000000).toFixed(2)}M`;
-  }
-  if (value >= 1000) {
-    return `$${(value / 1000).toFixed(0)}k`;
-  }
-  return "$" + value.toLocaleString("en-US");
+  const whole = Math.round(value);
+  return "$" + whole.toLocaleString("en-US", { maximumFractionDigits: 0, minimumFractionDigits: 0 });
 }
 
 function formatPercent(value: number | null) {
@@ -1242,42 +1237,47 @@ function CompanyDashboardContent() {
                 />
               )}
 
-              {/* Chat med agent — under metrics */}
-              <div className="mt-6 pt-4 border-t border-slate-700/70 light:border-slate-200">
-                <h3 className="text-xs font-medium text-slate-400 light:text-slate-600 uppercase tracking-wider mb-3">
-                  Chat med Valyxo Agent
-                </h3>
-                <p className="text-xs text-slate-500 light:text-slate-600 mb-3">
-                  Spør om metrics, sync eller sheets hvis noe ser feil ut.
+              {/* Chat with Valyxo Agent — below metrics */}
+              <div className="mt-8 pt-6 border-t border-slate-700/50 light:border-slate-200">
+                <div className="flex items-baseline gap-2 mb-1">
+                  <h3 className="text-sm font-semibold text-slate-200 light:text-slate-900 tracking-tight">
+                    Chat with Valyxo Agent
+                  </h3>
+                  <span className="text-[10px] font-medium text-slate-500 light:text-slate-500 uppercase tracking-widest">
+                    AI Assistant
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 light:text-slate-600 mb-4">
+                  Ask about metrics, sync or sheets if something looks wrong.
                 </p>
-                <div className="rounded-xl border border-slate-700/70 bg-slate-950/50 light:bg-slate-50 light:border-slate-200 min-h-[200px] max-h-[320px] flex flex-col">
-                  <div className="flex-1 overflow-y-auto p-3 space-y-3">
+                <div className="rounded-2xl border border-slate-700/50 bg-gradient-to-b from-slate-900/80 to-slate-950/60 light:from-slate-50 light:to-white light:border-slate-200 shadow-inner min-h-[220px] max-h-[340px] flex flex-col overflow-hidden">
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
                     {agentChatMessages.length === 0 && (
-                      <p className="text-xs text-slate-500 light:text-slate-600">
-                        Skriv en melding nedenfor for å chatte med agenten.
+                      <p className="text-xs text-slate-500 light:text-slate-600 italic">
+                        Type a message below to chat with the agent.
                       </p>
                     )}
                     {agentChatMessages.map((m, i) => (
                       <div
                         key={i}
                         className={cn(
-                          "text-sm rounded-lg px-3 py-2 max-w-[85%]",
+                          "text-sm rounded-xl px-4 py-2.5 max-w-[88%] shadow-sm",
                           m.role === "user"
-                            ? "ml-auto bg-[#2B74FF]/20 text-slate-200 light:text-slate-800"
-                            : "mr-auto bg-slate-800/80 text-slate-300 light:bg-slate-200 light:text-slate-800"
+                            ? "ml-auto bg-[#2B74FF]/25 text-slate-100 light:text-slate-900 border border-[#2B74FF]/20"
+                            : "mr-auto bg-slate-800/70 text-slate-200 light:bg-slate-100 light:text-slate-800 border border-slate-700/30 light:border-slate-200"
                         )}
                       >
-                        {m.content}
+                        <span className="whitespace-pre-wrap">{m.content}</span>
                       </div>
                     ))}
                     {agentChatLoading && (
-                      <div className="mr-auto text-sm rounded-lg px-3 py-2 bg-slate-800/80 text-slate-400 light:bg-slate-200 light:text-slate-600">
-                        Svarer…
+                      <div className="mr-auto text-sm rounded-xl px-4 py-2.5 bg-slate-800/70 text-slate-400 light:bg-slate-100 light:text-slate-600 border border-slate-700/30 light:border-slate-200">
+                        Replying…
                       </div>
                     )}
                   </div>
                   <form
-                    className="p-3 border-t border-slate-700/70 light:border-slate-200 flex gap-2"
+                    className="p-3 border-t border-slate-700/50 light:border-slate-200 bg-slate-950/30 light:bg-slate-50/50 flex gap-2"
                     onSubmit={async (e) => {
                       e.preventDefault();
                       const msg = agentChatInput.trim();
@@ -1294,7 +1294,7 @@ function CompanyDashboardContent() {
                         if (!res.ok || !data?.ok) {
                           setAgentChatMessages((prev) => [
                             ...prev,
-                            { role: "assistant", content: data?.error || "Kunne ikke sende melding." },
+                            { role: "assistant", content: data?.error || "Could not send message." },
                           ]);
                           return;
                         }
@@ -1305,7 +1305,7 @@ function CompanyDashboardContent() {
                       } catch (err) {
                         setAgentChatMessages((prev) => [
                           ...prev,
-                          { role: "assistant", content: "Noe gikk galt. Prøv igjen." },
+                          { role: "assistant", content: "Something went wrong. Please try again." },
                         ]);
                       } finally {
                         setAgentChatLoading(false);
@@ -1315,14 +1315,14 @@ function CompanyDashboardContent() {
                     <Input
                       value={agentChatInput}
                       onChange={(e) => setAgentChatInput(e.target.value)}
-                      placeholder="Skriv melding…"
-                      className="flex-1 bg-slate-900/80 border-slate-600 text-slate-100 placeholder:text-slate-500 light:bg-white light:border-slate-300 light:text-slate-900"
+                      placeholder="Type a message…"
+                      className="flex-1 bg-slate-900/60 border-slate-600/80 text-slate-100 placeholder:text-slate-500 rounded-lg light:bg-white light:border-slate-300 light:text-slate-900 focus:ring-2 focus:ring-[#2B74FF]/40"
                       disabled={agentChatLoading}
                     />
                     <Button
                       type="submit"
                       size="sm"
-                      className="shrink-0"
+                      className="shrink-0 rounded-lg bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white font-medium px-4"
                       disabled={!agentChatInput.trim() || agentChatLoading}
                     >
                       Send

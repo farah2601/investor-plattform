@@ -242,16 +242,17 @@ export function getDefaultKpiSnapshot(): KpiSnapshotKpis {
 }
 
 /**
- * Apply source priority to merge sheet and stripe KPIs
- * 
- * Priority rules (MVP):
- * - mrr/arr -> Stripe if method="billing" and stripe mrr exists, else Sheets
- * - net_revenue/refund_rate/failed_payment_rate -> Stripe (if exists)
- * - burn_rate/runway_months/cash_balance -> Sheets (until bank/accounting integrations)
- * - churn -> Sheets if exists, else Stripe if can calculate safely, else null
- * - customers -> Stripe if exists, else Sheets
- * 
- * Returns merged KPIs and source metadata
+ * Apply source priority to merge sheet and stripe KPIs.
+ * Only values from the current run (sheet or stripe) are used; no fallback to existing snapshot values.
+ *
+ * Priority rules:
+ * - mrr/arr -> Stripe (billing) if present, else Sheets
+ * - net_revenue/refund_rate/failed_payment_rate -> Stripe then Sheets
+ * - burn_rate/runway_months/cash_balance -> Sheets then Stripe
+ * - churn -> Sheets then Stripe
+ * - customers -> Stripe then Sheets
+ *
+ * Returns merged KPIs and source metadata.
  */
 export function applySourcePriority(
   existingKpis: any,
@@ -267,24 +268,13 @@ export function applySourcePriority(
   const result: Partial<KpiSnapshotKpis> = {};
   const kpiSources: Record<string, KpiSource> = {};
 
-  // Initialize with existing KPIs if they exist
-  if (existingKpis) {
-    for (const key of KPI_KEYS) {
-      result[key] = { ...existingKpis[key] };
-    }
-  } else {
-    // No existing KPIs - initialize with defaults
-    for (const key of KPI_KEYS) {
-      result[key] = createKpiValue(null, "computed");
-    }
+  // Only new data from this run: do not initialize from existing snapshots
+  for (const key of KPI_KEYS) {
+    result[key] = createKpiValue(null, "computed");
   }
 
-  // Apply source priority per KPI
+  // Apply source priority per KPI (sheet and stripe only; no fallback to existing)
   for (const key of KPI_KEYS) {
-    const existingKpi = result[key];
-    const existingValue = extractKpiValue(existingKpi);
-    const existingSource = extractKpiSource(existingKpi);
-
     const sheetValue = sheetKpis?.[key] ?? null;
     const stripeValue = stripeKpis?.[key] ?? null;
 
@@ -292,9 +282,7 @@ export function applySourcePriority(
     let finalSource: KpiSource = "computed";
     let finalUpdatedAt: string | null = null;
 
-    // Priority rules per KPI type
     if (key === "mrr" || key === "arr") {
-      // MRR/ARR: Stripe (billing) > Sheets > existing
       if (stripeValue !== null && stripeMethod === "billing") {
         finalValue = stripeValue;
         finalSource = "stripe";
@@ -303,15 +291,8 @@ export function applySourcePriority(
         finalValue = sheetValue;
         finalSource = "sheet";
         finalUpdatedAt = now;
-      } else if (existingValue !== null) {
-        finalValue = existingValue;
-        finalSource = existingSource || "computed";
-        if (existingKpi && typeof existingKpi === "object" && "updated_at" in existingKpi) {
-          finalUpdatedAt = existingKpi.updated_at as string | null;
-        }
       }
     } else if (key === "net_revenue" || key === "net_revenue_booked" || key === "refund_rate" || key === "failed_payment_rate") {
-      // Revenue metrics: Stripe > Sheets > existing
       if (stripeValue !== null) {
         finalValue = stripeValue;
         finalSource = "stripe";
@@ -320,15 +301,8 @@ export function applySourcePriority(
         finalValue = sheetValue;
         finalSource = "sheet";
         finalUpdatedAt = now;
-      } else if (existingValue !== null) {
-        finalValue = existingValue;
-        finalSource = existingSource || "computed";
-        if (existingKpi && typeof existingKpi === "object" && "updated_at" in existingKpi) {
-          finalUpdatedAt = existingKpi.updated_at as string | null;
-        }
       }
     } else if (key === "burn_rate" || key === "cash_balance" || key === "runway_months") {
-      // Financial metrics: Sheets > Stripe > existing
       if (sheetValue !== null) {
         finalValue = sheetValue;
         finalSource = "sheet";
@@ -337,33 +311,18 @@ export function applySourcePriority(
         finalValue = stripeValue;
         finalSource = "stripe";
         finalUpdatedAt = now;
-      } else if (existingValue !== null) {
-        finalValue = existingValue;
-        finalSource = existingSource || "computed";
-        if (existingKpi && typeof existingKpi === "object" && "updated_at" in existingKpi) {
-          finalUpdatedAt = existingKpi.updated_at as string | null;
-        }
       }
     } else if (key === "churn") {
-      // Churn: Sheets > Stripe (if safe) > existing
       if (sheetValue !== null) {
         finalValue = sheetValue;
         finalSource = "sheet";
         finalUpdatedAt = now;
       } else if (stripeValue !== null) {
-        // Only use Stripe churn if we can calculate it safely
         finalValue = stripeValue;
         finalSource = "stripe";
         finalUpdatedAt = now;
-      } else if (existingValue !== null) {
-        finalValue = existingValue;
-        finalSource = existingSource || "computed";
-        if (existingKpi && typeof existingKpi === "object" && "updated_at" in existingKpi) {
-          finalUpdatedAt = existingKpi.updated_at as string | null;
-        }
       }
     } else if (key === "customers") {
-      // Customers: Stripe > Sheets > existing
       if (stripeValue !== null) {
         finalValue = stripeValue;
         finalSource = "stripe";
@@ -372,15 +331,8 @@ export function applySourcePriority(
         finalValue = sheetValue;
         finalSource = "sheet";
         finalUpdatedAt = now;
-      } else if (existingValue !== null) {
-        finalValue = existingValue;
-        finalSource = existingSource || "computed";
-        if (existingKpi && typeof existingKpi === "object" && "updated_at" in existingKpi) {
-          finalUpdatedAt = existingKpi.updated_at as string | null;
-        }
       }
     } else {
-      // Other KPIs: Sheets > Stripe > existing
       if (sheetValue !== null) {
         finalValue = sheetValue;
         finalSource = "sheet";
@@ -389,31 +341,6 @@ export function applySourcePriority(
         finalValue = stripeValue;
         finalSource = "stripe";
         finalUpdatedAt = now;
-      } else if (existingValue !== null) {
-        finalValue = existingValue;
-        finalSource = existingSource || "computed";
-        if (existingKpi && typeof existingKpi === "object" && "updated_at" in existingKpi) {
-          finalUpdatedAt = existingKpi.updated_at as string | null;
-        }
-      }
-    }
-
-    // Preserve existing non-null values from higher-priority sources
-    if (existingValue !== null) {
-      if (existingSource === "stripe" && finalSource === "sheet") {
-        // Keep Stripe value if it exists
-        finalValue = existingValue;
-        finalSource = existingSource;
-        if (existingKpi && typeof existingKpi === "object" && "updated_at" in existingKpi) {
-          finalUpdatedAt = existingKpi.updated_at as string | null;
-        }
-      } else if (existingSource === "manual") {
-        // Always preserve manual values
-        finalValue = existingValue;
-        finalSource = existingSource;
-        if (existingKpi && typeof existingKpi === "object" && "updated_at" in existingKpi) {
-          finalUpdatedAt = existingKpi.updated_at as string | null;
-        }
       }
     }
 
