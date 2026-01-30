@@ -48,13 +48,14 @@ export async function POST(req: Request) {
       return authRes ?? NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
+    // OPENAI_API_KEY: lokalt fra .env/.env.local; på Vercel fra Project Settings → Environment Variables
     const apiKey = process.env.OPENAI_API_KEY?.trim();
     if (!apiKey) {
       return NextResponse.json(
         {
           ok: false,
           error:
-            "OpenAI er ikke satt opp. Legg til OPENAI_API_KEY i .env eller .env.local (i prosjektroten) og start appen på nytt.",
+            "OpenAI er ikke satt opp. Legg til OPENAI_API_KEY i .env/.env.local (lokalt) eller i Vercel → Project Settings → Environment Variables (deploy), og start appen på nytt.",
         },
         { status: 503 }
       );
