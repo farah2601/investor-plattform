@@ -279,9 +279,17 @@ function OverviewPageContentInner() {
     );
   }
 
-  // Calculate connected systems from real data (same logic as dashboard)
-  // Dashboard checks: google_sheets_url && google_sheets_tab to determine if Google Sheets is connected
-  const hasGoogleSheets = !!(company.google_sheets_url && company.google_sheets_tab);
+  // Calculate connected systems from real data (same logic as connected-systems)
+  // Support both old format (single url + tab) and new format (JSON array of sheets)
+  let hasGoogleSheets = false;
+  if (company.google_sheets_url) {
+    try {
+      const parsed = JSON.parse(company.google_sheets_url);
+      hasGoogleSheets = Array.isArray(parsed) ? parsed.length > 0 : !!(company.google_sheets_url && company.google_sheets_tab);
+    } catch {
+      hasGoogleSheets = !!(company.google_sheets_url && company.google_sheets_tab);
+    }
+  }
   const connectedCount = (hasGoogleSheets ? 1 : 0) + (stripeStatus.status === "connected" ? 1 : 0);
 
   // Calculate status from real sync data (same logic as dashboard uses)

@@ -49,11 +49,11 @@ export async function POST(
     const updatePayload: Record<string, number> = {};
 
     const mrr = extractKpiValue(kpis?.mrr);
-    if (mrr != null) updatePayload.mrr = Math.round(mrr);
+    if (mrr != null) updatePayload.mrr = mrr;
     const arr = extractKpiValue(kpis?.arr);
-    if (arr != null) updatePayload.arr = Math.round(arr);
+    if (arr != null) updatePayload.arr = arr;
     const burnRate = extractKpiValue(kpis?.burn_rate);
-    if (burnRate != null) updatePayload.burn_rate = Math.round(burnRate);
+    if (burnRate != null) updatePayload.burn_rate = burnRate;
     const churn = extractKpiValue(kpis?.churn);
     if (churn != null) updatePayload.churn = churn;
     const growthPercent = extractKpiValue(kpis?.growth_percent);
@@ -61,7 +61,7 @@ export async function POST(
     const runwayMonths = extractKpiValue(kpis?.runway_months);
     if (runwayMonths != null) updatePayload.runway_months = runwayMonths;
     const leadVelocity = extractKpiValue(kpis?.lead_velocity);
-    if (leadVelocity != null) updatePayload.lead_velocity = Math.round(leadVelocity);
+    if (leadVelocity != null) updatePayload.lead_velocity = leadVelocity;
 
     console.log("[refresh-from-snapshots] Updating companies with:", {
       companyId,

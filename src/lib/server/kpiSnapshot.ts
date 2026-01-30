@@ -167,10 +167,10 @@ export async function loadStripeMetrics(
       if (!list.data.length || !hasMore) break;
     }
     netRevenue = totalCharges > 0 || totalRefunds > 0
-      ? Math.round((totalCharges - totalRefunds) / 100 * 100) / 100
+      ? (totalCharges - totalRefunds) / 100
       : 0;
     const refundRate = totalCharges > 0
-      ? Math.round((totalRefunds / totalCharges) * 100 * 10) / 10
+      ? (totalRefunds / totalCharges) * 100
       : null;
     
     // 2) Failed Payment Rate: Use invoices to detect failed payment attempts
@@ -221,7 +221,7 @@ export async function loadStripeMetrics(
     
     // Failed payment rate as percentage
     const failedPaymentRate = totalAttempts > 0
-      ? Math.round((failedAttempts / totalAttempts) * 100 * 10) / 10 // Round to 1 decimal
+      ? (failedAttempts / totalAttempts) * 100
       : null;
     
     // 3) MRR: Compute from subscription invoices paid in the period
@@ -273,8 +273,7 @@ export async function loadStripeMetrics(
       }
     }
     
-    // Round MRR to 2 decimals
-    mrr = mrr > 0 ? Math.round(mrr * 100) / 100 : 0;
+    mrr = mrr > 0 ? mrr : 0;
     
     // 4) Churn: MRR churn proxy from canceled subscriptions in the period
     // Strategy: Find subscriptions canceled in period and sum their MRR
@@ -461,12 +460,10 @@ export async function computeDerivedMetrics(
 
   // MRR Growth MoM = ((current_mrr - previous_mrr) / previous_mrr) * 100
   // If mrr == null OR prevMrr == null OR prevMrr <= 0 => value = null
-  // Else compute percentage and round to 1 decimal
+  // Else compute percentage
   let mrrGrowthValue: number | null = null;
   if (mrrValue !== null && previousMonthMrr !== null && previousMonthMrr > 0) {
     mrrGrowthValue = ((mrrValue - previousMonthMrr) / previousMonthMrr) * 100;
-    // Round to 1 decimal place
-    mrrGrowthValue = Math.round(mrrGrowthValue * 10) / 10;
   }
   const mrr_growth_mom: KpiValue = createKpiValue(
     mrrGrowthValue,
@@ -476,14 +473,12 @@ export async function computeDerivedMetrics(
 
   // Runway months = cash_balance / burn_rate
   // If cash_balance == null OR burn_rate == null OR burn_rate <= 0 => null
-  // Else cash_balance / burn_rate, rounded to 1 decimal
+  // Else cash_balance / burn_rate
   const cashValue = sheetsMetrics.cash_balance.value;
   const burnValue = sheetsMetrics.burn_rate.value;
   let runwayValue: number | null = null;
   if (cashValue !== null && burnValue !== null && burnValue > 0) {
     runwayValue = cashValue / burnValue;
-    // Round to 1 decimal place
-    runwayValue = Math.round(runwayValue * 10) / 10;
   }
   const runway_months: KpiValue = createKpiValue(
     runwayValue,

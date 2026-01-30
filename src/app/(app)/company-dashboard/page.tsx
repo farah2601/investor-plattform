@@ -155,6 +155,12 @@ function CompanyDashboardContent() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [showForecast, setShowForecast] = useState(true);
 
+  // Chat with agent (under metrics)
+  type ChatMessage = { role: "user" | "assistant"; content: string };
+  const [agentChatMessages, setAgentChatMessages] = useState<ChatMessage[]>([]);
+  const [agentChatInput, setAgentChatInput] = useState("");
+  const [agentChatLoading, setAgentChatLoading] = useState(false);
+
   // Stripe integration
   const [stripeModalOpen, setStripeModalOpen] = useState(false);
   const [stripeKey, setStripeKey] = useState("");
@@ -1235,6 +1241,95 @@ function CompanyDashboardContent() {
                   companyName={company.name}
                 />
               )}
+
+              {/* Chat med agent — under metrics */}
+              <div className="mt-6 pt-4 border-t border-slate-700/70 light:border-slate-200">
+                <h3 className="text-xs font-medium text-slate-400 light:text-slate-600 uppercase tracking-wider mb-3">
+                  Chat med Valyxo Agent
+                </h3>
+                <p className="text-xs text-slate-500 light:text-slate-600 mb-3">
+                  Spør om metrics, sync eller sheets hvis noe ser feil ut.
+                </p>
+                <div className="rounded-xl border border-slate-700/70 bg-slate-950/50 light:bg-slate-50 light:border-slate-200 min-h-[200px] max-h-[320px] flex flex-col">
+                  <div className="flex-1 overflow-y-auto p-3 space-y-3">
+                    {agentChatMessages.length === 0 && (
+                      <p className="text-xs text-slate-500 light:text-slate-600">
+                        Skriv en melding nedenfor for å chatte med agenten.
+                      </p>
+                    )}
+                    {agentChatMessages.map((m, i) => (
+                      <div
+                        key={i}
+                        className={cn(
+                          "text-sm rounded-lg px-3 py-2 max-w-[85%]",
+                          m.role === "user"
+                            ? "ml-auto bg-[#2B74FF]/20 text-slate-200 light:text-slate-800"
+                            : "mr-auto bg-slate-800/80 text-slate-300 light:bg-slate-200 light:text-slate-800"
+                        )}
+                      >
+                        {m.content}
+                      </div>
+                    ))}
+                    {agentChatLoading && (
+                      <div className="mr-auto text-sm rounded-lg px-3 py-2 bg-slate-800/80 text-slate-400 light:bg-slate-200 light:text-slate-600">
+                        Svarer…
+                      </div>
+                    )}
+                  </div>
+                  <form
+                    className="p-3 border-t border-slate-700/70 light:border-slate-200 flex gap-2"
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      const msg = agentChatInput.trim();
+                      if (!msg || !company?.id || agentChatLoading) return;
+                      setAgentChatInput("");
+                      setAgentChatMessages((prev) => [...prev, { role: "user", content: msg }]);
+                      setAgentChatLoading(true);
+                      try {
+                        const res = await authedFetch("/api/agent/chat", {
+                          method: "POST",
+                          body: JSON.stringify({ companyId: company.id, message: msg }),
+                        });
+                        const data = await res.json().catch(() => ({}));
+                        if (!res.ok || !data?.ok) {
+                          setAgentChatMessages((prev) => [
+                            ...prev,
+                            { role: "assistant", content: data?.error || "Kunne ikke sende melding." },
+                          ]);
+                          return;
+                        }
+                        setAgentChatMessages((prev) => [
+                          ...prev,
+                          { role: "assistant", content: data.reply ?? "" },
+                        ]);
+                      } catch (err) {
+                        setAgentChatMessages((prev) => [
+                          ...prev,
+                          { role: "assistant", content: "Noe gikk galt. Prøv igjen." },
+                        ]);
+                      } finally {
+                        setAgentChatLoading(false);
+                      }
+                    }}
+                  >
+                    <Input
+                      value={agentChatInput}
+                      onChange={(e) => setAgentChatInput(e.target.value)}
+                      placeholder="Skriv melding…"
+                      className="flex-1 bg-slate-900/80 border-slate-600 text-slate-100 placeholder:text-slate-500 light:bg-white light:border-slate-300 light:text-slate-900"
+                      disabled={agentChatLoading}
+                    />
+                    <Button
+                      type="submit"
+                      size="sm"
+                      className="shrink-0"
+                      disabled={!agentChatInput.trim() || agentChatLoading}
+                    >
+                      Send
+                    </Button>
+                  </form>
+                </div>
+              </div>
             </section>
           )}
 

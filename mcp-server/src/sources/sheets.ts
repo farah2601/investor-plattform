@@ -3,9 +3,23 @@
  * 
  * Fetches and parses Google Sheets data for company KPIs.
  * This is the ONLY place that fetches sheets data - Next.js is just a gateway.
+ * Uses AI to match column headers to KPI fields so any phrasing (e.g. "Monthly recurring revenue (USD)") is understood.
  */
 
+import * as fs from "fs";
+import * as path from "path";
 import { supabase } from "../db/supabase";
+import { getOpenAI } from "../llm/openai";
+
+// #region agent log
+function debugLog(payload: { location: string; message: string; data?: object; hypothesisId?: string }) {
+  const line = JSON.stringify({ ...payload, timestamp: Date.now(), sessionId: "debug-session" }) + "\n";
+  const logPath = path.join(process.cwd(), "..", ".cursor", "debug.log");
+  try {
+    fs.appendFileSync(logPath, line);
+  } catch (_) {}
+}
+// #endregion
 
 // KPI keys we support (must match everywhere)
 const KPI_KEYS = [
@@ -99,6 +113,12 @@ const HEADER_MAP: Record<string, KpiKey | "month"> = {
 };
 
 /**
+ * UNDO: Set to false to use static HEADER_MAP + findBestHeaderRow again.
+ * When true: only LLM is used for recognition (row 0 = header, AI returns column map + month column index).
+ */
+const USE_LLM_ONLY_FOR_SHEET_RECOGNITION = true;
+
+/**
  * Normalize header string for matching
  */
 function normalizeHeader(header: string): string {
@@ -108,6 +128,409 @@ function normalizeHeader(header: string): string {
     .replace(/[:\-()]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** Result of AI grid scan: which row is header, which column is month, and column → KPI mapping for that row. */
+type MatchColumnsAIResult = {
+  headerRowIndex: number;
+  columnMap: Map<number, KpiKey>;
+  monthColumnIndex: number | null;
+};
+
+/** Normalize AI-returned field name to canonical KpiKey (case-insensitive, spaces → underscore, common aliases). */
+function normalizeAIFieldToKpiKey(value: string): KpiKey | null {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/-/g, "_");
+  if (KPI_KEYS.includes(normalized as KpiKey)) return normalized as KpiKey;
+  const aliases: Record<string, KpiKey> = {
+    burn_rate: "burn_rate",
+    burn: "burn_rate",
+    cash_balance: "cash_balance",
+    cash: "cash_balance",
+    runway_months: "runway_months",
+    runway: "runway_months",
+    mrr_growth_mom: "mrr_growth_mom",
+    growth: "mrr_growth_mom",
+    net_revenue: "net_revenue",
+    failed_payment_rate: "failed_payment_rate",
+    refund_rate: "refund_rate",
+  };
+  return aliases[normalized] ?? null;
+}
+
+// Caps for AI scan (flexible: we send actual sheet size up to these limits)
+const MAX_GRID_ROWS_CAP = 200;
+const MAX_GRID_COLS_CAP = 50;
+
+/**
+ * AI scans a Google Sheets grid to find the header row and map columns to KPI fields.
+ * Grid size is dynamic (actual rows/columns from the sheet, up to caps). Header row can be anywhere.
+ * Returns null if OPENAI_API_KEY is missing or the API call fails.
+ */
+async function matchColumnsWithAI(grid: SheetRows): Promise<MatchColumnsAIResult | null> {
+  if (!grid.length) return null;
+
+  const rowsToSend = grid.slice(0, MAX_GRID_ROWS_CAP);
+  const actualMaxCols = Math.max(1, ...rowsToSend.map((r) => (r ?? []).length));
+  const colsToSend = Math.min(actualMaxCols, MAX_GRID_COLS_CAP);
+
+  // #region agent log
+  debugLog({
+    location: "sheets.ts:matchColumnsWithAI:entry",
+    message: "grid sent to AI",
+    data: { rows: rowsToSend.length, cols: colsToSend },
+    hypothesisId: "H1-H3",
+  });
+  fetch("http://127.0.0.1:7242/ingest/d791096d-e9b3-45ec-a7c6-17c4fea0a92c", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      location: "sheets.ts:matchColumnsWithAI:entry",
+      message: "grid sent to AI",
+      data: { rows: rowsToSend.length, cols: colsToSend },
+      timestamp: Date.now(),
+      sessionId: "debug-session",
+      hypothesisId: "H1-H3",
+    }),
+  }).catch(() => {});
+  // #endregion
+  if (!process.env.OPENAI_API_KEY) {
+    console.log("[matchColumnsWithAI] OPENAI_API_KEY not set, skipping AI matching");
+    return null;
+  }
+
+  const gridLines = rowsToSend.map((row, rowIdx) => {
+    const cells = (row ?? []).slice(0, colsToSend).map((c, colIdx) => `${colIdx}="${String(c ?? "").trim().replace(/"/g, "'")}"`);
+    return `row ${rowIdx}: ${cells.join(", ")}`;
+  }).join("\n");
+
+  try {
+    const openai = getOpenAI();
+    const prompt = `Du ser på et rutenett fra Google Sheets. Størrelsen kan variere: rader 0 til ${rowsToSend.length - 1}, kolonner 0 til ${colsToSend - 1}. Bruk det som faktisk er vist—header-raden kan være hvor som helst (f.eks. rad 0 eller noen rader nede).
+
+Oppgave: Skann rutenettet og finn den raden som inneholder kolonneheadere (navn på feltene). Map kolonner etter betydning, ikke nøyaktig ordlyd—f.eks. "Monthly recurring revenue (USD)", "MRR", "Månedlig inntekt" skal mappes til mrr. Finn også hvilken kolonne som er måned/periode/dato.
+
+KPI-felt (bruk nøyaktig disse strengene i JSON):
+- mrr: monthly recurring revenue, MRR, inntekt per måned
+- arr: annual recurring revenue, ARR
+- mrr_growth_mom: MRR Growth %, Growth %, MoM-vekst
+- burn_rate: burn, burn rate, utgifter per måned
+- cash_balance: cash, cash balance, kontantbeholdning
+- runway_months: runway, runway i måneder
+- churn: churn, Churn %
+- customers: customers, users, subscribers
+- net_revenue: netto inntekt
+- failed_payment_rate: mislykkede betalinger
+- refund_rate: refusjonsrate
+
+Rutenett (rad 0–${rowsToSend.length - 1}, kol 0–${colsToSend - 1}):
+${gridLines}
+
+Returner JSON med:
+- header_row_index: (tall) 0-basert rad for header-raden.
+- month_column: (tall) 0-basert kolonne for måned/periode. Hvis usikker, bruk 0.
+- Mapping fra kolonneindeks (streng "0", "1", …) til KPI-felt. Eksempel: "0": "mrr", "1": "arr".
+
+Eksempel: {"header_row_index": 0, "month_column": 0, "0": "mrr", "1": "arr", "2": "burn_rate"}
+
+Du MÅ inkludere minst én kolonne til KPI i mappingen. Kun header_row_index og month_column er ugyldig.`;
+
+    console.log("[matchColumnsWithAI] Sending grid rows 0–" + (rowsToSend.length - 1) + ", cols 0–" + (colsToSend - 1));
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+    });
+
+    const raw = completion.choices?.[0]?.message?.content ?? "";
+    if (!raw) return null;
+    // #region agent log
+    debugLog({
+      location: "sheets.ts:matchColumnsWithAI:raw",
+      message: "AI raw response",
+      data: { rawFirst600: raw.slice(0, 600) },
+      hypothesisId: "H2-H4",
+    });
+    fetch("http://127.0.0.1:7242/ingest/d791096d-e9b3-45ec-a7c6-17c4fea0a92c", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        location: "sheets.ts:matchColumnsWithAI:raw",
+        message: "AI raw response",
+        data: { rawFirst600: raw.slice(0, 600) },
+        timestamp: Date.now(),
+        sessionId: "debug-session",
+        hypothesisId: "H2-H4",
+      }),
+    }).catch(() => {});
+    // #endregion
+    console.log("[matchColumnsWithAI] AI raw response (first 500 chars):", raw.slice(0, 500));
+
+    let parsed: Record<string, string | number>;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      const jsonMatch = raw.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+      if (jsonMatch) parsed = JSON.parse(jsonMatch[1]);
+      else return null;
+    }
+
+    console.log("[matchColumnsWithAI] AI raw response keys:", Object.keys(parsed).join(", "));
+
+    let headerRowIndex: number = 0;
+    const rawHeaderRow = parsed.header_row_index;
+    const hri = typeof rawHeaderRow === "number" ? rawHeaderRow : parseInt(String(rawHeaderRow ?? "0"), 10);
+    if (!isNaN(hri) && hri >= 0 && hri < rowsToSend.length) {
+      headerRowIndex = hri;
+    }
+    const headerRow = grid[headerRowIndex] ?? [];
+    const maxCol = colsToSend;
+
+    const columnMap = new Map<number, KpiKey>();
+    let monthColumnIndex: number | null = null;
+
+    // If model put mapping inside a nested object (e.g. "columns" or "mapping"), use that
+    let toIterate: Record<string, string | number> = parsed;
+    if (typeof parsed.columns === "object" && parsed.columns !== null) {
+      toIterate = parsed.columns as Record<string, string | number>;
+    } else if (typeof parsed.mapping === "object" && parsed.mapping !== null) {
+      toIterate = parsed.mapping as Record<string, string | number>;
+    }
+    // #region agent log
+    debugLog({
+      location: "sheets.ts:matchColumnsWithAI:parsed",
+      message: "parsed and toIterate keys",
+      data: { parsedKeys: Object.keys(parsed), toIterateKeys: Object.keys(toIterate), headerRowIndex },
+      hypothesisId: "H2",
+    });
+    fetch("http://127.0.0.1:7242/ingest/d791096d-e9b3-45ec-a7c6-17c4fea0a92c", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        location: "sheets.ts:matchColumnsWithAI:parsed",
+        message: "parsed and toIterate keys",
+        data: { parsedKeys: Object.keys(parsed), toIterateKeys: Object.keys(toIterate), headerRowIndex },
+        timestamp: Date.now(),
+        sessionId: "debug-session",
+        hypothesisId: "H2",
+      }),
+    }).catch(() => {});
+    // #endregion
+
+    for (const [key, value] of Object.entries(toIterate)) {
+      if (key === "month_column" || key === "header_row_index") {
+        if (key === "month_column") {
+          const n = typeof value === "number" ? value : parseInt(String(value), 10);
+          if (!isNaN(n) && n >= 0 && n < maxCol) monthColumnIndex = n;
+        }
+        continue;
+      }
+      const index = parseInt(key, 10);
+      const canonical = normalizeAIFieldToKpiKey(String(value));
+      if (isNaN(index) || index < 0 || index >= maxCol) {
+        // #region agent log
+        debugLog({
+          location: "sheets.ts:matchColumnsWithAI:skipIndex",
+          message: "skipped: invalid index",
+          data: { key, value, index, maxCol },
+          hypothesisId: "H5",
+        });
+        fetch("http://127.0.0.1:7242/ingest/d791096d-e9b3-45ec-a7c6-17c4fea0a92c", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            location: "sheets.ts:matchColumnsWithAI:skipIndex",
+            message: "skipped: invalid index",
+            data: { key, value, index, maxCol },
+            timestamp: Date.now(),
+            sessionId: "debug-session",
+            hypothesisId: "H5",
+          }),
+        }).catch(() => {});
+        // #endregion
+        continue;
+      }
+      if (!canonical) {
+        // #region agent log
+        debugLog({
+          location: "sheets.ts:matchColumnsWithAI:skipCanonical",
+          message: "skipped: normalizeAIFieldToKpiKey returned null",
+          data: { key, value, index },
+          hypothesisId: "H5",
+        });
+        fetch("http://127.0.0.1:7242/ingest/d791096d-e9b3-45ec-a7c6-17c4fea0a92c", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            location: "sheets.ts:matchColumnsWithAI:skipCanonical",
+            message: "skipped: normalizeAIFieldToKpiKey returned null",
+            data: { key, value, index },
+            timestamp: Date.now(),
+            sessionId: "debug-session",
+            hypothesisId: "H5",
+          }),
+        }).catch(() => {});
+        // #endregion
+        continue;
+      }
+      columnMap.set(index, canonical);
+      console.log(`[matchColumnsWithAI] row ${headerRowIndex} col ${index} "${String(headerRow[index] ?? "").trim()}" -> ${canonical}`);
+    }
+
+    // month_column might be at top level if mapping was nested
+    if (monthColumnIndex === null && typeof parsed.month_column === "number") {
+      const n = parsed.month_column;
+      if (n >= 0 && n < maxCol) monthColumnIndex = n;
+    } else if (monthColumnIndex === null && typeof parsed.month_column === "string") {
+      const n = parseInt(parsed.month_column, 10);
+      if (!isNaN(n) && n >= 0 && n < maxCol) monthColumnIndex = n;
+    }
+
+    // #region agent log
+    debugLog({
+      location: "sheets.ts:matchColumnsWithAI:outcome",
+      message: "result before return",
+      data: { headerRowIndex, columnMapSize: columnMap.size, monthColumnIndex },
+      hypothesisId: "H1-H5",
+    });
+    fetch("http://127.0.0.1:7242/ingest/d791096d-e9b3-45ec-a7c6-17c4fea0a92c", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        location: "sheets.ts:matchColumnsWithAI:outcome",
+        message: "result before return",
+        data: { columnMapSize: columnMap.size, monthColumnIndex },
+        timestamp: Date.now(),
+        sessionId: "debug-session",
+        hypothesisId: "H1-H5",
+      }),
+    }).catch(() => {});
+    // #endregion
+    if (columnMap.size >= 2) {
+      console.log(`[matchColumnsWithAI] header_row=${headerRowIndex}, matched ${columnMap.size} columns, month_column=${monthColumnIndex}`);
+      return { headerRowIndex, columnMap, monthColumnIndex };
+    }
+    console.warn("[matchColumnsWithAI] AI returned fewer than 2 columns; parsed keys:", Object.keys(parsed).join(", "));
+    return null;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn("[matchColumnsWithAI] AI matching failed:", msg);
+    return null;
+  }
+}
+
+/**
+ * Semantic extraction: AI finds where the metrics are and returns extracted rows directly.
+ * No column indices – model understands content and places values in the right KPI fields.
+ */
+async function extractSheetDataWithAI(grid: SheetRows): Promise<{ parsed: ParsedRow[] } | null> {
+  if (!grid.length || !process.env.OPENAI_API_KEY) return null;
+
+  const rowsToSend = grid.slice(0, MAX_GRID_ROWS_CAP);
+  const actualMaxCols = Math.max(1, ...rowsToSend.map((r) => (r ?? []).length));
+  const colsToSend = Math.min(actualMaxCols, MAX_GRID_COLS_CAP);
+  const gridLines = rowsToSend.map((row, rowIdx) => {
+    const cells = (row ?? []).slice(0, colsToSend).map((c, colIdx) => `${colIdx}="${String(c ?? "").trim().replace(/"/g, "'")}"`);
+    return `row ${rowIdx}: ${cells.join(", ")}`;
+  }).join("\n");
+
+  const kpiList = KPI_KEYS.join(", ");
+  const maxDataRows = Math.max(0, rowsToSend.length - 1); // at least one row is header
+  const prompt = `Du ser på et rutenett fra Google Sheets. Oppgaven er semantisk: finn ut hvor disse metricene er (måned/periode, MRR, ARR, MRR growth %, Burn, Cash balance, Runway, Churn, Customers, osv.) og les av verdiene for hver datarad.
+
+Rutenett:
+${gridLines}
+
+Gjør følgende:
+1) Finn hvilken rad som er header-rad (kolonnenavn).
+2) Finn hvilken kolonne som er måned/periode (for period_date).
+3) For hver datarad under header: les av verdiene for hver metric du gjenkjenner, og sett dem inn på riktig sted.
+
+Returner JSON med nøyaktig dette formatet:
+{
+  "rows": [
+    { "period_date": "YYYY-MM-01", "mrr": tall eller null, "arr": tall eller null, "mrr_growth_mom": null, "burn_rate": null, "cash_balance": null, "runway_months": null, "churn": null, "customers": null, "net_revenue": null, "failed_payment_rate": null, "refund_rate": null },
+    ...
+  ]
+}
+
+Regler:
+- period_date: alltid YYYY-MM-01 (avled fra månedsnavn eller år-måned).
+- Kun disse nøklene i hvert objekt: period_date, ${kpiList}. Bruk null der du ikke finner verdi.
+- Prosent (churn, mrr_growth_mom) som tall (f.eks. 10.5 for 10,5%), ikke 0.105.
+- Bruk KUN det som står i rutenettet. Legg IKKE til rader, ekstrapoler ikke, fyll ikke inn fremtidige måneder. Én datarad i rutenettet = én rad i "rows". Maks ${maxDataRows} rader i "rows".`;
+
+  try {
+    const openai = getOpenAI();
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+    });
+    const raw = completion.choices?.[0]?.message?.content ?? "";
+    if (!raw) return null;
+
+    let data: { rows?: Array<Record<string, unknown>> };
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      const jsonMatch = raw.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+      if (jsonMatch) data = JSON.parse(jsonMatch[1]);
+      else return null;
+    }
+
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+    const parsed: ParsedRow[] = [];
+    const seenPeriods = new Set<string>();
+    const maxRows = Math.max(0, rowsToSend.length - 1); // cap: only as many data rows as possible in grid
+
+    for (const row of rows) {
+      if (parsed.length >= maxRows) break; // do not return more rows than exist in sheet
+      if (!row || typeof row !== "object") continue;
+      let periodDate: string | null = null;
+      const rawDate = row.period_date ?? row.periodDate;
+      if (typeof rawDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+        periodDate = rawDate;
+      } else if (rawDate != null) {
+        periodDate = parseMonthToPeriodDate(String(rawDate)) ?? null;
+      }
+      if (!periodDate || seenPeriods.has(periodDate)) continue; // one row per period, no duplicates
+      seenPeriods.add(periodDate);
+
+      const values: Record<string, number | null> = {};
+      for (const key of KPI_KEYS) {
+        const v = row[key];
+        if (v === null || v === undefined || v === "") {
+          values[key] = null;
+        } else if (typeof v === "number" && !Number.isNaN(v)) {
+          values[key] = v;
+        } else if (typeof v === "string") {
+          const num = parseNumber(v, key === "churn" || key === "mrr_growth_mom" || key === "failed_payment_rate" || key === "refund_rate");
+          values[key] = num;
+        } else {
+          values[key] = null;
+        }
+      }
+      if (Object.values(values).some((v) => v !== null)) {
+        parsed.push({ periodDate, values });
+      }
+    }
+
+    if (parsed.length > 0) {
+      console.log(`[extractSheetDataWithAI] Extracted ${parsed.length} rows semantically`);
+      return { parsed };
+    }
+    return null;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn("[extractSheetDataWithAI] Semantic extraction failed:", msg);
+    return null;
+  }
 }
 
 /**
@@ -363,49 +786,88 @@ function extractDataRegion(
 
 /**
  * Parse horizontal layout
+ * When USE_LLM_ONLY_FOR_SHEET_RECOGNITION: only LLM is used (row 0 = header, AI returns column map + month column).
+ * Otherwise: findBestHeaderRow + optional AI override + static HEADER_MAP for month.
  */
-function parseHorizontalLayout(
+async function parseHorizontalLayout(
   rows: SheetRows
-): { parsed: ParsedRow[]; debug: ParseDebug } {
+): Promise<{ parsed: ParsedRow[]; debug: ParseDebug }> {
   const parsed: Array<{ periodDate: string; values: Record<string, number | null> }> = [];
   let skippedRows = 0;
 
-  const headerInfo = findBestHeaderRow(rows);
-  if (!headerInfo) {
-    return {
-      parsed: [],
-      debug: {
-        detectedLayout: "none",
-        totalRows: rows.length,
-        parsedRows: 0,
-        skippedRows: rows.length,
-      },
-    };
-  }
+  let headerRowIndex: number;
+  let columnMap: Map<number, KpiKey>;
+  let monthColumnIndex: number;
 
-  const { headerRowIndex, columnMap } = headerInfo;
-
-  // Find month column index
-  let monthColumnIndex = -1;
-  const headerRow = rows[headerRowIndex];
-  for (let i = 0; i < headerRow.length; i++) {
-    const normalized = normalizeHeader(String(headerRow[i] || ""));
-    if (HEADER_MAP[normalized] === "month") {
-      monthColumnIndex = i;
-      break;
+  if (USE_LLM_ONLY_FOR_SHEET_RECOGNITION) {
+    // Semantic path first: AI finds metrics and returns extracted rows directly (no column indices)
+    if (rows.length < 2) {
+      return {
+        parsed: [],
+        debug: { detectedLayout: "none", totalRows: rows.length, parsedRows: 0, skippedRows: rows.length },
+      };
     }
-  }
-
-  if (monthColumnIndex < 0) {
-    return {
-      parsed: [],
-      debug: {
-        detectedLayout: "horizontal",
-        totalRows: rows.length,
-        parsedRows: 0,
-        skippedRows: rows.length,
-      },
-    };
+    const grid = rows.slice(0, MAX_GRID_ROWS_CAP);
+    const semanticResult = await extractSheetDataWithAI(grid);
+    if (semanticResult && semanticResult.parsed.length > 0) {
+      return {
+        parsed: semanticResult.parsed,
+        debug: {
+          detectedLayout: "horizontal",
+          totalRows: rows.length,
+          parsedRows: semanticResult.parsed.length,
+          skippedRows: rows.length - semanticResult.parsed.length,
+        },
+      };
+    }
+    // Fallback: index-based column mapping
+    const aiResult = await matchColumnsWithAI(grid);
+    if (!aiResult || aiResult.columnMap.size < 2) {
+      return {
+        parsed: [],
+        debug: { detectedLayout: "horizontal", totalRows: rows.length, parsedRows: 0, skippedRows: rows.length },
+      };
+    }
+    headerRowIndex = aiResult.headerRowIndex;
+    columnMap = aiResult.columnMap;
+    monthColumnIndex = aiResult.monthColumnIndex ?? 0;
+  } else {
+    // Original path: findBestHeaderRow (static) + optional AI override + static month detection
+    const headerInfo = findBestHeaderRow(rows);
+    if (!headerInfo) {
+      return {
+        parsed: [],
+        debug: { detectedLayout: "none", totalRows: rows.length, parsedRows: 0, skippedRows: rows.length },
+      };
+    }
+    let { headerRowIndex: hri, columnMap: cm } = headerInfo;
+    headerRowIndex = hri;
+    const headerRow = rows[headerRowIndex];
+    const grid = rows.slice(0, MAX_GRID_ROWS_CAP);
+    const aiResult = await matchColumnsWithAI(grid);
+    monthColumnIndex = -1;
+    if (aiResult && aiResult.columnMap.size >= 2) {
+      headerRowIndex = aiResult.headerRowIndex;
+      cm = aiResult.columnMap;
+      if (aiResult.monthColumnIndex != null) monthColumnIndex = aiResult.monthColumnIndex;
+    }
+    columnMap = cm;
+    const headerRowForMonth = rows[headerRowIndex] ?? [];
+    if (monthColumnIndex < 0) {
+      for (let i = 0; i < headerRowForMonth.length; i++) {
+        const normalized = normalizeHeader(String(headerRowForMonth[i] || ""));
+        if (HEADER_MAP[normalized] === "month") {
+          monthColumnIndex = i;
+          break;
+        }
+      }
+    }
+    if (monthColumnIndex < 0) {
+      return {
+        parsed: [],
+        debug: { detectedLayout: "horizontal", totalRows: rows.length, parsedRows: 0, skippedRows: rows.length },
+      };
+    }
   }
 
   const dataRows = extractDataRegion(rows, headerRowIndex, monthColumnIndex);
@@ -589,11 +1051,12 @@ function parseVerticalLayout(
 
 /**
  * Parse sheet rows
+ * Uses AI for horizontal layout column matching when OPENAI_API_KEY is set.
  */
-function parseSheetRows(rows: SheetRows): {
+async function parseSheetRows(rows: SheetRows): Promise<{
   parsed: ParsedRow[];
   debug: ParseDebug;
-} {
+}> {
   if (!rows || rows.length === 0) {
     return {
       parsed: [],
@@ -606,8 +1069,8 @@ function parseSheetRows(rows: SheetRows): {
     };
   }
 
-  // Try horizontal layout first
-  const horizontalResult = parseHorizontalLayout(rows);
+  // Try horizontal layout first (AI column matching used here when available)
+  const horizontalResult = await parseHorizontalLayout(rows);
   if (horizontalResult.parsed.length > 0) {
     return horizontalResult;
   }
@@ -735,17 +1198,39 @@ export async function loadSheetsKpisForCompany(companyId: string): Promise<Array
     return [];
   }
 
+  // Support both old format (single url + tab) and new format (JSON array of sheets)
+  let sheetUrl: string;
+  let sheetTab: string | null;
+  try {
+    const parsed = JSON.parse(company.google_sheets_url);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      sheetUrl = (parsed[0].url ?? "").trim();
+      sheetTab = (parsed[0].tab ?? company.google_sheets_tab ?? "").trim() || null;
+    } else {
+      sheetUrl = company.google_sheets_url;
+      sheetTab = company.google_sheets_tab ?? null;
+    }
+  } catch {
+    sheetUrl = company.google_sheets_url;
+    sheetTab = company.google_sheets_tab ?? null;
+  }
+
+  if (!sheetUrl) {
+    console.log(`[loadSheetsKpisForCompany] No valid sheet URL for company ${companyId}`);
+    return [];
+  }
+
   // Extract sheet ID from URL
-  const sheetIdMatch = company.google_sheets_url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  const sheetIdMatch = sheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
   const sheetId = sheetIdMatch ? sheetIdMatch[1] : undefined;
 
   // Get CSV export URL
   const range: string | null = null;
-  const csvUrl = getSheetsCsvUrl(company.google_sheets_url, company.google_sheets_tab, range);
+  const csvUrl = getSheetsCsvUrl(sheetUrl, sheetTab, range);
 
   console.log(`[loadSheetsKpisForCompany] Loading Google Sheet for company ${companyId}:`, {
     hasUrl: true,
-    tabProvided: !!company.google_sheets_tab,
+    tabProvided: !!sheetTab,
     rangeProvided: !!range,
   });
 
@@ -774,8 +1259,8 @@ export async function loadSheetsKpisForCompany(companyId: string): Promise<Array
     return [];
   }
 
-  // Parse sheet rows
-  const { parsed, debug } = parseSheetRows(rows);
+  // Parse sheet rows (AI column matching used for horizontal layout when OPENAI_API_KEY is set)
+  const { parsed, debug } = await parseSheetRows(rows);
 
   // Log summary (safe - no raw cells)
   console.log(`[loadSheetsKpisForCompany] Parsed sheet for company ${companyId}:`, {
@@ -796,7 +1281,7 @@ export async function loadSheetsKpisForCompany(companyId: string): Promise<Array
     kpis: values,
     meta: {
       sheetId,
-      tab: company.google_sheets_tab || undefined,
+      tab: sheetTab || undefined,
       range: range || undefined,
       detectedLayout: (debug.detectedLayout === "horizontal" || debug.detectedLayout === "vertical" || debug.detectedLayout === "none") 
         ? debug.detectedLayout 

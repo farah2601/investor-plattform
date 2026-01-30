@@ -18,9 +18,7 @@ function n(v: any): number | null {
 
 function fmt(v: number | null, digits = 0): string {
   if (v === null) return "n/a";
-  const factor = Math.pow(10, digits);
-  const rounded = Math.round(v * factor) / factor;
-  return digits > 0 ? rounded.toFixed(digits) : String(Math.round(rounded));
+  return digits > 0 ? v.toFixed(digits) : String(v);
 }
 
 function getKpi(kpis: KPIMap, key: string): number | null {

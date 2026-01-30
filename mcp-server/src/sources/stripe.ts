@@ -183,7 +183,7 @@ async function calculateMRRFromSubscriptions(
       }
     }
 
-    return Math.round(mrr * 100) / 100; // Round to 2 decimals
+    return mrr;
   } catch (err) {
     console.error("[calculateMRRFromSubscriptions] Error:", err instanceof Error ? err.message : "Unknown");
     return 0;
@@ -235,7 +235,7 @@ async function calculateNetRevenueByAvailableOn(
     }
   }
 
-  const netRevenue = Math.round((totalCharges - totalRefunds) / 100 * 100) / 100;
+  const netRevenue = (totalCharges - totalRefunds) / 100;
   return { netRevenue, totalCharges, totalRefunds };
 }
 
@@ -292,7 +292,7 @@ async function calculateNetRevenueByCreated(
     totalRefunds += Math.abs(r.amount);
   }
 
-  return Math.round((totalCharges - totalRefunds) / 100 * 100) / 100;
+  return (totalCharges - totalRefunds) / 100;
 }
 
 /**
@@ -357,7 +357,7 @@ async function calculateFailedPaymentRate(
 
     if (totalAttempts === 0) return null;
 
-    return Math.round((failedAttempts / totalAttempts) * 100 * 10) / 10; // Percentage, 1 decimal
+    return (failedAttempts / totalAttempts) * 100;
   } catch (err) {
     console.warn("[calculateFailedPaymentRate] Error:", err instanceof Error ? err.message : "Unknown");
     return null;
@@ -540,7 +540,7 @@ export async function loadStripeKpisForCompany(
 
       // Refund rate
       if (totalCharges > 0) {
-        kpis.refund_rate = Math.round((totalRefunds / totalCharges) * 100 * 10) / 10;
+        kpis.refund_rate = (totalRefunds / totalCharges) * 100;
       }
 
       // Failed payment rate

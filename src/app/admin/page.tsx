@@ -39,6 +39,16 @@ type InvestorLink = {
 
 type AdminSection = "access" | "companies" | "risk" | "system";
 
+function hasGoogleSheets(company: { google_sheets_url?: string | null; google_sheets_tab?: string | null }): boolean {
+  if (!company.google_sheets_url) return false;
+  try {
+    const parsed = JSON.parse(company.google_sheets_url);
+    return Array.isArray(parsed) ? parsed.length > 0 : !!(company.google_sheets_url && company.google_sheets_tab);
+  } catch {
+    return !!(company.google_sheets_url && company.google_sheets_tab);
+  }
+}
+
 const ADMIN_CODE = process.env.NEXT_PUBLIC_ADMIN_CODE || "admin2024"; // Fallback kode
 
 export default function AdminPage() {
@@ -167,7 +177,7 @@ export default function AdminPage() {
     if (companyFilter === "all") return true;
     
     const hasData = company.google_sheets_last_sync_at || company.last_agent_run_at;
-    const hasConnection = !!(company.google_sheets_url && company.google_sheets_tab);
+    const hasConnection = hasGoogleSheets(company);
     
     if (companyFilter === "no-data") return !hasData;
     if (companyFilter === "error") return false; // TODO: Implement error detection
@@ -584,7 +594,7 @@ export default function AdminPage() {
                           const daysSinceSync = lastSync
                             ? (Date.now() - lastSync.getTime()) / (1000 * 60 * 60 * 24)
                             : null;
-                          const hasConnection = !!(company.google_sheets_url && company.google_sheets_tab);
+                          const hasConnection = hasGoogleSheets(company);
                           const hasData = lastSync || lastAgent;
 
                           let healthStatus: "healthy" | "warning" | "broken" = "healthy";

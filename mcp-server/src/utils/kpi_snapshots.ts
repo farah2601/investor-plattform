@@ -195,7 +195,6 @@ export function computeDerivedMetrics(
   let mrrGrowthValue: number | null = null;
   if (mrr !== null && previousMonthMrr !== null && previousMonthMrr > 0) {
     mrrGrowthValue = ((mrr - previousMonthMrr) / previousMonthMrr) * 100;
-    mrrGrowthValue = Math.round(mrrGrowthValue * 10) / 10;
   }
   const mrr_growth_mom = createKpiValue(
     mrrGrowthValue,
@@ -207,7 +206,6 @@ export function computeDerivedMetrics(
   let runwayValue: number | null = null;
   if (cashBalance !== null && burnRate !== null && burnRate > 0) {
     runwayValue = cashBalance / burnRate;
-    runwayValue = Math.round(runwayValue * 10) / 10;
   }
   const runway_months = createKpiValue(
     runwayValue,

@@ -91,11 +91,28 @@ function IntegrationsContent() {
           const data = await res.json();
           if (data?.company) {
             const company = data.company;
-            if (company.google_sheets_url && company.google_sheets_tab) {
-              setSheetsStatus("Connected");
-              setSheetsUrl(company.google_sheets_url);
-              setSheetsTab(company.google_sheets_tab);
-              setLastSyncAt(company.google_sheets_last_sync_at || null);
+            if (company.google_sheets_url) {
+              let url = "";
+              let tab = "";
+              try {
+                const parsed = JSON.parse(company.google_sheets_url);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  url = parsed[0].url ?? "";
+                  tab = parsed[0].tab ?? company.google_sheets_tab ?? "";
+                } else {
+                  url = company.google_sheets_url;
+                  tab = company.google_sheets_tab ?? "";
+                }
+              } catch {
+                url = company.google_sheets_url;
+                tab = company.google_sheets_tab ?? "";
+              }
+              if (url) {
+                setSheetsStatus("Connected");
+                setSheetsUrl(url);
+                setSheetsTab(tab);
+                setLastSyncAt(company.google_sheets_last_sync_at || null);
+              }
             }
           }
         }
