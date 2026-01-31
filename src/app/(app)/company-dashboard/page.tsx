@@ -141,6 +141,13 @@ function CompanyDashboardContent() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [showForecast, setShowForecast] = useState(true);
 
+  // Metric inference: AI-suggested key metrics (Level 1–4); when set, key metrics section uses these instead of fixed six
+  const [metricInference, setMetricInference] = useState<{
+    primaryMetricsTable?: Array<{ metric: string; value: string | number; confidence: string; evidence: string; rationale: string }>;
+    detectedMaturityLevel?: number;
+    whyHigherLevelNotUsed?: string;
+  } | null>(null);
+
   // Drag-and-drop: which metric is shown in each chart slot (default: ARR, MRR, Burn rate)
   const [chartSlots, setChartSlots] = useState<[string, string, string]>(["arr", "mrr", "burn_rate"]);
   const [dragOverSlot, setDragOverSlot] = useState<number | null>(null);
@@ -359,6 +366,30 @@ function CompanyDashboardContent() {
     }
   }
 
+  async function loadMetricInference(companyId: string) {
+    try {
+      const res = await fetch("/api/agent/metric-inference", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId }),
+        cache: "no-store",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data?.ok && data?.primaryMetricsTable) {
+        setMetricInference({
+          primaryMetricsTable: data.primaryMetricsTable,
+          detectedMaturityLevel: data.detectedMaturityLevel,
+          whyHigherLevelNotUsed: data.whyHigherLevelNotUsed,
+        });
+      } else {
+        setMetricInference(null);
+      }
+    } catch (e) {
+      console.warn("Failed to load metric inference", e);
+      setMetricInference(null);
+    }
+  }
+
   async function runAgent(companyIdParam?: string) {
     const targetCompanyId = companyIdParam || currentCompanyId;
     if (!targetCompanyId) {
@@ -569,18 +600,20 @@ function CompanyDashboardContent() {
         kpi_scale: ((companyToUse as any).kpi_scale as "unit" | "k" | "m") || "unit",
       });
 
-      // ✅ load simultaneously
+      // ✅ load simultaneously (including metric inference for dynamic key metrics)
       await Promise.all([
-        loadInsights(selectedCompany.id), 
+        loadInsights(selectedCompany.id),
         loadAgentLogs(selectedCompany.id),
         loadKpiHistory(selectedCompany.id),
         loadStripeStatus(selectedCompany.id),
+        loadMetricInference(selectedCompany.id),
       ]);
     } else {
       setInsights([]);
       setAgentLogs([]);
       setSnapshotRows([]);
       setKpiSources(null);
+      setMetricInference(null);
       setError("Company not found");
     }
   }
@@ -691,6 +724,62 @@ function CompanyDashboardContent() {
   const displayBurnRate = kpis != null ? extractKpiNumber(kpis, "burn_rate") : null;
   const displayRunwayMonths = kpis != null ? extractKpiNumber(kpis, "runway_months") : null;
   const displayChurn = kpis != null ? extractKpiNumber(kpis, "churn") : null;
+
+  // Map inference metric name → snapshot key (for value) and format type
+  const inferenceMetricToSnapshot: Record<string, { key: string; format: "currency" | "percent" | "runway" | "number" }> = {
+    MRR: { key: "mrr", format: "currency" },
+    ARR: { key: "arr", format: "currency" },
+    Growth: { key: "mrr_growth_mom", format: "percent" },
+    "Growth (MoM)": { key: "mrr_growth_mom", format: "percent" },
+    "Burn rate": { key: "burn_rate", format: "currency" },
+    Burn: { key: "burn_rate", format: "currency" },
+    Runway: { key: "runway_months", format: "runway" },
+    Churn: { key: "churn", format: "percent" },
+    "Monthly revenue": { key: "mrr", format: "currency" },
+    "Annual revenue": { key: "arr", format: "currency" },
+    "Number of customers": { key: "customers", format: "number" },
+    Customers: { key: "customers", format: "number" },
+    "Cash balance": { key: "cash_balance", format: "currency" },
+    Cash: { key: "cash_balance", format: "currency" },
+    "Revenue trend": { key: "mrr_growth_mom", format: "percent" },
+    "Net profit/loss": { key: "mrr", format: "currency" },
+  };
+
+  type KeyMetricItem = { label: string; value: string; sublabel: string; metricKey: string };
+  const keyMetricsDisplayList: KeyMetricItem[] = (() => {
+    const currency = (company as any)?.kpi_currency;
+    if (metricInference?.primaryMetricsTable && metricInference.primaryMetricsTable.length > 0) {
+      return metricInference.primaryMetricsTable.map((row) => {
+        const mapping = inferenceMetricToSnapshot[row.metric] ?? inferenceMetricToSnapshot[row.metric.trim()];
+        let value: string;
+        let sublabel = row.confidence ? `Confidence: ${row.confidence}` : "";
+        if (mapping && kpis != null) {
+          const snapshotVal = extractKpiNumber(kpis, mapping.key as any);
+          if (snapshotVal != null) {
+            if (mapping.format === "currency") value = formatMoney(snapshotVal, currency);
+            else if (mapping.format === "percent") value = formatPercent(snapshotVal);
+            else if (mapping.format === "runway") value = formatRunway(snapshotVal);
+            else value = snapshotVal.toLocaleString("en-US", { maximumFractionDigits: 0 });
+          } else {
+            value = row.value === "N/A" || row.value === null ? "—" : typeof row.value === "number" ? (mapping.format === "percent" ? formatPercent(row.value) : mapping.format === "runway" ? formatRunway(row.value) : mapping.format === "currency" ? formatMoney(row.value, currency) : String(row.value)) : String(row.value);
+          }
+        } else {
+          value = row.value === "N/A" || row.value === null ? "—" : typeof row.value === "number" ? formatMoney(row.value, currency) : String(row.value);
+        }
+        const label = row.metric === "Burn Rate" || row.metric === "Burn rate" ? "Burn" : row.metric;
+        const metricKey = mapping?.key ?? "mrr";
+        return { label, value, sublabel, metricKey };
+      });
+    }
+    return [
+      { label: "ARR", value: formatMoney(displayArr, currency), sublabel: "Annual recurring revenue", metricKey: "arr" },
+      { label: "MRR", value: formatMoney(displayMrr, currency), sublabel: "Monthly recurring revenue", metricKey: "mrr" },
+      { label: "Growth", value: formatPercent(displayGrowth), sublabel: "MRR growth (last 12 months)", metricKey: "mrr_growth_mom" },
+      { label: "Burn", value: formatMoney(displayBurnRate, currency), sublabel: "Monthly burn", metricKey: "burn_rate" },
+      { label: "Runway", value: formatRunway(displayRunwayMonths), sublabel: "Estimated runway at current burn", metricKey: "runway_months" },
+      { label: "Churn", value: formatPercent(displayChurn), sublabel: "MRR churn rate", metricKey: "churn" },
+    ];
+  })();
 
   const DEBUG = true;
   if (DEBUG) {
@@ -978,35 +1067,68 @@ function CompanyDashboardContent() {
     if (!company) return;
     setSavingKpi(true);
 
-    const payload: any = {
+    const payload: Record<string, unknown> = {
+      toCurrency: kpiForm.kpi_currency,
       mrr: kpiForm.mrr ? Number(kpiForm.mrr) : null,
       arr: kpiForm.arr ? Number(kpiForm.arr) : null,
       burn_rate: kpiForm.burn_rate ? Number(kpiForm.burn_rate) : null,
       runway_months: kpiForm.runway_months ? Number(kpiForm.runway_months) : null,
       churn: kpiForm.churn ? Number(kpiForm.churn) : null,
       growth_percent: kpiForm.growth_percent ? Number(kpiForm.growth_percent) : null,
-      kpi_currency: kpiForm.kpi_currency,
       kpi_scale: kpiForm.kpi_scale,
     };
 
-    const { error: updateError } = await supabase
-      .from("companies")
-      .update(payload)
-      .eq("id", company.id);
+    const res = await authedFetch(`/api/companies/${company.id}/convert-currency`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
 
     setSavingKpi(false);
 
-    if (updateError) {
-      console.error("Error updating KPIs", updateError);
-      alert("Could not update KPIs: " + updateError.message);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const msg = err?.error || err?.details || res.statusText;
+      alert("Could not update KPIs: " + msg);
       return;
     }
 
-    setCompany((prev) => (prev ? { ...prev, ...payload } : prev));
+    const data = await res.json().catch(() => ({}));
+    if (data.converted) {
+      setCompany((prev) =>
+        prev
+          ? {
+              ...prev,
+              kpi_currency: kpiForm.kpi_currency,
+              mrr: data.mrr ?? prev.mrr,
+              arr: data.arr ?? prev.arr,
+              burn_rate: data.burn_rate ?? prev.burn_rate,
+              runway_months: (payload.runway_months as number) ?? prev.runway_months,
+              churn: (payload.churn as number) ?? prev.churn,
+              growth_percent: (payload.growth_percent as number) ?? prev.growth_percent,
+            }
+          : prev
+      );
+      await loadKpiHistory(company.id);
+    } else {
+      setCompany((prev) =>
+        prev
+          ? {
+              ...prev,
+              kpi_currency: kpiForm.kpi_currency,
+              mrr: (payload.mrr as number) ?? prev.mrr,
+              arr: (payload.arr as number) ?? prev.arr,
+              burn_rate: (payload.burn_rate as number) ?? prev.burn_rate,
+              runway_months: (payload.runway_months as number) ?? prev.runway_months,
+              churn: (payload.churn as number) ?? prev.churn,
+              growth_percent: (payload.growth_percent as number) ?? prev.growth_percent,
+            }
+          : prev
+      );
+    }
     setKpiDialogOpen(false);
-    alert("KPIs updated successfully");
+    alert(data.converted ? "Valuta byttet og KPIs konvertert etter kurs." : "KPIs oppdatert.");
 
-    // refresh insights + logs after KPI update
     await Promise.all([loadInsights(company.id), loadAgentLogs(company.id)]);
   }
 
@@ -1218,23 +1340,27 @@ function CompanyDashboardContent() {
                 </div>
               </div>
 
-              {/* mobile: 2 cols, tablet: 3 cols, desktop: 6 cols — values from latest snapshot (same as Details) */}
+              {/* Key metrics: drag from here to chart slots below */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-                <KpiCard label="ARR" value={formatMoney(displayArr, (company as any)?.kpi_currency)} sublabel="Annual recurring revenue" />
-                <KpiCard label="MRR" value={formatMoney(displayMrr, (company as any)?.kpi_currency)} sublabel="Monthly recurring revenue" />
-                <KpiCard
-                  label="Growth"
-                  value={formatPercent(displayGrowth)}
-                  sublabel="MRR growth (last 12 months)"
-                />
-                <KpiCard label="Burn rate" value={formatMoney(displayBurnRate, (company as any)?.kpi_currency)} sublabel="Monthly burn" />
-                <KpiCard
-                  label="Runway"
-                  value={formatRunway(displayRunwayMonths)}
-                  sublabel="Estimated runway at current burn"
-                />
-                <KpiCard label="Churn" value={formatPercent(displayChurn)} sublabel="MRR churn rate" />
+                {keyMetricsDisplayList.map((item) => (
+                  <div
+                    key={item.label}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("metric", item.metricKey);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
+                    className="cursor-grab active:cursor-grabbing h-full min-h-0 [&>div]:h-full"
+                  >
+                    <KpiCard label={item.label} value={item.value} sublabel={item.sublabel} />
+                  </div>
+                ))}
               </div>
+              {metricInference?.whyHigherLevelNotUsed && (
+                <p className="text-xs text-slate-500 light:text-slate-600 mt-1">
+                  {metricInference.whyHigherLevelNotUsed}
+                </p>
+              )}
               {company && (
                 <MetricsDetailsModal
                   companyId={company.id}
@@ -1244,7 +1370,94 @@ function CompanyDashboardContent() {
                 />
               )}
 
-              {/* Chat with Valyxo Agent — below metrics */}
+              {/* Trends — above Chat */}
+              <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 shadow-xl space-y-4 sm:space-y-6 light:border-slate-200 light:bg-white light:shadow-sm mt-8">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm sm:text-base font-medium text-slate-200 light:text-slate-950">Trends</h2>
+                    <p className="text-xs text-slate-500 mt-1 light:text-slate-600">
+                      Revenue and burn metrics over time
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-sm text-slate-400 light:text-slate-600">Show forecast</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={showForecast}
+                      onClick={() => setShowForecast((v) => !v)}
+                      className={cn(
+                        "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-[#2B74FF]/50 focus:ring-offset-2 focus:ring-offset-slate-900 light:focus:ring-offset-white",
+                        showForecast ? "bg-[#2B74FF]" : "bg-slate-700 light:bg-slate-300"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "pointer-events-none block h-5 w-5 rounded-full bg-white shadow transition-transform",
+                          showForecast ? "translate-x-5" : "translate-x-0"
+                        )}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                  {([0, 1, 2] as const).map((slotIndex) => {
+                    const metricKey = chartSlots[slotIndex];
+                    const metric = DASHBOARD_METRICS.find((m) => m.key === metricKey) ?? DASHBOARD_METRICS[0];
+                    const chartData = getChartDataForMetric(metricKey);
+                    const hasData = hasDataForMetric(metricKey);
+                    return (
+                      <div
+                        key={slotIndex}
+                        className={cn(
+                          "rounded-xl border-2 border-dashed transition-colors",
+                          slotIndex === 2 && "lg:col-span-2",
+                          dragOverSlot === slotIndex
+                            ? "border-[#2B74FF] bg-slate-800/50"
+                            : "border-slate-700 light:border-slate-300"
+                        )}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                          setDragOverSlot(slotIndex);
+                        }}
+                        onDragLeave={() => setDragOverSlot(null)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setDragOverSlot(null);
+                          const key = e.dataTransfer.getData("metric");
+                          if (!key) return;
+                          setChartSlots((prev) => {
+                            const next = [...prev] as [string, string, string];
+                            next[slotIndex] = key;
+                            return next;
+                          });
+                        }}
+                      >
+                        <div className="p-2">
+                          <h3 className="text-sm font-medium text-slate-200 mb-2 light:text-slate-800">
+                            {metric.label}
+                          </h3>
+                          {!hasData ? (
+                            <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 flex items-center justify-center">
+                              <p className="text-sm text-slate-400">Drag a metric from Key Metrics to show here.</p>
+                            </div>
+                          ) : (
+                            <MetricChart
+                              data={chartData}
+                              metricLabel={metric.label}
+                              format={metric.format}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {/* Chat with Valyxo Agent — below Trends */}
               <div className="mt-8 pt-6 border-t border-slate-700/50 light:border-slate-200">
                 <div className="flex items-baseline gap-2 mb-1">
                   <h3 className="text-sm font-semibold text-slate-200 light:text-slate-900 tracking-tight">
@@ -1336,114 +1549,6 @@ function CompanyDashboardContent() {
                     </Button>
                   </form>
                 </div>
-              </div>
-            </section>
-          )}
-
-          {/* CHARTS SECTION - mobile: stack, desktop: 2 columns */}
-          {company && (
-            <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 shadow-xl space-y-4 sm:space-y-6 light:border-slate-200 light:bg-white light:shadow-sm">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <h2 className="text-sm sm:text-base font-medium text-slate-200 light:text-slate-950">Trends</h2>
-                  <p className="text-xs text-slate-500 mt-1 light:text-slate-600">
-                    Revenue and burn metrics over time
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-sm text-slate-400 light:text-slate-600">Show forecast</span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={showForecast}
-                    onClick={() => setShowForecast((v) => !v)}
-                    className={cn(
-                      "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-[#2B74FF]/50 focus:ring-offset-2 focus:ring-offset-slate-900 light:focus:ring-offset-white",
-                      showForecast ? "bg-[#2B74FF]" : "bg-slate-700 light:bg-slate-300"
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "pointer-events-none block h-5 w-5 rounded-full bg-white shadow transition-transform",
-                        showForecast ? "translate-x-5" : "translate-x-0"
-                      )}
-                    />
-                  </button>
-                </div>
-              </div>
-
-              {/* Draggable metrics: drag a metric onto a chart to show it */}
-              <div className="flex flex-wrap gap-2 mb-4">
-                <span className="text-xs text-slate-500 self-center mr-1 light:text-slate-600">Drag to chart:</span>
-                {DASHBOARD_METRICS.map((m) => (
-                  <span
-                    key={m.key}
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData("metric", m.key);
-                      e.dataTransfer.effectAllowed = "move";
-                    }}
-                    className="cursor-grab active:cursor-grabbing rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 light:border-slate-400 light:bg-slate-200 light:text-slate-800 light:hover:bg-slate-300"
-                  >
-                    {m.label}
-                  </span>
-                ))}
-              </div>
-
-              {/* Chart drop zones */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-                {([0, 1, 2] as const).map((slotIndex) => {
-                  const metricKey = chartSlots[slotIndex];
-                  const metric = DASHBOARD_METRICS.find((m) => m.key === metricKey) ?? DASHBOARD_METRICS[0];
-                  const chartData = getChartDataForMetric(metricKey);
-                  const hasData = hasDataForMetric(metricKey);
-                  return (
-                    <div
-                      key={slotIndex}
-                      className={cn(
-                        "rounded-xl border-2 border-dashed transition-colors",
-                        slotIndex === 2 && "lg:col-span-2",
-                        dragOverSlot === slotIndex
-                          ? "border-[#2B74FF] bg-slate-800/50"
-                          : "border-slate-700 light:border-slate-300"
-                      )}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        e.dataTransfer.dropEffect = "move";
-                        setDragOverSlot(slotIndex);
-                      }}
-                      onDragLeave={() => setDragOverSlot(null)}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        setDragOverSlot(null);
-                        const key = e.dataTransfer.getData("metric");
-                        if (!key) return;
-                        setChartSlots((prev) => {
-                          const next = [...prev] as [string, string, string];
-                          next[slotIndex] = key;
-                          return next;
-                        });
-                      }}
-                    >
-                      <div className="p-2">
-                        <h3 className="text-sm font-medium text-slate-200 mb-2 light:text-slate-800">
-                          {metric.label}
-                        </h3>
-                        {!hasData ? (
-                          <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 flex items-center justify-center">
-                            <p className="text-sm text-slate-400">No valid data yet. Drag a metric above to change.</p>
-                          </div>
-                        ) : (
-                          <MetricChart
-                            data={chartData}
-                            metricLabel={metric.label}
-                            format={metric.format}
-                          />
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
               </div>
             </section>
           )}

@@ -9,6 +9,7 @@ import { getAgentLogs } from "./tools/get_agent_logs";
 import { runAll } from "./tools/run_all";
 import { generateInsights } from "./tools/generate_insights";
 import { debugLatestSnapshot } from "./tools/debug_latest_snapshot";
+import { runMetricInference } from "./tools/metric_inference";
 const Uuid = z.string().uuid();
 
 export type AgentTool =
@@ -18,7 +19,8 @@ export type AgentTool =
   | "get_agent_logs"
   | "run_all"
   | "generate_insights"
-  | "debug_latest_snapshot";
+  | "debug_latest_snapshot"
+  | "metric_inference";
   
 
 
@@ -104,6 +106,11 @@ export async function runAgent(params: { tool: AgentTool; input: unknown }) {
 
       case "debug_latest_snapshot": {
         result = await debugLatestSnapshot({ companyId });
+        break;
+      }
+
+      case "metric_inference": {
+        result = await runMetricInference({ companyId });
         break;
       }
 

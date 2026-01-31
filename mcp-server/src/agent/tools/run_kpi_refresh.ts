@@ -214,23 +214,33 @@ export async function runKpiRefresh(input: unknown) {
 
     // Extract numeric values for computeDerivedMetrics (it expects numbers, not KpiValue objects)
     const mrrVal = extractKpiValue(mergedKpis.mrr);
+    const arrVal = extractKpiValue(mergedKpis.arr);
     const burnVal = extractKpiValue(mergedKpis.burn_rate);
     const cashVal = extractKpiValue(mergedKpis.cash_balance);
+    const runwayVal = extractKpiValue(mergedKpis.runway_months);
 
-    // Compute derived metrics (only if missing and never overwrite non-null source values)
+    // Compute derived metrics for all 6 core metrics when they can be derived (never overwrite stripe/sheet/manual)
     const computedMetrics = computeDerivedMetrics(
       mrrVal,
+      arrVal,
       burnVal,
       cashVal,
+      runwayVal,
       previousMonthMrr
     );
 
     // Only set computed values if they're missing or from computed (not stripe/sheet/manual)
+    if (mergedKpis.mrr.value === null || mergedKpis.mrr.source === "computed") {
+      mergedKpis.mrr = computedMetrics.mrr;
+    }
     if (mergedKpis.arr.value === null || mergedKpis.arr.source === "computed") {
       mergedKpis.arr = computedMetrics.arr;
     }
     if (mergedKpis.mrr_growth_mom.value === null || mergedKpis.mrr_growth_mom.source === "computed") {
       mergedKpis.mrr_growth_mom = computedMetrics.mrr_growth_mom;
+    }
+    if (mergedKpis.burn_rate.value === null || mergedKpis.burn_rate.source === "computed") {
+      mergedKpis.burn_rate = computedMetrics.burn_rate;
     }
     if (mergedKpis.runway_months.value === null || mergedKpis.runway_months.source === "computed") {
       mergedKpis.runway_months = computedMetrics.runway_months;

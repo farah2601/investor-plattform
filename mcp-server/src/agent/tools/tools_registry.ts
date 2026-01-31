@@ -6,6 +6,7 @@ import { runInsightsRefresh } from "./run_insights_refresh";
 import { runProfileRefresh } from "./run_profile_refresh";
 import { getAgentLogs } from "./get_agent_logs";
 import { debugLatestSnapshot } from "./debug_latest_snapshot";
+import { runMetricInference } from "./metric_inference";
 
 // (Valgfritt) map-lookup hvis du bruker det et sted
 export const toolsRegistry: Record<string, (input: any) => Promise<any>> = {
@@ -16,6 +17,7 @@ export const toolsRegistry: Record<string, (input: any) => Promise<any>> = {
   get_agent_logs: getAgentLogs,
   generate_insights: generateInsights,
   debug_latest_snapshot: debugLatestSnapshot,
+  metric_inference: runMetricInference,
 };
 
 // ✅ DETTE er vanligvis det MCP bruker til å expose tools/routes
@@ -68,6 +70,13 @@ export const ToolsRegistry = {
     description: "Debug tool to inspect the latest valid KPI snapshot for a company",
     inputSchema: z.object({ companyId: z.string().uuid() }),
     handler: debugLatestSnapshot,
+  },
+
+  metric_inference: {
+    name: "metric_inference",
+    description: "Discover investor pitch metrics by scoring candidate interpretations from the spreadsheet (no exact label search). Outputs KPI table with Confidence, Evidence, Why this mapping, plus Alt candidates and What data would increase confidence.",
+    inputSchema: z.object({ companyId: z.string().uuid() }),
+    handler: runMetricInference,
   },
 } as const;
 

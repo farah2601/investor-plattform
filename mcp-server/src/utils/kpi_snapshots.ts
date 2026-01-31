@@ -171,30 +171,45 @@ export function mergeSheetValuesIntoKpis(
 }
 
 /**
- * Compute derived metrics from base metrics
- * 
+ * Compute derived metrics from base metrics.
+ * Fills in the 6 core metrics (mrr, arr, mrr_growth_mom, burn_rate, runway_months, churn)
+ * when they can be derived from other available data. Churn cannot be derived and is never computed here.
+ *
  * Takes numeric values (not KpiValue objects) and returns computed KpiValue objects.
+ * - arr from mrr (arr = mrr * 12)
+ * - mrr from arr when mrr missing (mrr = arr / 12)
+ * - runway_months from cash_balance / burn_rate
+ * - burn_rate from cash_balance / runway_months when burn missing
+ * - mrr_growth_mom from current MRR and previous month MRR
  */
 export function computeDerivedMetrics(
   mrr: number | null,
+  arrFromMerged: number | null,
   burnRate: number | null,
   cashBalance: number | null,
+  runwayMonthsFromMerged: number | null,
   previousMonthMrr: number | null
 ): {
+  mrr: KpiValue;
   arr: KpiValue;
   mrr_growth_mom: KpiValue;
+  burn_rate: KpiValue;
   runway_months: KpiValue;
 } {
   const now = new Date().toISOString();
 
+  // Effective MRR: use mrr if present, else derive from ARR (mrr = arr / 12)
+  const effectiveMrr = mrr !== null ? mrr : (arrFromMerged !== null ? arrFromMerged / 12 : null);
+  const mrrKpi = createKpiValue(effectiveMrr, "computed", effectiveMrr !== null ? now : null);
+
   // ARR = MRR * 12 (run-rate)
-  const arrValue = mrr !== null ? mrr * 12 : null;
+  const arrValue = effectiveMrr !== null ? effectiveMrr * 12 : null;
   const arr = createKpiValue(arrValue, "computed", arrValue !== null ? now : null);
 
   // MRR Growth MoM
   let mrrGrowthValue: number | null = null;
-  if (mrr !== null && previousMonthMrr !== null && previousMonthMrr > 0) {
-    mrrGrowthValue = ((mrr - previousMonthMrr) / previousMonthMrr) * 100;
+  if (effectiveMrr !== null && previousMonthMrr !== null && previousMonthMrr > 0) {
+    mrrGrowthValue = ((effectiveMrr - previousMonthMrr) / previousMonthMrr) * 100;
   }
   const mrr_growth_mom = createKpiValue(
     mrrGrowthValue,
@@ -202,10 +217,23 @@ export function computeDerivedMetrics(
     mrrGrowthValue !== null ? now : null
   );
 
+  // Effective burn: use burn_rate if present, else derive from cash_balance / runway_months
+  const effectiveBurn =
+    burnRate !== null
+      ? burnRate
+      : cashBalance !== null && runwayMonthsFromMerged !== null && runwayMonthsFromMerged > 0
+        ? cashBalance / runwayMonthsFromMerged
+        : null;
+  const burn_rate = createKpiValue(
+    effectiveBurn,
+    "computed",
+    effectiveBurn !== null ? now : null
+  );
+
   // Runway months = cash_balance / burn_rate
   let runwayValue: number | null = null;
-  if (cashBalance !== null && burnRate !== null && burnRate > 0) {
-    runwayValue = cashBalance / burnRate;
+  if (cashBalance !== null && effectiveBurn !== null && effectiveBurn > 0) {
+    runwayValue = cashBalance / effectiveBurn;
   }
   const runway_months = createKpiValue(
     runwayValue,
@@ -214,8 +242,10 @@ export function computeDerivedMetrics(
   );
 
   return {
+    mrr: mrrKpi,
     arr,
     mrr_growth_mom,
+    burn_rate,
     runway_months,
   };
 }

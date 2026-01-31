@@ -51,4 +51,8 @@ export async function toolsRoutes(app: FastifyInstance) {
     const result = await getAgentLogs({ companyId });
     return reply.send(result);
   });
+
+  app.post("/metric_inference", async (request) => {
+    return await runAgent({ tool: "metric_inference", input: request.body });
+  });
 }

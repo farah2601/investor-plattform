@@ -81,6 +81,11 @@ function OverviewPageContentInner() {
   const [snapshotRows, setSnapshotRows] = useState<SnapshotRow[]>([]);
   const [loadingKpiHistory, setLoadingKpiHistory] = useState(false);
   const [activeChart, setActiveChart] = useState<"arr" | "mrr" | "burn">("mrr");
+  const [metricInference, setMetricInference] = useState<{
+    primaryMetricsTable?: Array<{ metric: string; value: string | number; confidence: string; evidence: string; rationale: string }>;
+    detectedMaturityLevel?: number;
+    whyHigherLevelNotUsed?: string;
+  } | null>(null);
 
   const arrSeries = useMemo(() => buildDenseSeries(snapshotRows, "arr"), [snapshotRows]);
   const mrrSeries = useMemo(() => buildDenseSeries(snapshotRows, "mrr"), [snapshotRows]);
@@ -191,6 +196,30 @@ function OverviewPageContentInner() {
       setSnapshotRows([]);
     } finally {
       setLoadingKpiHistory(false);
+    }
+  }
+
+  async function loadMetricInference(companyId: string) {
+    try {
+      const res = await fetch("/api/agent/metric-inference", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId }),
+        cache: "no-store",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data?.ok && data?.primaryMetricsTable) {
+        setMetricInference({
+          primaryMetricsTable: data.primaryMetricsTable,
+          detectedMaturityLevel: data.detectedMaturityLevel,
+          whyHigherLevelNotUsed: data.whyHigherLevelNotUsed,
+        });
+      } else {
+        setMetricInference(null);
+      }
+    } catch (e) {
+      console.warn("Failed to load metric inference", e);
+      setMetricInference(null);
     }
   }
 
@@ -432,6 +461,57 @@ function OverviewPageContentInner() {
   const displayRunwayMonths = kpis != null ? extractKpiNumber(kpis, "runway_months") : null;
   const displayChurn = kpis != null ? extractKpiNumber(kpis, "churn") : null;
 
+  const inferenceMetricToSnapshot: Record<string, { key: string; format: "currency" | "percent" | "runway" | "number" }> = {
+    MRR: { key: "mrr", format: "currency" },
+    ARR: { key: "arr", format: "currency" },
+    Growth: { key: "mrr_growth_mom", format: "percent" },
+    "Growth (MoM)": { key: "mrr_growth_mom", format: "percent" },
+    "Burn rate": { key: "burn_rate", format: "currency" },
+    Burn: { key: "burn_rate", format: "currency" },
+    Runway: { key: "runway_months", format: "runway" },
+    Churn: { key: "churn", format: "percent" },
+    "Monthly revenue": { key: "mrr", format: "currency" },
+    "Annual revenue": { key: "arr", format: "currency" },
+    "Number of customers": { key: "customers", format: "number" },
+    Customers: { key: "customers", format: "number" },
+    "Cash balance": { key: "cash_balance", format: "currency" },
+    Cash: { key: "cash_balance", format: "currency" },
+    "Revenue trend": { key: "mrr_growth_mom", format: "percent" },
+  };
+  type KeyMetricItem = { label: string; value: string; sublabel: string };
+  const keyMetricsDisplayList: KeyMetricItem[] = (() => {
+    if (metricInference?.primaryMetricsTable && metricInference.primaryMetricsTable.length > 0) {
+      return metricInference.primaryMetricsTable.map((row) => {
+        const mapping = inferenceMetricToSnapshot[row.metric] ?? inferenceMetricToSnapshot[row.metric.trim()];
+        let value: string;
+        const sublabel = row.confidence ? `Confidence: ${row.confidence}` : "";
+        if (mapping && kpis != null) {
+          const snapshotVal = extractKpiNumber(kpis, mapping.key as keyof typeof kpis);
+          if (snapshotVal != null) {
+            if (mapping.format === "currency") value = formatMoney(snapshotVal);
+            else if (mapping.format === "percent") value = formatPercent(snapshotVal);
+            else if (mapping.format === "runway") value = formatRunway(snapshotVal);
+            else value = snapshotVal.toLocaleString("en-US", { maximumFractionDigits: 0 });
+          } else {
+            value = row.value === "N/A" || row.value === null ? "—" : typeof row.value === "number" ? (mapping.format === "percent" ? formatPercent(row.value) : mapping.format === "runway" ? formatRunway(row.value) : mapping.format === "currency" ? formatMoney(row.value) : String(row.value)) : String(row.value);
+          }
+        } else {
+          value = row.value === "N/A" || row.value === null ? "—" : typeof row.value === "number" ? formatMoney(row.value) : String(row.value);
+        }
+        const label = row.metric === "Burn Rate" || row.metric === "Burn rate" ? "Burn" : row.metric;
+        return { label, value, sublabel };
+      });
+    }
+    return [
+      { label: "ARR", value: formatMoney(displayArr), sublabel: "Annual recurring revenue" },
+      { label: "MRR", value: formatMoney(displayMrr), sublabel: "Monthly recurring revenue" },
+      { label: "Growth", value: formatPercent(displayGrowth), sublabel: "MRR growth (last 12 months)" },
+      { label: "Burn", value: formatMoney(displayBurnRate), sublabel: "Monthly burn" },
+      { label: "Runway", value: formatRunway(displayRunwayMonths), sublabel: "Estimated runway at current burn" },
+      { label: "Churn", value: formatPercent(displayChurn), sublabel: "MRR churn rate" },
+    ];
+  })();
+
   return (
     <div className="mx-auto max-w-[1000px] space-y-6">
       {/* Welcome Section */}
@@ -533,28 +613,16 @@ function OverviewPageContentInner() {
           </Button>
         </div>
 
-        {/* All 6 Key Metrics - same source as Details (latest snapshot when available) */}
+        {/* Key metrics: from AI agent (primaryMetricsTable) when available, else fixed six */}
         <div className="mb-8">
-          {/* First row: ARR, MRR, Growth */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-            <KpiCard label="ARR" value={formatMoney(displayArr)} sublabel="Annual recurring revenue" />
-            <KpiCard label="MRR" value={formatMoney(displayMrr)} sublabel="Monthly recurring revenue" />
-            <KpiCard
-              label="Growth"
-              value={formatPercent(displayGrowth)}
-              sublabel="MRR growth (last 12 months)"
-            />
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+            {keyMetricsDisplayList.map((item) => (
+              <KpiCard key={item.label} label={item.label} value={item.value} sublabel={item.sublabel} />
+            ))}
           </div>
-          {/* Second row: Burn Rate, Runway, Churn */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <KpiCard label="Burn rate" value={formatMoney(displayBurnRate)} sublabel="Monthly burn" />
-            <KpiCard
-              label="Runway"
-              value={formatRunway(displayRunwayMonths)}
-              sublabel="Estimated runway at current burn"
-            />
-            <KpiCard label="Churn" value={formatPercent(displayChurn)} sublabel="MRR churn rate" />
-          </div>
+          {metricInference?.whyHigherLevelNotUsed && (
+            <p className="text-xs text-slate-500 mt-1">{metricInference.whyHigherLevelNotUsed}</p>
+          )}
           <MetricsDetailsModal
             companyId={company.id}
             open={detailsOpen}

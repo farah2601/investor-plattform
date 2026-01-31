@@ -21,15 +21,12 @@ function debugLog(payload: { location: string; message: string; data?: object; h
 }
 // #endregion
 
-// KPI keys we support (must match everywhere)
+// KPI keys we support from sheets (net_revenue / booked omitted; can come from Stripe)
 const KPI_KEYS = [
   "mrr",
   "arr",
   "mrr_growth_mom",
   "churn",
-  "net_revenue",
-  "failed_payment_rate",
-  "refund_rate",
   "burn_rate",
   "cash_balance",
   "customers",
@@ -98,18 +95,6 @@ const HEADER_MAP: Record<string, KpiKey | "month"> = {
   customers: "customers",
   subs: "customers",
   subscribers: "customers",
-  
-  // Net Revenue (may not be in sheets)
-  "net revenue": "net_revenue",
-  "net revenue (usd)": "net_revenue",
-  
-  // Failed Payment Rate
-  "failed payment rate": "failed_payment_rate",
-  "failed payment %": "failed_payment_rate",
-  
-  // Refund Rate
-  "refund rate": "refund_rate",
-  "refund %": "refund_rate",
 };
 
 /**
@@ -153,9 +138,6 @@ function normalizeAIFieldToKpiKey(value: string): KpiKey | null {
     runway: "runway_months",
     mrr_growth_mom: "mrr_growth_mom",
     growth: "mrr_growth_mom",
-    net_revenue: "net_revenue",
-    failed_payment_rate: "failed_payment_rate",
-    refund_rate: "refund_rate",
   };
   return aliases[normalized] ?? null;
 }
@@ -221,9 +203,6 @@ KPI fields (use these exact strings in JSON):
 - runway_months: runway, runway in months
 - churn: churn, Churn %
 - customers: customers, users, subscribers
-- net_revenue: net revenue
-- failed_payment_rate: failed payments
-- refund_rate: refund rate
 
 Grid (row 0–${rowsToSend.length - 1}, col 0–${colsToSend - 1}):
 ${gridLines}
@@ -444,7 +423,7 @@ async function extractSheetDataWithAI(grid: SheetRows): Promise<{ parsed: Parsed
 
 ${gridLines}
 
-Identify where month/period, MRR, ARR, Burn, Cash, Runway, Churn and Customers are, and for each data row: read the values and fill an object with the keys period_date (YYYY-MM-01), mrr, arr, mrr_growth_mom, burn_rate, cash_balance, runway_months, churn, customers, net_revenue, failed_payment_rate, refund_rate. Use null where there is no value. Return a single JSON object with a "rows" array of such objects—only what actually appears in the sheet, max ${maxDataRows} rows. Percentages as numbers (e.g. 10.5 for 10.5%).`;
+Identify where month/period, MRR, ARR, Burn, Cash, Runway, Churn and Customers are, and for each data row: read the values and fill an object with the keys period_date (YYYY-MM-01), mrr, arr, mrr_growth_mom, burn_rate, cash_balance, runway_months, churn, customers. Use null where there is no value. Do not include net_revenue, net_revenue_booked, failed_payment_rate or refund_rate. Return a single JSON object with a "rows" array of such objects—only what actually appears in the sheet, max ${maxDataRows} rows. Percentages as numbers (e.g. 10.5 for 10.5%).`;
 
   try {
     const openai = getOpenAI();
@@ -495,7 +474,7 @@ Identify where month/period, MRR, ARR, Burn, Cash, Runway, Churn and Customers a
         } else if (typeof v === "number" && !Number.isNaN(v)) {
           values[key] = v;
         } else if (typeof v === "string") {
-          const num = parseNumber(v, key === "churn" || key === "mrr_growth_mom" || key === "failed_payment_rate" || key === "refund_rate");
+          const num = parseNumber(v, key === "churn" || key === "mrr_growth_mom");
           values[key] = num;
         } else {
           values[key] = null;
@@ -834,8 +813,7 @@ async function parseHorizontalLayout(
 
     for (const [colIndex, kpiKey] of columnMap.entries()) {
       const rawValue = row[parseInt(String(colIndex))];
-      const isPercent = kpiKey === "churn" || kpiKey === "mrr_growth_mom" || 
-                       kpiKey === "failed_payment_rate" || kpiKey === "refund_rate";
+      const isPercent = kpiKey === "churn" || kpiKey === "mrr_growth_mom";
       const parsedValue = parseNumber(rawValue, isPercent);
       values[kpiKey] = parsedValue;
     }
@@ -970,8 +948,7 @@ function parseVerticalLayout(
       if (!row) continue;
 
       const rawValue = row[monthColIndex];
-      const isPercent = kpiKey === "churn" || kpiKey === "mrr_growth_mom" ||
-                       kpiKey === "failed_payment_rate" || kpiKey === "refund_rate";
+      const isPercent = kpiKey === "churn" || kpiKey === "mrr_growth_mom";
       const parsedValue = parseNumber(rawValue, isPercent);
       values[kpiKey] = parsedValue;
     }
@@ -1236,4 +1213,55 @@ export async function loadSheetsKpisForCompany(companyId: string): Promise<Array
       mapping_used: mappingUsed,
     },
   }));
+}
+
+/**
+ * Load raw sheet grid for a company (for metric inference / candidate scoring).
+ * Returns the CSV-parsed grid plus tab and sheetId for evidence references.
+ */
+export async function getSheetGridForCompany(companyId: string): Promise<{
+  grid: SheetRows;
+  tab: string | null;
+  sheetId: string | undefined;
+}> {
+  const { data: company, error: companyError } = await supabase
+    .from("companies")
+    .select("id, google_sheets_url, google_sheets_tab")
+    .eq("id", companyId)
+    .maybeSingle();
+
+  if (companyError) throw new Error(`Failed to fetch company: ${companyError.message}`);
+  if (!company) throw new Error(`Company ${companyId} not found`);
+  if (!company.google_sheets_url) {
+    return { grid: [], tab: null, sheetId: undefined };
+  }
+
+  let sheetUrl: string;
+  let sheetTab: string | null;
+  try {
+    const parsed = JSON.parse(company.google_sheets_url);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      sheetUrl = (parsed[0].url ?? "").trim();
+      sheetTab = (parsed[0].tab ?? company.google_sheets_tab ?? "").trim() || null;
+    } else {
+      sheetUrl = company.google_sheets_url;
+      sheetTab = company.google_sheets_tab ?? null;
+    }
+  } catch {
+    sheetUrl = company.google_sheets_url;
+    sheetTab = company.google_sheets_tab ?? null;
+  }
+
+  if (!sheetUrl) return { grid: [], tab: null, sheetId: undefined };
+
+  const sheetIdMatch = sheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  const sheetId = sheetIdMatch ? sheetIdMatch[1] : undefined;
+  const csvUrl = getSheetsCsvUrl(sheetUrl, sheetTab, null);
+
+  const response = await fetch(csvUrl, { cache: "no-store" });
+  if (!response.ok) throw new Error(`Failed to fetch sheet: ${response.status} ${response.statusText}`);
+  const csvText = await response.text();
+  const grid = parseCSV(csvText);
+
+  return { grid, tab: sheetTab, sheetId };
 }
