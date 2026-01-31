@@ -67,7 +67,7 @@ function CustomTooltip({
 
   return (
     <div className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-100 shadow-lg">
-      <div className="font-medium mb-1">{label}</div>
+      <div className="font-medium mb-1">{label ?? ""}</div>
       <div className="text-slate-300 space-y-0.5">
         {value != null && (
           <div>{metricLabel}: {formatValue(value, format)}</div>
@@ -124,7 +124,9 @@ export function MetricChart({
             <Tooltip
               content={(props) => (
                 <CustomTooltip
-                  {...props}
+                  active={props.active}
+                  payload={props.payload as readonly { dataKey?: string; value?: number }[] | undefined}
+                  label={props.label != null ? String(props.label) : undefined}
                   metricLabel={metricLabel}
                   format={format}
                 />
