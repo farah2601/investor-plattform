@@ -372,7 +372,7 @@ function ConnectedSystemsPageContentInner() {
     });
     setTimeout(async () => {
       try {
-        const res = await authedFetch("/api/sheets/sync", {
+        const res = await authedFetch("/api/agent/run", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ companyId: cid }),
@@ -383,9 +383,10 @@ function ConnectedSystemsPageContentInner() {
         }
         setSyncSuccess(true);
         setTimeout(() => window.location.reload(), 1500);
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.error("Error syncing KPIs:", e);
-        setTimeout(() => alert("Error: " + (e?.message || "Failed to sync KPIs")), 0);
+        const errorMessage = e instanceof Error ? e.message : "Failed to sync KPIs";
+        setTimeout(() => alert("Error: " + errorMessage), 0);
       } finally {
         startTransition(() => {
           setSyncingKPIs(false);

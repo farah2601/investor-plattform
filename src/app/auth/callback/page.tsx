@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, Suspense, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation"; 
 import Link from "next/link";
 import { supabase, isSupabaseConfigured } from "../../lib/supabaseClient";
 import { routeUserAfterAuth } from "@/lib/auth/routeUserAfterAuth";
