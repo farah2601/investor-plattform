@@ -174,3 +174,40 @@ export async function requireAuthAndCompanyAccess(
 
   return { user, res: null };
 }
+
+/**
+ * Verify public investor link token (for unauthenticated /investor/[token] pages).
+ * Returns companyId if the token is valid and not expired.
+ */
+export async function verifyInvestorToken(
+  investorToken: string
+): Promise<{ companyId: string | null; error: string | null }> {
+  if (!investorToken || typeof investorToken !== "string" || !investorToken.trim()) {
+    return { companyId: null, error: "Missing investor token" };
+  }
+  const { data: linkRow, error: linkError } = await supabaseAdmin
+    .from("investor_links")
+    .select("id, access_token, expires_at, company_id, request_id")
+    .eq("access_token", investorToken.trim())
+    .maybeSingle();
+
+  if (linkError || !linkRow) {
+    return { companyId: null, error: "Invalid or expired investor link" };
+  }
+  if (linkRow.expires_at && new Date(linkRow.expires_at).getTime() < Date.now()) {
+    return { companyId: null, error: "Investor link expired" };
+  }
+  let companyId = linkRow.company_id as string | null;
+  if (!companyId && linkRow.request_id) {
+    const { data: requestRow } = await supabaseAdmin
+      .from("access_requests")
+      .select("company_id")
+      .eq("id", linkRow.request_id)
+      .maybeSingle();
+    companyId = requestRow?.company_id as string | null ?? null;
+  }
+  if (!companyId) {
+    return { companyId: null, error: "No company attached to this investor link" };
+  }
+  return { companyId, error: null };
+}

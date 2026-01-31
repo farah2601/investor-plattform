@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
-import { requireAuthAndCompanyAccess } from "@/lib/server/auth";
+import { requireAuthAndCompanyAccess, verifyInvestorToken } from "@/lib/server/auth";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +28,7 @@ function extractKpiValue(kpi: unknown): number | null {
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    const { companyId, message } = body;
+    const { companyId, message, investorToken } = body;
 
     if (!companyId || typeof companyId !== "string") {
       return NextResponse.json(
@@ -43,9 +43,23 @@ export async function POST(req: Request) {
       );
     }
 
+    // 1) Logged-in user with company access (dashboard)
     const { user, res: authRes } = await requireAuthAndCompanyAccess(req, companyId);
-    if (authRes || !user) {
-      return authRes ?? NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    if (!authRes && user) {
+      // Authorized via Bearer + company access
+    } else {
+      // 2) Public investor page: verify shareable link token
+      const token = typeof investorToken === "string" ? investorToken.trim() : "";
+      if (!token) {
+        return authRes ?? NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+      }
+      const { companyId: linkCompanyId, error: linkError } = await verifyInvestorToken(token);
+      if (linkError || !linkCompanyId || linkCompanyId !== companyId) {
+        return NextResponse.json(
+          { ok: false, error: linkError ?? "Invalid or expired investor link" },
+          { status: 401 }
+        );
+      }
     }
 
     // OPENAI_API_KEY: lokalt fra .env/.env.local; på Vercel fra Project Settings → Environment Variables

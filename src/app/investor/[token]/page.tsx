@@ -14,6 +14,8 @@ import { extendWithForecast } from "@/lib/kpi/forecast";
 import { Card } from "../../../components/ui/card";
 import { Badge } from "../../../../components/ui/badge";
 import { Avatar, AvatarFallback } from "../../../../components/ui/avatar";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { ArrChart, type ArrChartDataPoint } from "@/components/ui/ArrChart";
 import { BurnChart, type BurnChartDataPoint } from "@/components/ui/BurnChart";
 import { MrrChart, type MrrChartDataPoint } from "@/components/ui/MrrChart";
@@ -161,6 +163,12 @@ export default function InvestorCompanyPage() {
   const [snapshotRows, setSnapshotRows] = useState<Array<{ period_date: string; kpis: unknown }>>([]);
   const [loadingKpiHistory, setLoadingKpiHistory] = useState(false);
   const [latestSnapshotDate, setLatestSnapshotDate] = useState<string | null>(null);
+
+  // Chat with Valyxo Agent (public investor – uses investorToken, no Bearer)
+  type ChatMessage = { role: "user" | "assistant"; content: string };
+  const [agentChatMessages, setAgentChatMessages] = useState<ChatMessage[]>([]);
+  const [agentChatInput, setAgentChatInput] = useState("");
+  const [agentChatLoading, setAgentChatLoading] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -808,6 +816,102 @@ export default function InvestorCompanyPage() {
             </div>
           </Card>
           )}
+
+          {/* Chat with Valyxo Agent – public investor (uses investorToken, fetches OpenAI via API) */}
+          <Card className="rounded-xl border border-slate-700/60 bg-slate-900/70 shadow-sm overflow-hidden">
+            <div className="px-4 py-2 sm:px-5 sm:py-3 border-b border-slate-700/50">
+              <div className="flex items-baseline gap-2">
+                <h2 className="text-sm font-semibold text-slate-200">Chat with Valyxo Agent</h2>
+                <span className="text-[10px] font-medium text-slate-500 uppercase tracking-widest">AI Assistant</span>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Ask about metrics or this company. Replies are powered by Valyxo.
+              </p>
+            </div>
+            <div className="rounded-b-xl border-t-0 min-h-[200px] max-h-[320px] flex flex-col overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {agentChatMessages.length === 0 && (
+                  <p className="text-xs text-slate-500 italic">Type a message below to chat with the agent.</p>
+                )}
+                {agentChatMessages.map((m, i) => (
+                  <div
+                    key={i}
+                    className={cn(
+                      "text-sm rounded-xl px-4 py-2.5 max-w-[88%] shadow-sm",
+                      m.role === "user"
+                        ? "ml-auto bg-sky-500/20 text-slate-100 border border-sky-500/30"
+                        : "mr-auto bg-slate-800/70 text-slate-200 border border-slate-700/40"
+                    )}
+                  >
+                    <span className="whitespace-pre-wrap">{m.content}</span>
+                  </div>
+                ))}
+                {agentChatLoading && (
+                  <div className="mr-auto text-sm rounded-xl px-4 py-2.5 bg-slate-800/70 text-slate-400 border border-slate-700/40">
+                    Replying…
+                  </div>
+                )}
+              </div>
+              <form
+                className="p-3 border-t border-slate-700/50 bg-slate-950/30 flex gap-2"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const msg = agentChatInput.trim();
+                  const companyId = company?.id ?? linkMeta?.company_id ?? null;
+                  if (!msg || !companyId || !token || agentChatLoading) return;
+                  setAgentChatInput("");
+                  setAgentChatMessages((prev) => [...prev, { role: "user", content: msg }]);
+                  setAgentChatLoading(true);
+                  try {
+                    const res = await fetch("/api/agent/chat", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        companyId,
+                        message: msg,
+                        investorToken: token,
+                      }),
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok || !data?.ok) {
+                      setAgentChatMessages((prev) => [
+                        ...prev,
+                        { role: "assistant", content: data?.error ?? "Could not send message." },
+                      ]);
+                      return;
+                    }
+                    setAgentChatMessages((prev) => [
+                      ...prev,
+                      { role: "assistant", content: data.reply ?? "" },
+                    ]);
+                  } catch {
+                    setAgentChatMessages((prev) => [
+                      ...prev,
+                      { role: "assistant", content: "Something went wrong. Please try again." },
+                    ]);
+                  } finally {
+                    setAgentChatLoading(false);
+                  }
+                }}
+              >
+                <Input
+                  value={agentChatInput}
+                  onChange={(e) => setAgentChatInput(e.target.value)}
+                  placeholder="Type a message…"
+                  className="flex-1 bg-slate-900/60 border-slate-600/80 text-slate-100 placeholder:text-slate-500 rounded-lg focus:ring-2 focus:ring-sky-500/40"
+                  disabled={agentChatLoading}
+                />
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="shrink-0 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-medium px-4"
+                  disabled={!agentChatInput.trim() || agentChatLoading}
+                >
+                  Send
+                </Button>
+              </form>
+            </div>
+          </Card>
         </div>
         
         {/* Footer – muted */}
