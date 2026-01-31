@@ -54,7 +54,7 @@ function CustomTooltip({
   format,
 }: {
   active?: boolean;
-  payload?: { dataKey?: string; value?: number }[];
+  payload?: readonly { dataKey?: string; value?: number }[];
   label?: string;
   metricLabel: string;
   format: MetricFormat;
