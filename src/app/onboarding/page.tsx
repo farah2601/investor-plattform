@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { supabase } from "../../app/lib/supabaseClient";
+import { useUserCompany } from "@/lib/user-company-context";
 import { cn } from "@/lib/utils";
 
 import { Button } from "../../components/ui/button";
@@ -47,6 +48,7 @@ const secondaryCta =
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { refresh: refreshUserCompany } = useUserCompany();
 
   const [step, setStep] = useState<Step>(1);
   const [isLoading, setIsLoading] = useState(false);
@@ -158,11 +160,13 @@ export default function OnboardingPage() {
     }
 
     setCompanyId(data?.id ?? null);
+    await refreshUserCompany();
     setIsLoading(false);
     setStep(2);
   }
 
-  function handleGoToDashboard() {
+  async function handleGoToDashboard() {
+    await refreshUserCompany();
     router.push("/company-dashboard");
   }
 

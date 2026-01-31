@@ -64,6 +64,7 @@ export async function GET(req: Request) {
       website_url,
       profile_published,
       updated_at,
+      kpi_currency,
 
       last_agent_run_at,
       last_agent_run_by,

@@ -68,10 +68,20 @@ type AgentLog = {
   tool_name?: string; // if using tool_name instead of step
 };
 
-function formatMoney(value: number | null) {
+function getCurrencySymbol(currency: string): string {
+  switch (currency) {
+    case "NOK": return "kr ";
+    case "EUR": return "€";
+    case "IDR": return "Rp ";
+    default: return "$";
+  }
+}
+
+function formatMoney(value: number | null, currency: string = "USD") {
   if (value == null) return "—";
   const whole = Math.round(value);
-  return "$" + whole.toLocaleString("en-US", { maximumFractionDigits: 0, minimumFractionDigits: 0 });
+  const symbol = getCurrencySymbol(currency);
+  return symbol + whole.toLocaleString("en-US", { maximumFractionDigits: 0, minimumFractionDigits: 0 });
 }
 
 function formatPercent(value: number | null) {
@@ -1210,14 +1220,14 @@ function CompanyDashboardContent() {
 
               {/* mobile: 2 cols, tablet: 3 cols, desktop: 6 cols — values from latest snapshot (same as Details) */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-                <KpiCard label="ARR" value={formatMoney(displayArr)} sublabel="Annual recurring revenue" />
-                <KpiCard label="MRR" value={formatMoney(displayMrr)} sublabel="Monthly recurring revenue" />
+                <KpiCard label="ARR" value={formatMoney(displayArr, (company as any)?.kpi_currency)} sublabel="Annual recurring revenue" />
+                <KpiCard label="MRR" value={formatMoney(displayMrr, (company as any)?.kpi_currency)} sublabel="Monthly recurring revenue" />
                 <KpiCard
                   label="Growth"
                   value={formatPercent(displayGrowth)}
                   sublabel="MRR growth (last 12 months)"
                 />
-                <KpiCard label="Burn rate" value={formatMoney(displayBurnRate)} sublabel="Monthly burn" />
+                <KpiCard label="Burn rate" value={formatMoney(displayBurnRate, (company as any)?.kpi_currency)} sublabel="Monthly burn" />
                 <KpiCard
                   label="Runway"
                   value={formatRunway(displayRunwayMonths)}
@@ -1783,6 +1793,7 @@ function CompanyDashboardContent() {
                   <option value="USD">USD ($)</option>
                   <option value="NOK">NOK (kr)</option>
                   <option value="EUR">EUR (€)</option>
+                  <option value="IDR">IDR (Rp)</option>
                 </select>
               </div>
 

@@ -8,6 +8,7 @@ import { supabase } from "@/app/lib/supabaseClient";
 import { authedFetch } from "@/lib/authedFetch";
 import { FormattedDate } from "@/components/ui/FormattedDate";
 import { KpiCard } from "@/components/ui/KpiCard";
+import { ArrChart, type ArrChartDataPoint } from "@/components/ui/ArrChart";
 import { BurnChart } from "@/components/ui/BurnChart";
 import { MrrChart } from "@/components/ui/MrrChart";
 import { buildDenseSeries, type SnapshotRow, type ChartPoint } from "@/lib/kpi/kpi_series";
@@ -79,12 +80,26 @@ function OverviewPageContentInner() {
   const [deleting, setDeleting] = useState(false);
   const [snapshotRows, setSnapshotRows] = useState<SnapshotRow[]>([]);
   const [loadingKpiHistory, setLoadingKpiHistory] = useState(false);
-  const [activeChart, setActiveChart] = useState<"mrr" | "burn">("mrr");
+  const [activeChart, setActiveChart] = useState<"arr" | "mrr" | "burn">("mrr");
 
+  const arrSeries = useMemo(() => buildDenseSeries(snapshotRows, "arr"), [snapshotRows]);
   const mrrSeries = useMemo(() => buildDenseSeries(snapshotRows, "mrr"), [snapshotRows]);
   const burnSeries = useMemo(() => buildDenseSeries(snapshotRows, "burn_rate"), [snapshotRows]);
+  const arrExtended = useMemo(() => extendWithForecast(arrSeries, { monthsAhead: 6 }), [arrSeries]);
   const mrrExtended = useMemo(() => extendWithForecast(mrrSeries, { monthsAhead: 6 }), [mrrSeries]);
   const burnExtended = useMemo(() => extendWithForecast(burnSeries, { monthsAhead: 6 }), [burnSeries]);
+
+  function toArrChartData(series: ChartPoint[]): ArrChartDataPoint[] {
+    const lastHist = series.reduce<number>((acc, p, i) => (p.value != null ? i : acc), -1);
+    return series.map((p, i) => {
+      const arr = p.value;
+      let arrForecast: number | null | undefined;
+      if (p.forecast != null) arrForecast = p.forecast;
+      else if (i === lastHist && lastHist >= 0) arrForecast = (series[lastHist]!.value as number);
+      else arrForecast = undefined;
+      return { month: p.label, arr, ...(arrForecast != null && { arrForecast }) };
+    });
+  }
 
   function toMrrChartData(series: ChartPoint[]) {
     const lastHist = series.reduce<number>((acc, p, i) => (p.value != null ? i : acc), -1);
@@ -110,8 +125,25 @@ function OverviewPageContentInner() {
     });
   }
 
+  const arrChartData = useMemo(() => toArrChartData(arrExtended), [arrExtended]);
   const mrrChartData = useMemo(() => toMrrChartData(mrrExtended), [mrrExtended]);
   const burnChartData = useMemo(() => toBurnChartData(burnExtended), [burnExtended]);
+  const hasAnyChartData = arrChartData.length > 0 || mrrChartData.length > 0 || burnChartData.length > 0;
+
+  // Keep activeChart in sync with available data (e.g. default to first available)
+  useEffect(() => {
+    if (!hasAnyChartData) return;
+    const hasArr = arrChartData.length > 0;
+    const hasMrr = mrrChartData.length > 0;
+    const hasBurn = burnChartData.length > 0;
+    const currentHasData =
+      (activeChart === "arr" && hasArr) || (activeChart === "mrr" && hasMrr) || (activeChart === "burn" && hasBurn);
+    if (!currentHasData) {
+      if (hasArr) setActiveChart("arr");
+      else if (hasMrr) setActiveChart("mrr");
+      else if (hasBurn) setActiveChart("burn");
+    }
+  }, [hasAnyChartData, arrChartData.length, mrrChartData.length, burnChartData.length, activeChart]);
 
   const [stripeStatus, setStripeStatus] = useState<{
     status: "not_connected" | "pending" | "connected";
@@ -531,88 +563,73 @@ function OverviewPageContentInner() {
           />
         </div>
 
-        {/* Chart carousel — MRR · Burn (with prognose) */}
-        {!loadingKpiHistory && (mrrChartData.length > 0 || burnChartData.length > 0) && (
+        {/* Chart carousel — ARR · MRR · Burn rate (with prognose) */}
+        {!loadingKpiHistory && hasAnyChartData && (
           <div className="mb-8">
             <div className="relative bg-slate-900/40 rounded-xl p-5 border border-slate-700/30 light:bg-white light:border-slate-200">
-              {/* Arrow navigation - only show if both charts available */}
-              {mrrChartData.length > 0 && burnChartData.length > 0 && (
-                <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
-                  <button
-                    onClick={() => setActiveChart("mrr")}
-                    disabled={activeChart === "mrr"}
-                    className={`p-2 rounded-md transition-all ${
-                      activeChart === "mrr"
-                        ? "opacity-40 cursor-not-allowed"
-                        : "hover:bg-slate-800/50 text-slate-400 hover:text-white"
-                    }`}
-                    aria-label="Previous chart"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
+              {/* Arrow navigation when more than one chart */}
+              {(() => {
+                const available: Array<"arr" | "mrr" | "burn"> = [];
+                if (arrChartData.length > 0) available.push("arr");
+                if (mrrChartData.length > 0) available.push("mrr");
+                if (burnChartData.length > 0) available.push("burn");
+                if (available.length <= 1) return null;
+                const idx = available.indexOf(activeChart);
+                const currentIdx = idx >= 0 ? idx : 0;
+                const prevChart = available[(currentIdx - 1 + available.length) % available.length];
+                const nextChart = available[(currentIdx + 1) % available.length];
+                return (
+                  <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+                    <button
+                      onClick={() => setActiveChart(prevChart)}
+                      className="p-2 rounded-md transition-all hover:bg-slate-800/50 text-slate-400 hover:text-white"
+                      aria-label="Previous chart"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15 19l-7-7 7-7"
-                      />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => setActiveChart("burn")}
-                    disabled={activeChart === "burn"}
-                    className={`p-2 rounded-md transition-all ${
-                      activeChart === "mrr"
-                        ? "opacity-40 cursor-not-allowed"
-                        : "hover:bg-slate-800/50 text-slate-400 hover:text-white"
-                    }`}
-                    aria-label="Next chart"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => setActiveChart(nextChart)}
+                      className="p-2 rounded-md transition-all hover:bg-slate-800/50 text-slate-400 hover:text-white"
+                      aria-label="Next chart"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              )}
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+                );
+              })()}
 
-              {/* Chart title: MRR or Burn rate */}
+              {/* Chart title */}
               <h3 className="text-sm font-medium text-slate-200 mb-2 light:text-slate-800">
-                {activeChart === "mrr" ? "MRR" : "Burn rate"}
+                {activeChart === "arr" ? "ARR" : activeChart === "mrr" ? "MRR" : "Burn rate"}
               </h3>
               {/* Chart content */}
               <div className="relative min-h-[280px]">
+                {arrChartData.length > 0 && (
+                  <div
+                    className={`transition-opacity duration-300 ${
+                      activeChart === "arr" ? "opacity-100 relative" : "opacity-0 absolute inset-0 pointer-events-none"
+                    }`}
+                  >
+                    <ArrChart data={arrChartData} />
+                  </div>
+                )}
                 {mrrChartData.length > 0 && (
                   <div
                     className={`transition-opacity duration-300 ${
-                      activeChart === "mrr" || (mrrChartData.length > 0 && burnChartData.length === 0)
-                        ? "opacity-100 relative"
-                        : "opacity-0 absolute inset-0 pointer-events-none"
+                      activeChart === "mrr" ? "opacity-100 relative" : "opacity-0 absolute inset-0 pointer-events-none"
                     }`}
                   >
                     <MrrChart data={mrrChartData} />
                   </div>
                 )}
-
                 {burnChartData.length > 0 && (
                   <div
                     className={`transition-opacity duration-300 ${
-                      activeChart === "burn" || (burnChartData.length > 0 && mrrChartData.length === 0)
-                        ? "opacity-100 relative"
-                        : "opacity-0 absolute inset-0 pointer-events-none"
+                      activeChart === "burn" ? "opacity-100 relative" : "opacity-0 absolute inset-0 pointer-events-none"
                     }`}
                   >
                     <BurnChart data={burnChartData} />
@@ -620,22 +637,36 @@ function OverviewPageContentInner() {
                 )}
               </div>
 
-              {mrrChartData.length > 0 && burnChartData.length > 0 && (
+              {/* Dots: ARR · MRR · Burn */}
+              {hasAnyChartData && (
                 <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t border-slate-700/30">
-                  <button
-                    onClick={() => setActiveChart("mrr")}
-                    className={`h-2 rounded-full transition-all ${
-                      activeChart === "mrr" ? "w-8 bg-[#2B74FF]" : "w-2 bg-slate-600 hover:bg-slate-500"
-                    }`}
-                    aria-label="Show MRR chart"
-                  />
-                  <button
-                    onClick={() => setActiveChart("burn")}
-                    className={`h-2 rounded-full transition-all ${
-                      activeChart === "burn" ? "w-8 bg-[#2B74FF]" : "w-2 bg-slate-600 hover:bg-slate-500"
-                    }`}
-                    aria-label="Show Burn chart"
-                  />
+                  {arrChartData.length > 0 && (
+                    <button
+                      onClick={() => setActiveChart("arr")}
+                      className={`h-2 rounded-full transition-all ${
+                        activeChart === "arr" ? "w-8 bg-[#2B74FF]" : "w-2 bg-slate-600 hover:bg-slate-500"
+                      }`}
+                      aria-label="Show ARR chart"
+                    />
+                  )}
+                  {mrrChartData.length > 0 && (
+                    <button
+                      onClick={() => setActiveChart("mrr")}
+                      className={`h-2 rounded-full transition-all ${
+                        activeChart === "mrr" ? "w-8 bg-[#2B74FF]" : "w-2 bg-slate-600 hover:bg-slate-500"
+                      }`}
+                      aria-label="Show MRR chart"
+                    />
+                  )}
+                  {burnChartData.length > 0 && (
+                    <button
+                      onClick={() => setActiveChart("burn")}
+                      className={`h-2 rounded-full transition-all ${
+                        activeChart === "burn" ? "w-8 bg-[#2B74FF]" : "w-2 bg-slate-600 hover:bg-slate-500"
+                      }`}
+                      aria-label="Show Burn chart"
+                    />
+                  )}
                 </div>
               )}
             </div>

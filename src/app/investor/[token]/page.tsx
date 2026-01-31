@@ -81,6 +81,8 @@ type CompanyProfile = {
   latest_insights_generated_by?: string | null;
   based_on_snapshot_date?: string | null;
 
+  kpi_currency?: string | null;
+
   /** From companies.investor_view_config – what to show on investor view */
   investor_view_config?: InvestorViewConfig | null;
 
@@ -112,10 +114,20 @@ function formatDateLabel(dateString?: string | null): string {
   });
 }
 
-function formatMoney(value: number | null) {
+function getCurrencySymbol(currency: string | null | undefined): string {
+  switch (currency) {
+    case "NOK": return "kr ";
+    case "EUR": return "€";
+    case "IDR": return "Rp ";
+    default: return "$";
+  }
+}
+
+function formatMoney(value: number | null, currency: string | null | undefined = "USD") {
   if (value == null) return "—";
   const whole = Math.round(value);
-  return "$" + whole.toLocaleString("en-US", { maximumFractionDigits: 0, minimumFractionDigits: 0 });
+  const symbol = getCurrencySymbol(currency ?? "USD");
+  return symbol + whole.toLocaleString("en-US", { maximumFractionDigits: 0, minimumFractionDigits: 0 });
 }
 
 function formatPercent(value: number | null) {
@@ -617,7 +629,7 @@ export default function InvestorCompanyPage() {
                       <Card className="rounded-lg border border-sky-500/25 bg-gradient-to-br from-slate-950/95 via-slate-950/80 to-slate-900/60 p-3 sm:p-4 ring-1 ring-sky-500/15 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_0_20px_-8px_rgba(56,189,248,0.12)]">
                         <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">MRR</p>
                         <p className="mt-0.5 text-xl sm:text-2xl font-bold text-white tabular-nums">
-                          {formatMoney(latestMrr)}
+                          {formatMoney(latestMrr, company?.kpi_currency)}
                         </p>
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
                           {mrrTrend.text && (
@@ -639,7 +651,7 @@ export default function InvestorCompanyPage() {
                       <Card className="rounded-lg border border-sky-500/25 bg-gradient-to-br from-slate-950/95 via-slate-950/80 to-slate-900/60 p-3 sm:p-4 ring-1 ring-sky-500/15 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_0_20px_-8px_rgba(56,189,248,0.12)]">
                         <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">ARR</p>
                         <p className="mt-0.5 text-xl sm:text-2xl font-bold text-white tabular-nums">
-                          {formatMoney(latestArr)}
+                          {formatMoney(latestArr, company?.kpi_currency)}
                         </p>
                         <p className="mt-1.5 text-[11px] text-slate-500">Run-rate from MRR</p>
                       </Card>
@@ -661,7 +673,7 @@ export default function InvestorCompanyPage() {
                       <Card className="rounded-lg border border-slate-700/40 bg-gradient-to-br from-slate-950/75 to-slate-900/55 p-3 sm:p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
                         <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Monthly burn</p>
                         <p className="mt-0.5 text-lg sm:text-xl font-bold text-slate-50 tabular-nums">
-                          {formatMoney(latestBurn)}
+                          {formatMoney(latestBurn, company?.kpi_currency)}
                         </p>
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
                           {burnTrend.text && (
