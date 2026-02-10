@@ -25,8 +25,8 @@ import {
 } from "@/components/ui/dialog";
 import { MetricsDetailsModal } from "@/components/metrics/MetricsDetailsModal";
 import { FormattedDate } from "@/components/ui/FormattedDate";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { SimpleMetricDetails } from "@/components/SimpleMetricDetails";
+import { Zap } from "lucide-react";
 import { normalizeMetricsOutput } from "@/lib/normalizeMetrics";
 import { type MetricResult } from "@/types/metricResult";
 
@@ -186,8 +186,6 @@ function CompanyDashboardContent() {
   });
 
   // User dropdown
-  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
 
   // What investors can see (customize investor view)
   const [investorView, setInvestorView] = useState({
@@ -206,13 +204,6 @@ function CompanyDashboardContent() {
       return;
     }
   }, [userCompanyLoading, isAuthenticated, router]);
-
-  useEffect(() => {
-    (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setUserEmail(session?.user?.email ?? null);
-    })();
-  }, [isAuthenticated]);
 
   // Stable primitive for effect deps so we don't re-run on every render (searchParams object identity changes)
   const stripeQueryParam = searchParams.get("stripe");
@@ -736,29 +727,26 @@ function CompanyDashboardContent() {
   
   // Calculate net cash flow to determine Profit vs Burn
   // If burn_rate = 0, assume cash-flow positive (profit)
-  // Otherwise show burn
-  const isProfitable = displayBurnRate === 0;
-  const profitBurnValue = isProfitable ? null : displayBurnRate; // Show profit as null (we don't have exact profit amount)
-  const profitBurnLabel = isProfitable ? "Profit" : "Burn";
-  const profitBurnSublabel = isProfitable ? "Cash-flow positive" : "Monthly cash outflow";
+  const isProfitable = displayBurnRate != null && displayBurnRate <= 0;
+  const profitBurnValue = displayBurnRate == null ? null : displayBurnRate < 0 ? Math.abs(displayBurnRate) : displayBurnRate;
+  const profitBurnLabel = displayBurnRate != null && displayBurnRate < 0 ? "Profit" : displayBurnRate === 0 ? "Profit" : "Burn";
+  const profitBurnSublabel = displayBurnRate != null && displayBurnRate < 0 ? "Cash inflow" : displayBurnRate === 0 ? "Breaking even" : "Monthly cash outflow";
 
   // Map inference metric name → snapshot key (for value) and format type
   const inferenceMetricToSnapshot: Record<string, { key: string; format: "currency" | "percent" | "runway" | "number" }> = {
-    MRR: { key: "mrr", format: "currency" },
-    ARR: { key: "arr", format: "currency" },
-    Growth: { key: "mrr_growth_mom", format: "percent" },
-    "Growth (MoM)": { key: "mrr_growth_mom", format: "percent" },
-    "Burn rate": { key: "burn_rate", format: "currency" },
+    "Cash Balance": { key: "cash_balance", format: "currency" },
+    "Cash balance": { key: "cash_balance", format: "currency" },
+    Cash: { key: "cash_balance", format: "currency" },
     Burn: { key: "burn_rate", format: "currency" },
+    "Burn rate": { key: "burn_rate", format: "currency" },
     Runway: { key: "runway_months", format: "runway" },
     Churn: { key: "churn", format: "percent" },
+    MRR: { key: "mrr", format: "currency" },
+    ARR: { key: "arr", format: "currency" },
     "Monthly revenue": { key: "mrr", format: "currency" },
     "Annual revenue": { key: "arr", format: "currency" },
     "Number of customers": { key: "customers", format: "number" },
     Customers: { key: "customers", format: "number" },
-    "Cash balance": { key: "cash_balance", format: "currency" },
-    Cash: { key: "cash_balance", format: "currency" },
-    "Revenue trend": { key: "mrr_growth_mom", format: "percent" },
     "Net profit/loss": { key: "mrr", format: "currency" },
   };
 
@@ -789,7 +777,11 @@ function CompanyDashboardContent() {
   const keyMetricsDisplayList: KeyMetricItem[] = (() => {
     const currency = (company as any)?.kpi_currency;
     if (metricInference?.primaryMetricsTable && metricInference.primaryMetricsTable.length > 0) {
-      return metricInference.primaryMetricsTable.map((row) => {
+      const excludeGrowth = (metric: string) =>
+        /^(Growth\s*\(?MoM\)?|Growth|Revenue trend)$/i.test(metric.trim());
+      return metricInference.primaryMetricsTable
+        .filter((row) => !excludeGrowth(row.metric))
+        .map((row) => {
         const mapping = inferenceMetricToSnapshot[row.metric] ?? inferenceMetricToSnapshot[row.metric.trim()];
         let value: string;
         let sublabel = row.confidence ? `Confidence: ${row.confidence}` : "";
@@ -806,18 +798,24 @@ function CompanyDashboardContent() {
         } else {
           value = row.value === "N/A" || row.value === null ? "—" : typeof row.value === "number" ? formatMoney(row.value, currency) : String(row.value);
         }
-        const label = row.metric === "Burn Rate" || row.metric === "Burn rate" ? "Burn" : row.metric;
-        const metricKey = mapping?.key ?? "mrr";
+        let label = row.metric === "Burn Rate" || row.metric === "Burn rate" ? "Burn" : row.metric;
+        const metricKey = mapping?.key ?? "cash_balance";
+        const burnNum = metricKey === "burn_rate" ? (kpis != null ? extractKpiNumber(kpis, "burn_rate") : typeof row.value === "number" ? row.value : null) : null;
+        if (burnNum != null && burnNum < 0) {
+          label = "Profit";
+          value = formatMoney(Math.abs(burnNum), currency);
+          sublabel = "Cash inflow";
+        }
         return { label, value, sublabel, metricKey };
       });
     }
     return [
-      { label: "ARR", value: formatMoney(displayArr, currency), sublabel: "Annual recurring revenue", metricKey: "arr" },
-      { label: "MRR", value: formatMoney(displayMrr, currency), sublabel: "Monthly recurring revenue", metricKey: "mrr" },
       { label: "Cash Balance", value: formatMoney(displayCashBalance, currency), sublabel: "Cash on hand", metricKey: "cash_balance" },
-      { label: profitBurnLabel, value: isProfitable ? "—" : formatMoney(profitBurnValue, currency), sublabel: profitBurnSublabel, metricKey: "burn_rate" },
+      { label: profitBurnLabel, value: profitBurnValue != null ? formatMoney(profitBurnValue, currency) : "—", sublabel: profitBurnSublabel, metricKey: "burn_rate" },
       { label: "Runway", value: formatRunway(displayRunwayMonths), sublabel: "Estimated runway at current burn", metricKey: "runway_months" },
       { label: "Churn", value: formatPercent(displayChurn), sublabel: "MRR churn rate", metricKey: "churn" },
+      { label: "ARR", value: formatMoney(displayArr, currency), sublabel: "Annual recurring revenue", metricKey: "arr" },
+      { label: "MRR", value: formatMoney(displayMrr, currency), sublabel: "Monthly recurring revenue", metricKey: "mrr" },
     ];
   })();
 
@@ -1210,8 +1208,8 @@ function CompanyDashboardContent() {
     <>
       <main className="min-h-screen text-slate-50">
         <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-6 sm:space-y-8">
-          {/* HEADER - mobile: stack, desktop: side-by-side */}
-          <header className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 sm:gap-6 pb-2">
+          {/* HEADER - mobile: stack, desktop: side-by-side; align button to same baseline as left content */}
+          <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 pb-2">
             <div className="space-y-3 sm:space-y-4 flex-1 min-w-0">
               <div className="space-y-1">
                 <p className="text-xs tracking-[0.2em] text-slate-500 uppercase">Company</p>
@@ -1250,92 +1248,30 @@ function CompanyDashboardContent() {
               )}
             </div>
 
-            {/* Navigation and User Menu */}
-            <div className="flex items-center gap-3 shrink-0">
-              {/* Overview Link */}
-              <Link href="/overview">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-slate-300 hover:text-white hover:bg-slate-800/50 h-10 sm:h-9 px-4"
-                >
-                  Overview
-                </Button>
-              </Link>
-
-              {/* Run Agent Button */}
+            <div className="flex items-center justify-end w-full sm:w-auto shrink-0">
+              {/* Run Valyxo Agent - premium primary action, matches card radius + calmer blue */}
               {company?.id && (
                 <Button
                   size="sm"
                   onClick={() => runAgent()}
                   disabled={runningAgent}
-                  className="bg-[#2B74FF] hover:bg-[#2B74FF]/90 text-white disabled:opacity-50 h-10 sm:h-9 px-4"
+                  className={cn(
+                    "rounded-xl h-9 px-5 text-sm font-medium text-white disabled:opacity-50",
+                    "bg-[#1e5cbf] hover:bg-[#2563eb] hover:shadow-md hover:shadow-blue-900/20",
+                    "transition-all duration-200 ease-out",
+                    "inline-flex items-center justify-center gap-2"
+                  )}
                 >
-                  {runningAgent ? "Running…" : "Run Agent"}
+                  {runningAgent ? (
+                    "Running…"
+                  ) : (
+                    <>
+                      <Zap className="h-4 w-4 shrink-0" aria-hidden />
+                      Run Valyxo Agent
+                    </>
+                  )}
                 </Button>
               )}
-
-              {/* User Dropdown */}
-              <div className="relative">
-                <button
-                  onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                  className="flex items-center justify-center w-10 h-10 rounded-full border border-slate-700/50 bg-slate-800/30 hover:bg-slate-800/50 transition-colors focus:outline-none focus:ring-2 focus:ring-[#2B74FF]/50"
-                >
-                  <Avatar className="w-8 h-8">
-                    <AvatarFallback className="bg-[#2B74FF] text-white text-xs font-medium">
-                      {userEmail ? userEmail.charAt(0).toUpperCase() : "U"}
-                    </AvatarFallback>
-                  </Avatar>
-                </button>
-
-                {/* Dropdown Menu */}
-                {userDropdownOpen && (
-                  <>
-                    {/* Overlay to close dropdown on click outside */}
-                    <div
-                      className="fixed inset-0 z-10"
-                      onClick={() => setUserDropdownOpen(false)}
-                    />
-                    <div className="absolute right-0 mt-2 w-56 rounded-lg border border-slate-700/50 bg-slate-900/95 backdrop-blur-sm shadow-xl z-20 light:bg-white light:border-slate-200">
-                      <div className="py-1">
-                        {/* Profile */}
-                        <Link
-                          href="/company-profile"
-                          onClick={() => setUserDropdownOpen(false)}
-                          className="block px-4 py-2 text-sm text-slate-300 hover:bg-slate-800/50 hover:text-white transition-colors light:text-slate-700 light:hover:bg-slate-100"
-                >
-                  Profile
-              </Link>
-
-                        {/* Preview investor view */}
-              {investorUrl && (
-                <a
-                  href={investorUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                            onClick={() => setUserDropdownOpen(false)}
-                            className="block px-4 py-2 text-sm text-slate-300 hover:bg-slate-800/50 hover:text-white transition-colors light:text-slate-700 light:hover:bg-slate-100"
-                >
-                            Preview investor view
-                </a>
-              )}
-
-                        {/* Divider */}
-                        <div className="my-1 border-t border-slate-700/50 light:border-slate-200" />
-
-                        {/* Sign out */}
-                        <Link
-                          href="/logout"
-                          onClick={() => setUserDropdownOpen(false)}
-                          className="block px-4 py-2 text-sm text-slate-300 hover:bg-slate-800/50 hover:text-white transition-colors light:text-slate-700 light:hover:bg-slate-100"
-                >
-                  Sign out
-              </Link>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
             </div>
           </header>
 

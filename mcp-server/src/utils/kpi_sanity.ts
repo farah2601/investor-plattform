@@ -13,7 +13,7 @@ export type KpiMeta = {
   warnings: string[];
 };
 
-export type KpiKey = "mrr" | "arr" | "mrr_growth_mom" | "burn_rate" | "runway_months" | "churn";
+export type KpiKey = "cash_balance" | "mrr" | "arr" | "mrr_growth_mom" | "burn_rate" | "runway_months" | "churn";
 
 export type RowKpiMeta = Partial<Record<KpiKey, KpiMeta>>;
 
@@ -26,10 +26,11 @@ export type MetricInferenceDataRow = {
   runway_months: number | null;
   churn: number | null;
   customers: number | null;
+  cash_balance?: number | null;
 };
 
 const MAX_RUNWAY_MONTHS = 36;
-const KPI_KEYS: KpiKey[] = ["mrr", "arr", "mrr_growth_mom", "burn_rate", "runway_months", "churn"];
+const KPI_KEYS: KpiKey[] = ["cash_balance", "mrr", "arr", "mrr_growth_mom", "burn_rate", "runway_months", "churn"];
 
 /** Detect column index by header (first row) substring match, case-insensitive */
 function findColumnIndex(grid: string[][], ...patterns: string[]): number | null {

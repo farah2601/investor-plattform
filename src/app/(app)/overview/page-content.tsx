@@ -8,12 +8,11 @@ import { supabase } from "@/app/lib/supabaseClient";
 import { authedFetch } from "@/lib/authedFetch";
 import { FormattedDate } from "@/components/ui/FormattedDate";
 import { KpiCard } from "@/components/ui/KpiCard";
-import { ArrChart, type ArrChartDataPoint } from "@/components/ui/ArrChart";
-import { BurnChart } from "@/components/ui/BurnChart";
-import { MrrChart } from "@/components/ui/MrrChart";
 import { buildDenseSeries, type SnapshotRow, type ChartPoint } from "@/lib/kpi/kpi_series";
+import { MetricChart, type MetricChartDataPoint, type MetricFormat } from "@/components/ui/MetricChart";
 import { extendWithForecast } from "@/lib/kpi/forecast";
 import { extractKpiNumber } from "@/lib/kpi/kpi_extract";
+import { cn } from "@/lib/utils";
 import { useCompanyData } from "@/hooks/useCompanyData";
 import { useUserCompany } from "@/lib/user-company-context";
 import { MetricsDetailsModal } from "@/components/metrics/MetricsDetailsModal";
@@ -74,13 +73,14 @@ function OverviewPageContentInner() {
   const router = useRouter();
   const { company: userCompany, loading: userCompanyLoading, isAuthenticated } = useUserCompany();
   const companyId = userCompany?.id ?? null;
-  const { company, investorRequests, investorLinks, loading, error } = useCompanyData(companyId);
+  const { company, investorRequests, investorLinks, loading, error, refetch } = useCompanyData(companyId);
   const [runningAgent, setRunningAgent] = useState(false);
   const [agentError, setAgentError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [snapshotRows, setSnapshotRows] = useState<SnapshotRow[]>([]);
   const [loadingKpiHistory, setLoadingKpiHistory] = useState(false);
-  const [activeChart, setActiveChart] = useState<"arr" | "mrr" | "burn">("mrr");
+  const [chartMetric, setChartMetric] = useState<string>("cash_balance");
+  const [dragOverChart, setDragOverChart] = useState(false);
   const [metricInference, setMetricInference] = useState<{
     primaryMetricsTable?: Array<{ metric: string; value: string | number; confidence: string; evidence: string; rationale: string }>;
     detectedMaturityLevel?: number;
@@ -90,65 +90,69 @@ function OverviewPageContentInner() {
   const arrSeries = useMemo(() => buildDenseSeries(snapshotRows, "arr"), [snapshotRows]);
   const mrrSeries = useMemo(() => buildDenseSeries(snapshotRows, "mrr"), [snapshotRows]);
   const burnSeries = useMemo(() => buildDenseSeries(snapshotRows, "burn_rate"), [snapshotRows]);
+  const runwaySeries = useMemo(() => buildDenseSeries(snapshotRows, "runway_months"), [snapshotRows]);
+  const churnSeries = useMemo(() => buildDenseSeries(snapshotRows, "churn", { percent: true, allowNegative: false }), [snapshotRows]);
+  const growthSeries = useMemo(() => buildDenseSeries(snapshotRows, "mrr_growth_mom", { percent: true, allowNegative: true }), [snapshotRows]);
+  const cashBalanceSeries = useMemo(() => buildDenseSeries(snapshotRows, "cash_balance"), [snapshotRows]);
+
   const arrExtended = useMemo(() => extendWithForecast(arrSeries, { monthsAhead: 6 }), [arrSeries]);
   const mrrExtended = useMemo(() => extendWithForecast(mrrSeries, { monthsAhead: 6 }), [mrrSeries]);
   const burnExtended = useMemo(() => extendWithForecast(burnSeries, { monthsAhead: 6 }), [burnSeries]);
+  const runwayExtended = useMemo(() => extendWithForecast(runwaySeries, { monthsAhead: 6 }), [runwaySeries]);
 
-  function toArrChartData(series: ChartPoint[]): ArrChartDataPoint[] {
-    const lastHist = series.reduce<number>((acc, p, i) => (p.value != null ? i : acc), -1);
-    return series.map((p, i) => {
-      const arr = p.value;
-      let arrForecast: number | null | undefined;
-      if (p.forecast != null) arrForecast = p.forecast;
-      else if (i === lastHist && lastHist >= 0) arrForecast = (series[lastHist]!.value as number);
-      else arrForecast = undefined;
-      return { month: p.label, arr, ...(arrForecast != null && { arrForecast }) };
+  const seriesByKey: Record<string, ChartPoint[]> = {
+    arr: arrSeries,
+    mrr: mrrSeries,
+    burn_rate: burnSeries,
+    runway_months: runwaySeries,
+    churn: churnSeries,
+    mrr_growth_mom: growthSeries,
+    cash_balance: cashBalanceSeries,
+  };
+  const extendedByKey: Record<string, ChartPoint[]> = {
+    arr: arrExtended,
+    mrr: mrrExtended,
+    burn_rate: burnExtended,
+    runway_months: runwayExtended,
+    churn: churnSeries,
+    mrr_growth_mom: growthSeries,
+    cash_balance: cashBalanceSeries,
+  };
+
+  const OVERVIEW_CHART_METRICS: Array<{ key: string; label: string; format: MetricFormat }> = [
+    { key: "arr", label: "ARR", format: "currency" },
+    { key: "mrr", label: "MRR", format: "currency" },
+    { key: "cash_balance", label: "Cash Balance", format: "currency" },
+    { key: "burn_rate", label: "Burn", format: "currency" },
+    { key: "runway_months", label: "Runway", format: "number" },
+    { key: "churn", label: "Churn", format: "percent" },
+    { key: "mrr_growth_mom", label: "Growth", format: "percent" },
+  ];
+
+  function toMetricChartData(series: ChartPoint[], useExtended: boolean, extended: ChartPoint[]): MetricChartDataPoint[] {
+    const src = useExtended ? extended : series;
+    const lastHist = src.reduce<number>((acc, p, i) => (p.value != null ? i : acc), -1);
+    return src.map((p, i) => {
+      const value = p.value;
+      let valueForecast: number | null | undefined;
+      if (p.forecast != null) valueForecast = p.forecast;
+      else if (i === lastHist && lastHist >= 0) valueForecast = (src[lastHist]!.value as number);
+      else valueForecast = undefined;
+      return { month: p.label, value, ...(valueForecast != null && { valueForecast }) };
     });
   }
 
-  function toMrrChartData(series: ChartPoint[]) {
-    const lastHist = series.reduce<number>((acc, p, i) => (p.value != null ? i : acc), -1);
-    return series.map((p, i) => {
-      const mrr = p.value;
-      let mrrForecast: number | null | undefined;
-      if (p.forecast != null) mrrForecast = p.forecast;
-      else if (i === lastHist && lastHist >= 0) mrrForecast = (series[lastHist]!.value as number);
-      else mrrForecast = undefined;
-      return { month: p.label, mrr, ...(mrrForecast != null && { mrrForecast }) };
-    });
+  function getChartDataForMetric(metricKey: string): MetricChartDataPoint[] {
+    const series = seriesByKey[metricKey] ?? [];
+    const extended = extendedByKey[metricKey];
+    const useForecast = extended != null;
+    return toMetricChartData(series, useForecast, extended ?? series);
   }
 
-  function toBurnChartData(series: ChartPoint[]) {
-    const lastHist = series.reduce<number>((acc, p, i) => (p.value != null ? i : acc), -1);
-    return series.map((p, i) => {
-      const burn = p.value;
-      let burnForecast: number | null | undefined;
-      if (p.forecast != null) burnForecast = p.forecast;
-      else if (i === lastHist && lastHist >= 0) burnForecast = (series[lastHist]!.value as number);
-      else burnForecast = undefined;
-      return { month: p.label, burn, ...(burnForecast != null && { burnForecast }) };
-    });
+  function hasDataForMetric(metricKey: string): boolean {
+    const series = seriesByKey[metricKey] ?? [];
+    return series.some((p) => p.value !== null);
   }
-
-  const arrChartData = useMemo(() => toArrChartData(arrExtended), [arrExtended]);
-  const mrrChartData = useMemo(() => toMrrChartData(mrrExtended), [mrrExtended]);
-  const burnChartData = useMemo(() => toBurnChartData(burnExtended), [burnExtended]);
-  const hasAnyChartData = arrChartData.length > 0 || mrrChartData.length > 0 || burnChartData.length > 0;
-
-  // Keep activeChart in sync with available data (e.g. default to first available)
-  useEffect(() => {
-    if (!hasAnyChartData) return;
-    const hasArr = arrChartData.length > 0;
-    const hasMrr = mrrChartData.length > 0;
-    const hasBurn = burnChartData.length > 0;
-    const currentHasData =
-      (activeChart === "arr" && hasArr) || (activeChart === "mrr" && hasMrr) || (activeChart === "burn" && hasBurn);
-    if (!currentHasData) {
-      if (hasArr) setActiveChart("arr");
-      else if (hasMrr) setActiveChart("mrr");
-      else if (hasBurn) setActiveChart("burn");
-    }
-  }, [hasAnyChartData, arrChartData.length, mrrChartData.length, burnChartData.length, activeChart]);
 
   const [stripeStatus, setStripeStatus] = useState<{
     status: "not_connected" | "pending" | "connected";
@@ -167,8 +171,22 @@ function OverviewPageContentInner() {
     if (company?.id) {
       loadKpiHistory(company.id);
       loadStripeStatus(company.id);
+      loadMetricInference(company.id);
     }
   }, [company?.id]);
+
+  // Refetch overview data when user returns to the tab (e.g. after syncing on dashboard)
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState !== "visible" || !companyId) return;
+      refetch();
+      loadKpiHistory(companyId);
+      loadMetricInference(companyId);
+      loadStripeStatus(companyId);
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [companyId, refetch]);
 
   async function loadKpiHistory(companyId: string) {
     setLoadingKpiHistory(true);
@@ -456,35 +474,37 @@ function OverviewPageContentInner() {
   const kpis = latestSnapshotRow?.kpis ?? null;
   const displayArr = kpis != null ? extractKpiNumber(kpis, "arr") : null;
   const displayMrr = kpis != null ? extractKpiNumber(kpis, "mrr") : null;
-  const displayGrowth = kpis != null ? (extractKpiNumber(kpis, "mrr_growth_mom") ?? extractKpiNumber(kpis, "growth_percent")) : null;
+  const displayCashBalance = kpis != null ? extractKpiNumber(kpis, "cash_balance") : null;
   const displayBurnRate = kpis != null ? extractKpiNumber(kpis, "burn_rate") : null;
   const displayRunwayMonths = kpis != null ? extractKpiNumber(kpis, "runway_months") : null;
   const displayChurn = kpis != null ? extractKpiNumber(kpis, "churn") : null;
 
   const inferenceMetricToSnapshot: Record<string, { key: string; format: "currency" | "percent" | "runway" | "number" }> = {
-    MRR: { key: "mrr", format: "currency" },
-    ARR: { key: "arr", format: "currency" },
-    Growth: { key: "mrr_growth_mom", format: "percent" },
-    "Growth (MoM)": { key: "mrr_growth_mom", format: "percent" },
-    "Burn rate": { key: "burn_rate", format: "currency" },
+    "Cash Balance": { key: "cash_balance", format: "currency" },
+    "Cash balance": { key: "cash_balance", format: "currency" },
+    Cash: { key: "cash_balance", format: "currency" },
     Burn: { key: "burn_rate", format: "currency" },
+    "Burn rate": { key: "burn_rate", format: "currency" },
     Runway: { key: "runway_months", format: "runway" },
     Churn: { key: "churn", format: "percent" },
+    MRR: { key: "mrr", format: "currency" },
+    ARR: { key: "arr", format: "currency" },
     "Monthly revenue": { key: "mrr", format: "currency" },
     "Annual revenue": { key: "arr", format: "currency" },
     "Number of customers": { key: "customers", format: "number" },
     Customers: { key: "customers", format: "number" },
-    "Cash balance": { key: "cash_balance", format: "currency" },
-    Cash: { key: "cash_balance", format: "currency" },
-    "Revenue trend": { key: "mrr_growth_mom", format: "percent" },
   };
-  type KeyMetricItem = { label: string; value: string; sublabel: string };
+  type KeyMetricItem = { label: string; value: string; sublabel: string; metricKey: string };
   const keyMetricsDisplayList: KeyMetricItem[] = (() => {
     if (metricInference?.primaryMetricsTable && metricInference.primaryMetricsTable.length > 0) {
-      return metricInference.primaryMetricsTable.map((row) => {
+      const excludeGrowth = (metric: string) =>
+        /^(Growth\s*\(?MoM\)?|Growth|Revenue trend)$/i.test(metric.trim());
+      return metricInference.primaryMetricsTable
+        .filter((row) => !excludeGrowth(row.metric))
+        .map((row) => {
         const mapping = inferenceMetricToSnapshot[row.metric] ?? inferenceMetricToSnapshot[row.metric.trim()];
         let value: string;
-        const sublabel = row.confidence ? `Confidence: ${row.confidence}` : "";
+        let sublabel = row.confidence ? `Confidence: ${row.confidence}` : "";
         if (mapping && kpis != null) {
           const snapshotVal = extractKpiNumber(kpis, mapping.key as keyof typeof kpis);
           if (snapshotVal != null) {
@@ -498,17 +518,27 @@ function OverviewPageContentInner() {
         } else {
           value = row.value === "N/A" || row.value === null ? "—" : typeof row.value === "number" ? formatMoney(row.value) : String(row.value);
         }
-        const label = row.metric === "Burn Rate" || row.metric === "Burn rate" ? "Burn" : row.metric;
-        return { label, value, sublabel };
+        let label = row.metric === "Burn Rate" || row.metric === "Burn rate" ? "Burn" : row.metric;
+        const metricKey = mapping?.key ?? "cash_balance";
+        const burnNum = metricKey === "burn_rate" ? (kpis != null ? extractKpiNumber(kpis, "burn_rate") : typeof row.value === "number" ? row.value : null) : null;
+        if (burnNum != null && burnNum < 0) {
+          label = "Profit";
+          value = formatMoney(Math.abs(burnNum));
+          sublabel = "Cash inflow";
+        }
+        return { label, value, sublabel, metricKey };
       });
     }
+    const burnLabel = displayBurnRate != null && displayBurnRate < 0 ? "Profit" : displayBurnRate === 0 ? "Profit" : "Burn";
+    const burnValue = displayBurnRate == null ? null : displayBurnRate < 0 ? Math.abs(displayBurnRate) : displayBurnRate;
+    const burnSublabel = displayBurnRate != null && displayBurnRate < 0 ? "Cash inflow" : displayBurnRate === 0 ? "Breaking even" : "Monthly burn";
     return [
-      { label: "ARR", value: formatMoney(displayArr), sublabel: "Annual recurring revenue" },
-      { label: "MRR", value: formatMoney(displayMrr), sublabel: "Monthly recurring revenue" },
-      { label: "Growth", value: formatPercent(displayGrowth), sublabel: "MRR growth (last 12 months)" },
-      { label: "Burn", value: formatMoney(displayBurnRate), sublabel: "Monthly burn" },
-      { label: "Runway", value: formatRunway(displayRunwayMonths), sublabel: "Estimated runway at current burn" },
-      { label: "Churn", value: formatPercent(displayChurn), sublabel: "MRR churn rate" },
+      { label: "Cash Balance", value: formatMoney(displayCashBalance), sublabel: "Cash on hand", metricKey: "cash_balance" },
+      { label: burnLabel, value: burnValue != null ? formatMoney(burnValue) : "—", sublabel: burnSublabel, metricKey: "burn_rate" },
+      { label: "Runway", value: formatRunway(displayRunwayMonths), sublabel: "Estimated runway at current burn", metricKey: "runway_months" },
+      { label: "Churn", value: formatPercent(displayChurn), sublabel: "MRR churn rate", metricKey: "churn" },
+      { label: "ARR", value: formatMoney(displayArr), sublabel: "Annual recurring revenue", metricKey: "arr" },
+      { label: "MRR", value: formatMoney(displayMrr), sublabel: "Monthly recurring revenue", metricKey: "mrr" },
     ];
   })();
 
@@ -613,11 +643,21 @@ function OverviewPageContentInner() {
           </Button>
         </div>
 
-        {/* Key metrics: from AI agent (primaryMetricsTable) when available, else fixed six */}
+        {/* Key metrics: drag from here to the chart below */}
         <div className="mb-8">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
             {keyMetricsDisplayList.map((item) => (
-              <KpiCard key={item.label} label={item.label} value={item.value} sublabel={item.sublabel} />
+              <div
+                key={item.label}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData("metric", item.metricKey);
+                  e.dataTransfer.effectAllowed = "move";
+                }}
+                className="cursor-grab active:cursor-grabbing h-full min-h-0 [&>div]:h-full"
+              >
+                <KpiCard label={item.label} value={item.value} sublabel={item.sublabel} />
+              </div>
             ))}
           </div>
           {metricInference?.whyHigherLevelNotUsed && (
@@ -631,112 +671,44 @@ function OverviewPageContentInner() {
           />
         </div>
 
-        {/* Chart carousel — ARR · MRR · Burn rate (with prognose) */}
-        {!loadingKpiHistory && hasAnyChartData && (
+        {/* Single chart — drag a metric from Key Metrics above to show it here */}
+        {!loadingKpiHistory && (
           <div className="mb-8">
-            <div className="relative bg-slate-900/40 rounded-xl p-5 border border-slate-700/30 light:bg-white light:border-slate-200">
-              {/* Arrow navigation when more than one chart */}
+            <div
+              className={cn(
+                "relative bg-slate-900/40 rounded-xl p-5 border-2 border-dashed transition-colors min-h-[280px]",
+                dragOverChart ? "border-[#2B74FF] bg-slate-800/50" : "border-slate-700/30 light:border-slate-300 light:bg-white light:border-slate-200"
+              )}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                setDragOverChart(true);
+              }}
+              onDragLeave={() => setDragOverChart(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOverChart(false);
+                const key = e.dataTransfer.getData("metric");
+                if (key) setChartMetric(key);
+              }}
+            >
               {(() => {
-                const available: Array<"arr" | "mrr" | "burn"> = [];
-                if (arrChartData.length > 0) available.push("arr");
-                if (mrrChartData.length > 0) available.push("mrr");
-                if (burnChartData.length > 0) available.push("burn");
-                if (available.length <= 1) return null;
-                const idx = available.indexOf(activeChart);
-                const currentIdx = idx >= 0 ? idx : 0;
-                const prevChart = available[(currentIdx - 1 + available.length) % available.length];
-                const nextChart = available[(currentIdx + 1) % available.length];
+                const metric = OVERVIEW_CHART_METRICS.find((m) => m.key === chartMetric) ?? OVERVIEW_CHART_METRICS.find((m) => m.key === "cash_balance") ?? OVERVIEW_CHART_METRICS[0];
+                const chartData = getChartDataForMetric(chartMetric);
+                const hasData = hasDataForMetric(chartMetric);
                 return (
-                  <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
-                    <button
-                      onClick={() => setActiveChart(prevChart)}
-                      className="p-2 rounded-md transition-all hover:bg-slate-800/50 text-slate-400 hover:text-white"
-                      aria-label="Previous chart"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => setActiveChart(nextChart)}
-                      className="p-2 rounded-md transition-all hover:bg-slate-800/50 text-slate-400 hover:text-white"
-                      aria-label="Next chart"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </button>
-                  </div>
+                  <>
+                    <h3 className="text-sm font-medium text-slate-200 mb-2 light:text-slate-800">{metric.label}</h3>
+                    {!hasData ? (
+                      <div className="w-full h-64 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 flex items-center justify-center light:bg-slate-50 light:border-slate-200">
+                        <p className="text-sm text-slate-400 light:text-slate-500">Drag a metric from Key Metrics above to show it here.</p>
+                      </div>
+                    ) : (
+                      <MetricChart data={chartData} metricLabel={metric.label} format={metric.format} />
+                    )}
+                  </>
                 );
               })()}
-
-              {/* Chart title */}
-              <h3 className="text-sm font-medium text-slate-200 mb-2 light:text-slate-800">
-                {activeChart === "arr" ? "ARR" : activeChart === "mrr" ? "MRR" : "Burn rate"}
-              </h3>
-              {/* Chart content */}
-              <div className="relative min-h-[280px]">
-                {arrChartData.length > 0 && (
-                  <div
-                    className={`transition-opacity duration-300 ${
-                      activeChart === "arr" ? "opacity-100 relative" : "opacity-0 absolute inset-0 pointer-events-none"
-                    }`}
-                  >
-                    <ArrChart data={arrChartData} />
-                  </div>
-                )}
-                {mrrChartData.length > 0 && (
-                  <div
-                    className={`transition-opacity duration-300 ${
-                      activeChart === "mrr" ? "opacity-100 relative" : "opacity-0 absolute inset-0 pointer-events-none"
-                    }`}
-                  >
-                    <MrrChart data={mrrChartData} />
-                  </div>
-                )}
-                {burnChartData.length > 0 && (
-                  <div
-                    className={`transition-opacity duration-300 ${
-                      activeChart === "burn" ? "opacity-100 relative" : "opacity-0 absolute inset-0 pointer-events-none"
-                    }`}
-                  >
-                    <BurnChart data={burnChartData} />
-                  </div>
-                )}
-              </div>
-
-              {/* Dots: ARR · MRR · Burn */}
-              {hasAnyChartData && (
-                <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t border-slate-700/30">
-                  {arrChartData.length > 0 && (
-                    <button
-                      onClick={() => setActiveChart("arr")}
-                      className={`h-2 rounded-full transition-all ${
-                        activeChart === "arr" ? "w-8 bg-[#2B74FF]" : "w-2 bg-slate-600 hover:bg-slate-500"
-                      }`}
-                      aria-label="Show ARR chart"
-                    />
-                  )}
-                  {mrrChartData.length > 0 && (
-                    <button
-                      onClick={() => setActiveChart("mrr")}
-                      className={`h-2 rounded-full transition-all ${
-                        activeChart === "mrr" ? "w-8 bg-[#2B74FF]" : "w-2 bg-slate-600 hover:bg-slate-500"
-                      }`}
-                      aria-label="Show MRR chart"
-                    />
-                  )}
-                  {burnChartData.length > 0 && (
-                    <button
-                      onClick={() => setActiveChart("burn")}
-                      className={`h-2 rounded-full transition-all ${
-                        activeChart === "burn" ? "w-8 bg-[#2B74FF]" : "w-2 bg-slate-600 hover:bg-slate-500"
-                      }`}
-                      aria-label="Show Burn chart"
-                    />
-                  )}
-                </div>
-              )}
             </div>
           </div>
         )}

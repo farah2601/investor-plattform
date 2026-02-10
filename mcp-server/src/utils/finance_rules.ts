@@ -1,15 +1,10 @@
 /**
- * Hard Finance Rules for KPI Calculations
- * 
- * STRICT RULES to prevent sign confusion and ensure financial logic is correct:
- * 
- * 1. net_cash_flow > 0 => burn = 0, label "cash-flow positive"
- * 2. burn = max(0, -net_cash_flow)  (burn is always >= 0)
- * 3. runway only computed when burn > 0; otherwise runway = null with label "Not applicable (cash-flow positive)"
- * 4. Validation rejects outputs that violate these rules
- * 
- * Acceptance: No scenario where positive net cash flow becomes positive burn,
- * and runway never shown when burn <= 0.
+ * Finance rules: profit vs burn
+ *
+ * - net_cash_flow > 0 => profit (money in). We store this as burn_rate = -net_cash_flow (negative = profit).
+ * - net_cash_flow < 0 => burn (money out). burn_rate = -net_cash_flow (positive).
+ * So burn_rate = -net_cash_flow when net is known: negative burn = profit, positive burn = burn.
+ * - Runway only when burn_rate > 0 (actually burning). When burn_rate <= 0 (profit or break-even), runway = null.
  */
 
 import { parseSheetNumber, parseNetCashFlow, type ParsedNumber } from "./robust_number_parser";
@@ -38,26 +33,19 @@ export type ValidationResult = {
 };
 
 /**
- * Apply hard finance rules to compute burn and runway
- * 
- * HARD RULES:
- * - burn is ALWAYS non-negative (>= 0)
- * - burn = 0 when net_cash_flow > 0 (cash inflow)
- * - burn = -net_cash_flow when net_cash_flow < 0 (cash outflow)
- * - runway = null when burn <= 0 (not burning cash)
- * - runway = cash / burn when burn > 0
+ * Apply finance rules: burn_rate = -net_cash_flow when net is known.
+ * Negative burn = profit (cash in), positive burn = burn (cash out). Runway only when burn > 0.
  */
 export function applyFinanceRules(
   netCashFlowRaw: unknown,
   burnRateRaw: unknown,
   cashBalanceRaw: unknown,
   options?: {
-    preferReportedBurn?: boolean; // If true, use reported burn unless it violates rules
+    preferReportedBurn?: boolean; // If true, use reported burn unless it diverges from net
   }
 ): FinanceMetrics {
   const warnings: string[] = [];
   
-  // Parse inputs with robust parser
   const netParsed = parseSheetNumber(netCashFlowRaw);
   const burnParsed = parseSheetNumber(burnRateRaw);
   const cashParsed = parseSheetNumber(cashBalanceRaw);
@@ -69,81 +57,40 @@ export function applyFinanceRules(
   let burnRate: number | null = null;
   let burnDerivation: "from_net_cash_flow" | "reported" | "computed" = "computed";
   
-  // HARD RULE 1: If net_cash_flow exists, use it to compute burn (unless preferReportedBurn)
   if (netCashFlow !== null) {
-    if (netCashFlow > 0) {
-      // Cash inflow: not burning
-      burnRate = 0;
-      burnDerivation = "from_net_cash_flow";
-      warnings.push("Net cash flow is positive (inflow); burn set to 0 (cash-flow positive).");
-    } else if (netCashFlow < 0) {
-      // Cash outflow: burning
-      const burnFromNet = -netCashFlow; // Convert to positive
-      
-      // If reported burn exists, validate against net
-      if (reportedBurn !== null && options?.preferReportedBurn) {
-        const absoluteReportedBurn = Math.abs(reportedBurn);
-        const divergence = Math.abs(absoluteReportedBurn - burnFromNet) / burnFromNet;
-        
-        if (divergence > 0.10) {
-          // >10% divergence: use net_cash_flow as source of truth
-          warnings.push(`Reported burn (${absoluteReportedBurn}) diverges ${(divergence * 100).toFixed(0)}% from net cash flow (${burnFromNet}). Using net cash flow as source of truth.`);
-          burnRate = burnFromNet;
-          burnDerivation = "from_net_cash_flow";
-        } else {
-          // Close enough: use reported
-          burnRate = absoluteReportedBurn;
-          burnDerivation = "reported";
-        }
-      } else {
-        // No reported burn, or not preferring it: use net
-        burnRate = burnFromNet;
-        burnDerivation = "from_net_cash_flow";
-      }
-    } else {
-      // Net = 0: breaking even
-      burnRate = 0;
-      burnDerivation = "from_net_cash_flow";
-      warnings.push("Net cash flow is zero (breaking even); burn set to 0.");
-    }
+    // burn_rate = -net_cash_flow: positive net → negative burn (profit), negative net → positive burn
+    burnRate = -netCashFlow;
+    burnDerivation = "from_net_cash_flow";
+    if (burnRate > 0) { /* burning */ } else if (burnRate < 0) { warnings.push("Profit (cash inflow)."); } else { warnings.push("Breaking even."); }
   } else if (reportedBurn !== null) {
-    // No net_cash_flow, but have reported burn
-    // HARD RULE: Burn must be non-negative
-    burnRate = Math.abs(reportedBurn);
+    burnRate = reportedBurn;
     burnDerivation = "reported";
-    
     if (reportedBurn < 0) {
-      warnings.push(`Reported burn was negative (${reportedBurn}); converted to positive (${burnRate}).`);
+      warnings.push("Negative burn = profit (from sheet).");
     }
   }
   
-  // HARD RULE 2: Runway calculation
   let runwayMonths: number | null = null;
   let runwayStatus: "active" | "not_applicable" | "missing_data" = "missing_data";
   let runwayLabel: string | undefined;
   
   if (burnRate !== null && cashBalance !== null) {
     if (burnRate <= 0) {
-      // HARD RULE: No runway when not burning
       runwayMonths = null;
       runwayStatus = "not_applicable";
-      runwayLabel = "Not applicable (cash-flow positive)";
+      runwayLabel = burnRate < 0 ? "Not applicable (profit)" : "Not applicable (breaking even)";
     } else {
-      // Normal case: burning cash
       runwayMonths = cashBalance / burnRate;
       runwayStatus = "active";
-      
-      // Sanity cap at 999 months (likely data error if higher)
       if (runwayMonths > 999) {
-        warnings.push(`Runway ${runwayMonths.toFixed(1)} months seems unrealistic; capping at 999. Check cash and burn values.`);
+        warnings.push(`Runway ${runwayMonths.toFixed(1)} months capped at 999.`);
         runwayMonths = 999;
       }
     }
   } else if (burnRate !== null && burnRate <= 0) {
-    // Burn is 0 but no cash balance: still mark as cash-flow positive
     runwayMonths = null;
     runwayStatus = "not_applicable";
-    runwayLabel = "Not applicable (cash-flow positive)";
+    runwayLabel = burnRate < 0 ? "Not applicable (profit)" : "Not applicable (breaking even)";
   }
   
   return {
@@ -169,52 +116,23 @@ export function validateFinanceRules(metrics: FinanceMetrics): ValidationResult 
   const errors: string[] = [];
   const warnings: string[] = [...(metrics.warnings || [])];
   
-  // RULE 1: Burn must be non-negative
-  if (metrics.burn_rate !== null && metrics.burn_rate < 0) {
-    errors.push(`VIOLATION: Burn rate cannot be negative. Got: ${metrics.burn_rate}`);
+  // Negative burn = profit (allowed). When net > 0, burn should be negative.
+  if (metrics.net_cash_flow !== null && metrics.net_cash_flow > 0 && metrics.burn_rate !== null && metrics.burn_rate > 0) {
+    errors.push(`Positive net (profit) but burn > 0. When profit, burn should be negative.`);
   }
-  
-  // RULE 2: If net_cash_flow > 0, burn must be 0
-  if (metrics.net_cash_flow !== null && metrics.net_cash_flow > 0) {
-    if (metrics.burn_rate !== null && metrics.burn_rate > 0) {
-      errors.push(`VIOLATION: Positive net cash flow (${metrics.net_cash_flow}) but burn > 0 (${metrics.burn_rate}). When cash inflow, burn must be 0.`);
-    }
+  if (metrics.net_cash_flow !== null && metrics.net_cash_flow < 0 && metrics.burn_rate !== null && metrics.burn_rate < 0) {
+    errors.push(`Negative net (burn) but burn_rate negative. When burning, burn should be positive.`);
   }
-  
-  // RULE 3: If net_cash_flow < 0, burn should equal -net_cash_flow (or close)
-  if (metrics.net_cash_flow !== null && metrics.net_cash_flow < 0) {
-    const expectedBurn = -metrics.net_cash_flow;
-    if (metrics.burn_rate !== null) {
-      const divergence = Math.abs(metrics.burn_rate - expectedBurn) / expectedBurn;
-      if (divergence > 0.15) {
-        warnings.push(`Burn (${metrics.burn_rate}) diverges ${(divergence * 100).toFixed(0)}% from net cash flow (-${metrics.net_cash_flow}). May indicate inconsistent data.`);
-      }
-    }
+  if (metrics.burn_rate !== null && metrics.burn_rate <= 0 && metrics.runway_months !== null) {
+    errors.push(`Runway must be null when not burning (burn <= 0 or profit).`);
   }
-  
-  // RULE 4: Runway must be null when burn <= 0
-  if (metrics.burn_rate !== null && metrics.burn_rate <= 0) {
-    if (metrics.runway_months !== null) {
-      errors.push(`VIOLATION: Runway (${metrics.runway_months}) shown when burn <= 0. Runway must be null when not burning cash.`);
-    }
-    if (metrics.runway_status !== "not_applicable" && metrics.runway_status !== "missing_data") {
-      errors.push(`VIOLATION: Runway status must be "not_applicable" when burn <= 0. Got: ${metrics.runway_status}`);
-    }
-  }
-  
-  // RULE 5: Runway must be positive when calculated
-  if (metrics.runway_months !== null && metrics.runway_months <= 0) {
-    errors.push(`VIOLATION: Runway cannot be zero or negative. Got: ${metrics.runway_months}`);
-  }
-  
-  // RULE 6: Runway requires both cash and burn > 0
   if (metrics.runway_status === "active" && metrics.runway_months !== null) {
-    if (metrics.cash_balance === null) {
-      errors.push(`VIOLATION: Runway active (${metrics.runway_months}) but cash_balance is null.`);
+    if (metrics.cash_balance === null || metrics.burn_rate === null || metrics.burn_rate <= 0) {
+      errors.push(`Runway active requires cash and positive burn.`);
     }
-    if (metrics.burn_rate === null || metrics.burn_rate <= 0) {
-      errors.push(`VIOLATION: Runway active (${metrics.runway_months}) but burn_rate is null or <= 0.`);
-    }
+  }
+  if (metrics.runway_months !== null && metrics.runway_months <= 0) {
+    errors.push(`Runway cannot be zero or negative.`);
   }
   
   return {
@@ -225,35 +143,18 @@ export function validateFinanceRules(metrics: FinanceMetrics): ValidationResult 
 }
 
 /**
- * Helper: Convert net cash flow to burn rate
- * 
- * Net cash flow semantics:
- * - Positive = cash inflow (good) → burn = 0
- * - Negative = cash outflow (burning) → burn = abs(net)
- * - Zero = breaking even → burn = 0
+ * Convert net cash flow to burn rate: burn = -net. Negative burn = profit.
  */
 export function netCashFlowToBurn(netCashFlow: number | null): number | null {
-  if (netCashFlow === null) {
-    return null;
-  }
-  
-  // HARD RULE: burn = max(0, -net_cash_flow)
-  return Math.max(0, -netCashFlow);
+  return netCashFlow === null ? null : -netCashFlow;
 }
 
 /**
- * Helper: Determine if company is cash-flow positive
+ * Company is cash-flow positive (profit or break-even) when net > 0 or burn <= 0.
  */
 export function isCashFlowPositive(metrics: FinanceMetrics): boolean {
-  // Cash-flow positive if:
-  // 1. Net cash flow > 0, OR
-  // 2. Burn rate = 0
-  if (metrics.net_cash_flow !== null && metrics.net_cash_flow > 0) {
-    return true;
-  }
-  if (metrics.burn_rate !== null && metrics.burn_rate === 0) {
-    return true;
-  }
+  if (metrics.net_cash_flow !== null && metrics.net_cash_flow > 0) return true;
+  if (metrics.burn_rate !== null && metrics.burn_rate <= 0) return true;
   return false;
 }
 
@@ -267,16 +168,14 @@ export function getFinanceStatusDescription(metrics: FinanceMetrics): {
   let burn_description = "";
   let runway_description = "";
   
-  // Burn description
   if (metrics.burn_rate === null) {
     burn_description = "Burn rate not available (missing data).";
+  } else if (metrics.burn_rate < 0) {
+    burn_description = `Profit: ${Math.abs(metrics.burn_rate).toLocaleString()} per month (cash inflow).`;
   } else if (metrics.burn_rate === 0) {
-    burn_description = "Not burning cash (cash-flow positive). Company is profitable or breaking even.";
+    burn_description = "Breaking even (no burn, no profit).";
   } else {
     burn_description = `Burning ${metrics.burn_rate.toLocaleString()} per month (cash outflow).`;
-    if (metrics.burn_derivation === "from_net_cash_flow") {
-      burn_description += " Derived from net cash flow.";
-    }
   }
   
   // Runway description
@@ -316,16 +215,16 @@ export function runFinanceRulesTests() {
   let passed = 0;
   let failed = 0;
   
-  // Test 1: Positive net cash flow → burn = 0
+  // Test 1: Positive net (profit) → negative burn
   {
     const metrics = applyFinanceRules(5000, null, 100000); // net = +5000
     const validation = validateFinanceRules(metrics);
     
-    if (metrics.burn_rate === 0 && validation.valid) {
-      console.log("✅ Test 1: Positive net cash flow → burn = 0");
+    if (metrics.burn_rate === -5000 && validation.valid) {
+      console.log("✅ Test 1: Positive net (profit) → burn = -5000");
       passed++;
     } else {
-      console.error("❌ Test 1 FAILED: Expected burn=0, got:", metrics.burn_rate);
+      console.error("❌ Test 1 FAILED: Expected burn=-5000, got:", metrics.burn_rate);
       console.error("   Validation:", validation);
       failed++;
     }
@@ -346,7 +245,7 @@ export function runFinanceRulesTests() {
     }
   }
   
-  // Test 3: Burn = 0 → runway = null, status = "not_applicable"
+  // Test 3: Profit (negative burn) → runway = null
   {
     const metrics = applyFinanceRules(5000, null, 100000);
     const validation = validateFinanceRules(metrics);
@@ -356,7 +255,7 @@ export function runFinanceRulesTests() {
       metrics.runway_status === "not_applicable" &&
       validation.valid
     ) {
-      console.log("✅ Test 3: Burn = 0 → runway = null, not_applicable");
+      console.log("✅ Test 3: Profit → runway = null, not_applicable");
       passed++;
     } else {
       console.error("❌ Test 3 FAILED: Expected runway=null & not_applicable");
@@ -388,18 +287,18 @@ export function runFinanceRulesTests() {
     }
   }
   
-  // Test 5: Validation rejects positive burn with positive net cash flow
+  // Test 5: Validation rejects positive burn with positive net (profit)
   {
     const badMetrics: FinanceMetrics = {
-      net_cash_flow: 5000, // POSITIVE (inflow)
-      burn_rate: 3000,     // POSITIVE (should be 0!)
+      net_cash_flow: 5000,
+      burn_rate: 3000,
       cash_balance: 100000,
       runway_months: null,
     };
     
     const validation = validateFinanceRules(badMetrics);
     
-    if (!validation.valid && validation.errors.some(e => e.includes("Positive net cash flow"))) {
+    if (!validation.valid && validation.errors.some(e => e.includes("Positive net") || e.includes("profit"))) {
       console.log("✅ Test 5: Validation rejects positive burn with positive net");
       passed++;
     } else {
@@ -409,19 +308,19 @@ export function runFinanceRulesTests() {
     }
   }
   
-  // Test 6: Validation rejects runway shown when burn <= 0
+  // Test 6: Validation rejects runway when burn <= 0
   {
     const badMetrics: FinanceMetrics = {
       net_cash_flow: null,
       burn_rate: 0,
       cash_balance: 100000,
-      runway_months: 10, // WRONG! Should be null
+      runway_months: 10,
       runway_status: "active",
     };
     
     const validation = validateFinanceRules(badMetrics);
     
-    if (!validation.valid && validation.errors.some(e => e.includes("Runway") && e.includes("burn <= 0"))) {
+    if (!validation.valid && validation.errors.some(e => e.includes("Runway") && (e.includes("null") || e.includes("not burning")))) {
       console.log("✅ Test 6: Validation rejects runway when burn <= 0");
       passed++;
     } else {
@@ -461,12 +360,12 @@ export function runFinanceRulesTests() {
     }
   }
   
-  // Test 9: Handles currency formats
+  // Test 9: Handles currency formats (positive net → profit = negative burn)
   {
     const metrics = applyFinanceRules("$5,000", null, "$100,000");
     const validation = validateFinanceRules(metrics);
     
-    if (metrics.net_cash_flow === 5000 && metrics.burn_rate === 0 && validation.valid) {
+    if (metrics.net_cash_flow === 5000 && metrics.burn_rate === -5000 && validation.valid) {
       console.log("✅ Test 9: Currency formats parsed correctly");
       passed++;
     } else {

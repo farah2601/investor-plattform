@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getOpenAI } from "../../llm/openai";
 import { getSheetGridForCompany } from "../../sources/sheets";
+import { applyFinanceRules } from "../../utils/finance_rules";
 import { postProcessKpis, type RowKpiMeta, type KpiKey } from "../../utils/kpi_sanity";
 
 const InputSchema = z.object({
@@ -20,7 +21,7 @@ export type MetricInferenceRow = {
   whyThisMapping: string;
 };
 
-/** One period row from the sheet: six KPIs + period_date + customers. */
+/** One period row from the sheet: six KPIs + period_date + customers; net_cash_flow/cash_balance used for finance rules. */
 export type MetricInferenceDataRow = {
   period_date: string;
   mrr: number | null;
@@ -30,6 +31,8 @@ export type MetricInferenceDataRow = {
   runway_months: number | null;
   churn: number | null;
   customers: number | null;
+  net_cash_flow?: number | null;
+  cash_balance?: number | null;
 };
 
 export type MetricInferenceOutput = {
@@ -140,17 +143,15 @@ export async function runMetricInference(input: unknown): Promise<MetricInferenc
     return `row${rowIdx} ${cells.join(" ")}`;
   }).join("\n");
 
-  const systemPrompt = `You are Valyxo's financial inference agent. Infer KPIs from the sheet semantically; do not depend on exact column names.
-Rules: Never invent numbers or periods. Always output the 6 headline KPIs (MRR, ARR, Growth MoM, Burn, Runway, Churn) using canonical definitions when data supports them, otherwise use proxies. Mark internally when a value is a proxy (proxiesUsed). Prefer null over guessing when no defensible proxy exists.`;
+  const systemPrompt = `You read a financial sheet and fill one row per period with the numbers you find. Use the meaning of columns, not just labels. Don't invent data; use null when you're not sure. Profit and burn are opposites: profit is money in, burn is money out. Put the net result in net_cash_flow so the system can tell them apart. Important: mrr and arr are money (currency); customers is a head count—only put currency amounts in mrr/arr and counts in customers.`;
 
-  const userPrompt = `Context: ${tabLabel}. ${sheetRef}
+  const userPrompt = `Sheet: ${tabLabel}. ${sheetRef}
 
-Grid:
 ${gridLines}
 
-Output one row per period with: period_date (YYYY-MM-01), mrr, arr, mrr_growth_mom, burn_rate, runway_months, churn, customers. Use proxies if needed; list them in proxiesUsed. mrr_growth_mom and churn as percentages (e.g. 6.5 for 6.5%). Max ${MAX_DATA_ROWS} rows.
+For each period, output: period_date (YYYY-MM-01), cash_balance, mrr, arr, burn_rate, runway_months, churn, customers, net_cash_flow. mrr and arr must be money amounts; customers must be a count. Prefer cash_balance when you see cash at period end. For net result (Net, P&L, profit or burn): put it in net_cash_flow—positive for profit, negative for burn. Use your judgment. Percentages as numbers (6.5 for 6.5%). Max ${MAX_DATA_ROWS} rows.
 
-Return a single JSON object with: "rows" (array), "assumptions" (array), "whatDataWouldIncreaseConfidence" (string), "proxiesUsed" (optional string). Only valid JSON, no markdown.`;
+Return JSON with "rows", "assumptions", "whatDataWouldIncreaseConfidence", and optionally "proxiesUsed".`;
 
   try {
     const openai = getOpenAI();
@@ -188,6 +189,8 @@ Return a single JSON object with: "rows" (array), "assumptions" (array), "whatDa
       runway_months?: number | null;
       churn?: number | null;
       customers?: number | null;
+      net_cash_flow?: number | null;
+      cash_balance?: number | null;
     };
     let data: {
       rows?: DataRow[];
@@ -216,16 +219,36 @@ Return a single JSON object with: "rows" (array), "assumptions" (array), "whatDa
     }
 
     const rawRows = Array.isArray(data.rows) ? data.rows : [];
-    const parsedRows: MetricInferenceDataRow[] = rawRows.slice(0, MAX_DATA_ROWS).map((r: DataRow) => ({
-      period_date: typeof r.period_date === "string" ? r.period_date : "",
-      mrr: typeof r.mrr === "number" ? r.mrr : r.mrr === null ? null : null,
-      arr: typeof r.arr === "number" ? r.arr : r.arr === null ? null : null,
-      mrr_growth_mom: typeof r.mrr_growth_mom === "number" ? r.mrr_growth_mom : r.mrr_growth_mom === null ? null : null,
-      burn_rate: typeof r.burn_rate === "number" ? r.burn_rate : r.burn_rate === null ? null : null,
-      runway_months: typeof r.runway_months === "number" ? r.runway_months : r.runway_months === null ? null : null,
-      churn: typeof r.churn === "number" ? r.churn : r.churn === null ? null : null,
-      customers: typeof r.customers === "number" ? r.customers : r.customers === null ? null : null,
-    }));
+    const parsedRows: MetricInferenceDataRow[] = rawRows.slice(0, MAX_DATA_ROWS).map((r: DataRow) => {
+      const netCf = r.net_cash_flow;
+      const net_cash_flow = typeof netCf === "number" && !Number.isNaN(netCf) ? netCf : netCf === null ? null : null;
+      const cb = r.cash_balance;
+      const cash_balance = typeof cb === "number" && !Number.isNaN(cb) ? cb : cb === null ? null : null;
+      return {
+        period_date: typeof r.period_date === "string" ? r.period_date : "",
+        mrr: typeof r.mrr === "number" ? r.mrr : r.mrr === null ? null : null,
+        arr: typeof r.arr === "number" ? r.arr : r.arr === null ? null : null,
+        mrr_growth_mom: typeof r.mrr_growth_mom === "number" ? r.mrr_growth_mom : r.mrr_growth_mom === null ? null : null,
+        burn_rate: typeof r.burn_rate === "number" ? r.burn_rate : r.burn_rate === null ? null : null,
+        runway_months: typeof r.runway_months === "number" ? r.runway_months : r.runway_months === null ? null : null,
+        churn: typeof r.churn === "number" ? r.churn : r.churn === null ? null : null,
+        customers: typeof r.customers === "number" ? r.customers : r.customers === null ? null : null,
+        net_cash_flow: net_cash_flow ?? undefined,
+        cash_balance: cash_balance ?? undefined,
+      };
+    });
+
+    // Apply finance rules so profit periods get burn_rate=0 and runway correct
+    for (const row of parsedRows) {
+      const finance = applyFinanceRules(
+        row.net_cash_flow ?? null,
+        row.burn_rate,
+        row.cash_balance ?? null,
+        { preferReportedBurn: false }
+      );
+      row.burn_rate = finance.burn_rate;
+      row.runway_months = finance.runway_months ?? (finance.runway_status === "not_applicable" ? null : row.runway_months);
+    }
 
     const { rows: sanityRows, rowMeta, logWarnings } = postProcessKpis(parsedRows, rowsToSend);
     if (logWarnings.length > 0) {
@@ -240,12 +263,12 @@ Return a single JSON object with: "rows" (array), "assumptions" (array), "whatDa
     const evidenceBase = `${tabLabel}`;
     const rationaleBase = data.proxiesUsed ?? "Values from sheet; sanity checks applied.";
     const kpiLabels: Array<{ key: KpiKey; label: string }> = [
-      { key: "mrr", label: "MRR" },
-      { key: "arr", label: "ARR" },
-      { key: "mrr_growth_mom", label: "Growth (MoM)" },
+      { key: "cash_balance", label: "Cash Balance" },
       { key: "burn_rate", label: "Burn" },
       { key: "runway_months", label: "Runway" },
       { key: "churn", label: "Churn" },
+      { key: "mrr", label: "MRR" },
+      { key: "arr", label: "ARR" },
     ];
 
     const primaryMetricsTable = latestRow

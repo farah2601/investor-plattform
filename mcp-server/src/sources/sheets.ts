@@ -9,22 +9,10 @@
  * FINANCE RULES: Applies hard rules to prevent sign confusion (burn always >= 0, runway only when burn > 0)
  */
 
-import * as fs from "fs";
-import * as path from "path";
 import { supabase } from "../db/supabase";
 import { getOpenAI } from "../llm/openai";
 import { parseSheetNumber, getSignedValue } from "../utils/robust_number_parser";
 import { applyFinanceRules, validateFinanceRules } from "../utils/finance_rules";
-
-// #region agent log
-function debugLog(payload: { location: string; message: string; data?: object; hypothesisId?: string }) {
-  const line = JSON.stringify({ ...payload, timestamp: Date.now(), sessionId: "debug-session" }) + "\n";
-  const logPath = path.join(process.cwd(), "..", ".cursor", "debug.log");
-  try {
-    fs.appendFileSync(logPath, line);
-  } catch (_) {}
-}
-// #endregion
 
 // KPI keys we support from sheets (net_revenue / booked omitted; can come from Stripe)
 const KPI_KEYS = [
@@ -43,7 +31,7 @@ type KpiKey = typeof KPI_KEYS[number];
 // Type definitions for sheet parsing
 type SheetRow = Array<string | number | null | undefined>;
 type SheetRows = SheetRow[];
-type ParsedRow = { periodDate: string; values: Record<string, number | null> };
+type ParsedRow = { periodDate: string; values: Record<string, number | null>; net_cash_flow?: number | null };
 type ParseDebug = {
   detectedLayout: string;
   totalRows: number;
@@ -52,7 +40,7 @@ type ParseDebug = {
 };
 
 // Header mapping: normalized header -> KPI key
-const HEADER_MAP: Record<string, KpiKey | "month"> = {
+const HEADER_MAP: Record<string, KpiKey | "month" | "net_cash_flow"> = {
   // Month/Date
   month: "month",
   date: "month",
@@ -100,6 +88,15 @@ const HEADER_MAP: Record<string, KpiKey | "month"> = {
   customers: "customers",
   subs: "customers",
   subscribers: "customers",
+
+  // Net cash flow (profit/burn); used for finance rules only
+  "net (in-out)": "net_cash_flow",
+  "net in-out": "net_cash_flow",
+  "net cash flow": "net_cash_flow",
+  "profit/loss": "net_cash_flow",
+  "p&l": "net_cash_flow",
+  net: "net_cash_flow",
+  result: "net_cash_flow",
 };
 
 /**
@@ -119,20 +116,26 @@ function normalizeHeader(header: string): string {
     .trim();
 }
 
-/** Result of AI grid scan: which row is header, which column is month, and column → KPI mapping for that row. */
+/** Column map can map to a KPI key or to net_cash_flow (used only for finance rules, not stored in snapshot). */
+type ColumnMapKey = KpiKey | "net_cash_flow";
+
+/** Result of AI grid scan: which row is header, which column is month, and column → field mapping. */
 type MatchColumnsAIResult = {
   headerRowIndex: number;
-  columnMap: Map<number, KpiKey>;
+  columnMap: Map<number, ColumnMapKey>;
   monthColumnIndex: number | null;
 };
 
-/** Normalize AI-returned field name to canonical KpiKey (case-insensitive, spaces → underscore, common aliases). */
-function normalizeAIFieldToKpiKey(value: string): KpiKey | null {
+/** Normalize AI-returned field name to ColumnMapKey (KPI or net_cash_flow). */
+function normalizeAIFieldToKpiKey(value: string): ColumnMapKey | null {
   const normalized = value
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "_")
     .replace(/-/g, "_");
+  if (normalized === "net_cash_flow") return "net_cash_flow";
+  const netAliases = ["net", "profit", "p&l", "profit_loss", "cash_flow", "result", "net_in_out"];
+  if (netAliases.includes(normalized)) return "net_cash_flow";
   if (KPI_KEYS.includes(normalized as KpiKey)) return normalized as KpiKey;
   const aliases: Record<string, KpiKey> = {
     burn_rate: "burn_rate",
@@ -163,26 +166,6 @@ async function matchColumnsWithAI(grid: SheetRows): Promise<MatchColumnsAIResult
   const actualMaxCols = Math.max(1, ...rowsToSend.map((r) => (r ?? []).length));
   const colsToSend = Math.min(actualMaxCols, MAX_GRID_COLS_CAP);
 
-  // #region agent log
-  debugLog({
-    location: "sheets.ts:matchColumnsWithAI:entry",
-    message: "grid sent to AI",
-    data: { rows: rowsToSend.length, cols: colsToSend },
-    hypothesisId: "H1-H3",
-  });
-  fetch("http://127.0.0.1:7242/ingest/d791096d-e9b3-45ec-a7c6-17c4fea0a92c", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      location: "sheets.ts:matchColumnsWithAI:entry",
-      message: "grid sent to AI",
-      data: { rows: rowsToSend.length, cols: colsToSend },
-      timestamp: Date.now(),
-      sessionId: "debug-session",
-      hypothesisId: "H1-H3",
-    }),
-  }).catch(() => {});
-  // #endregion
   if (!process.env.OPENAI_API_KEY) {
     console.log("[matchColumnsWithAI] OPENAI_API_KEY not set, skipping AI matching");
     return null;
@@ -195,33 +178,16 @@ async function matchColumnsWithAI(grid: SheetRows): Promise<MatchColumnsAIResult
 
   try {
     const openai = getOpenAI();
-    const prompt = `You are looking at a grid from Google Sheets. The size may vary: rows 0 to ${rowsToSend.length - 1}, columns 0 to ${colsToSend - 1}. Use what is actually shown—the header row can be anywhere (e.g. row 0 or a few rows down).
+    const prompt = `Grid from Google Sheets (rows 0–${rowsToSend.length - 1}, cols 0–${colsToSend - 1}). Header row can be anywhere. Find the header row and map each data column to a field by meaning. mrr and arr are for money (revenue); customers is for a count—map accordingly.
 
-Task: Scan the grid and find the row that contains column headers (field names). Map columns by meaning, not exact wording—e.g. "Monthly recurring revenue (USD)", "MRR", "Månedlig inntekt" should map to mrr. Also identify which column is month/period/date.
+Fields (use these exact strings): mrr, arr, mrr_growth_mom, burn_rate, cash_balance, runway_months, churn, customers.
+Also: net_cash_flow — use for Net, Profit/Loss, P&L, Cash flow, Result (positive = profit, negative = burn).
 
-KPI fields (use these exact strings in JSON):
-- mrr: monthly recurring revenue, MRR
-- arr: annual recurring revenue, ARR
-- mrr_growth_mom: MRR Growth %, Growth %, MoM growth
-- burn_rate: burn, burn rate, monthly spend
-- cash_balance: cash, cash balance
-- runway_months: runway, runway in months
-- churn: churn, Churn %
-- customers: customers, users, subscribers
-
-Grid (row 0–${rowsToSend.length - 1}, col 0–${colsToSend - 1}):
+Grid:
 ${gridLines}
 
-Return JSON with:
-- header_row_index: (number) 0-based row index of the header row.
-- month_column: (number) 0-based column index for month/period.
-- Mapping from column index (string "0", "1", …) to KPI field. Map ONLY data columns to KPI—the month/period column (month_column) must NOT be mapped to mrr, arr or any other KPI field.
+Return JSON: header_row_index (0-based), month_column (0-based), and mapping from column index "0","1",… to field name. Example: {"header_row_index":0,"month_column":0,"1":"mrr","2":"arr","3":"net_cash_flow"}. At least one data column required.`;
 
-Example when column 0 is month: {"header_row_index": 0, "month_column": 0, "1": "mrr", "2": "arr", "3": "mrr_growth_mom", "4": "burn_rate"}
-
-You MUST include at least one column in the mapping. Only header_row_index and month_column alone is invalid.`;
-
-    console.log("[matchColumnsWithAI] Sending grid rows 0–" + (rowsToSend.length - 1) + ", cols 0–" + (colsToSend - 1));
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
@@ -231,27 +197,6 @@ You MUST include at least one column in the mapping. Only header_row_index and m
 
     const raw = completion.choices?.[0]?.message?.content ?? "";
     if (!raw) return null;
-    // #region agent log
-    debugLog({
-      location: "sheets.ts:matchColumnsWithAI:raw",
-      message: "AI raw response",
-      data: { rawFirst600: raw.slice(0, 600) },
-      hypothesisId: "H2-H4",
-    });
-    fetch("http://127.0.0.1:7242/ingest/d791096d-e9b3-45ec-a7c6-17c4fea0a92c", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        location: "sheets.ts:matchColumnsWithAI:raw",
-        message: "AI raw response",
-        data: { rawFirst600: raw.slice(0, 600) },
-        timestamp: Date.now(),
-        sessionId: "debug-session",
-        hypothesisId: "H2-H4",
-      }),
-    }).catch(() => {});
-    // #endregion
-    console.log("[matchColumnsWithAI] AI raw response (first 500 chars):", raw.slice(0, 500));
 
     let parsed: Record<string, string | number>;
     try {
@@ -262,8 +207,6 @@ You MUST include at least one column in the mapping. Only header_row_index and m
       else return null;
     }
 
-    console.log("[matchColumnsWithAI] AI raw response keys:", Object.keys(parsed).join(", "));
-
     let headerRowIndex: number = 0;
     const rawHeaderRow = parsed.header_row_index;
     const hri = typeof rawHeaderRow === "number" ? rawHeaderRow : parseInt(String(rawHeaderRow ?? "0"), 10);
@@ -273,7 +216,7 @@ You MUST include at least one column in the mapping. Only header_row_index and m
     const headerRow = grid[headerRowIndex] ?? [];
     const maxCol = colsToSend;
 
-    const columnMap = new Map<number, KpiKey>();
+    const columnMap = new Map<number, ColumnMapKey>();
     let monthColumnIndex: number | null = null;
 
     // If model put mapping inside a nested object (e.g. "columns" or "mapping"), use that
@@ -283,26 +226,6 @@ You MUST include at least one column in the mapping. Only header_row_index and m
     } else if (typeof parsed.mapping === "object" && parsed.mapping !== null) {
       toIterate = parsed.mapping as Record<string, string | number>;
     }
-    // #region agent log
-    debugLog({
-      location: "sheets.ts:matchColumnsWithAI:parsed",
-      message: "parsed and toIterate keys",
-      data: { parsedKeys: Object.keys(parsed), toIterateKeys: Object.keys(toIterate), headerRowIndex },
-      hypothesisId: "H2",
-    });
-    fetch("http://127.0.0.1:7242/ingest/d791096d-e9b3-45ec-a7c6-17c4fea0a92c", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        location: "sheets.ts:matchColumnsWithAI:parsed",
-        message: "parsed and toIterate keys",
-        data: { parsedKeys: Object.keys(parsed), toIterateKeys: Object.keys(toIterate), headerRowIndex },
-        timestamp: Date.now(),
-        sessionId: "debug-session",
-        hypothesisId: "H2",
-      }),
-    }).catch(() => {});
-    // #endregion
 
     for (const [key, value] of Object.entries(toIterate)) {
       if (key === "month_column" || key === "header_row_index") {
@@ -314,54 +237,9 @@ You MUST include at least one column in the mapping. Only header_row_index and m
       }
       const index = parseInt(key, 10);
       const canonical = normalizeAIFieldToKpiKey(String(value));
-      if (isNaN(index) || index < 0 || index >= maxCol) {
-        // #region agent log
-        debugLog({
-          location: "sheets.ts:matchColumnsWithAI:skipIndex",
-          message: "skipped: invalid index",
-          data: { key, value, index, maxCol },
-          hypothesisId: "H5",
-        });
-        fetch("http://127.0.0.1:7242/ingest/d791096d-e9b3-45ec-a7c6-17c4fea0a92c", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            location: "sheets.ts:matchColumnsWithAI:skipIndex",
-            message: "skipped: invalid index",
-            data: { key, value, index, maxCol },
-            timestamp: Date.now(),
-            sessionId: "debug-session",
-            hypothesisId: "H5",
-          }),
-        }).catch(() => {});
-        // #endregion
-        continue;
-      }
-      if (!canonical) {
-        // #region agent log
-        debugLog({
-          location: "sheets.ts:matchColumnsWithAI:skipCanonical",
-          message: "skipped: normalizeAIFieldToKpiKey returned null",
-          data: { key, value, index },
-          hypothesisId: "H5",
-        });
-        fetch("http://127.0.0.1:7242/ingest/d791096d-e9b3-45ec-a7c6-17c4fea0a92c", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            location: "sheets.ts:matchColumnsWithAI:skipCanonical",
-            message: "skipped: normalizeAIFieldToKpiKey returned null",
-            data: { key, value, index },
-            timestamp: Date.now(),
-            sessionId: "debug-session",
-            hypothesisId: "H5",
-          }),
-        }).catch(() => {});
-        // #endregion
-        continue;
-      }
+      if (isNaN(index) || index < 0 || index >= maxCol) continue;
+      if (!canonical) continue;
       columnMap.set(index, canonical);
-      console.log(`[matchColumnsWithAI] row ${headerRowIndex} col ${index} "${String(headerRow[index] ?? "").trim()}" -> ${canonical}`);
     }
 
     // month_column might be at top level if mapping was nested
@@ -373,31 +251,9 @@ You MUST include at least one column in the mapping. Only header_row_index and m
       if (!isNaN(n) && n >= 0 && n < maxCol) monthColumnIndex = n;
     }
 
-    // #region agent log
-    debugLog({
-      location: "sheets.ts:matchColumnsWithAI:outcome",
-      message: "result before return",
-      data: { headerRowIndex, columnMapSize: columnMap.size, monthColumnIndex },
-      hypothesisId: "H1-H5",
-    });
-    fetch("http://127.0.0.1:7242/ingest/d791096d-e9b3-45ec-a7c6-17c4fea0a92c", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        location: "sheets.ts:matchColumnsWithAI:outcome",
-        message: "result before return",
-        data: { columnMapSize: columnMap.size, monthColumnIndex },
-        timestamp: Date.now(),
-        sessionId: "debug-session",
-        hypothesisId: "H1-H5",
-      }),
-    }).catch(() => {});
-    // #endregion
     if (columnMap.size >= 2) {
-      console.log(`[matchColumnsWithAI] header_row=${headerRowIndex}, matched ${columnMap.size} columns, month_column=${monthColumnIndex}`);
       return { headerRowIndex, columnMap, monthColumnIndex };
     }
-    console.warn("[matchColumnsWithAI] AI returned fewer than 2 columns; parsed keys:", Object.keys(parsed).join(", "));
     return null;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -422,22 +278,17 @@ async function extractSheetDataWithAI(grid: SheetRows): Promise<{ parsed: Parsed
   }).join("\n");
 
   const maxDataRows = Math.max(0, rowsToSend.length - 1);
-  const systemPrompt = `You are Valyxo's sheet parser. You receive a grid from a Google Sheet and must find the KPI values (month/period, MRR, ARR, Burn, Cash, Runway, Churn, Customers, etc.) and return them in the specified JSON format. Use only what appears in the grid—do not invent rows or numbers.`;
+  const systemPrompt = `You extract numbers from a Google Sheet into a JSON list. Use only what you see; leave null when missing. mrr and arr are currency amounts; customers is a count—do not put counts in mrr/arr or money in customers.`;
 
-  const userPrompt = `Here is an excerpt from a Google Sheet (rows are numbered, cells are columnIndex="value"):
+  const userPrompt = `Sheet (row index, then cells as columnIndex="value"):
 
 ${gridLines}
 
-Identify where month/period, MRR, ARR, Burn, Cash, Runway, Churn and Customers are, and for each data row: read the values and fill an object with the keys period_date (YYYY-MM-01), mrr, arr, mrr_growth_mom, burn_rate, cash_balance, runway_months, churn, customers. Use null where there is no value. Do not include net_revenue, net_revenue_booked, failed_payment_rate or refund_rate. Return a single JSON object with a "rows" array of such objects—only what actually appears in the sheet, max ${maxDataRows} rows.
+For each data row, one object with: period_date (YYYY-MM-01), mrr, arr, mrr_growth_mom, burn_rate, cash_balance, runway_months, churn, customers, net_cash_flow. mrr and arr = money; customers = count.
 
-IMPORTANT - NUMBER SIGNS:
-- Return numbers with correct sign: negative as negative number (e.g., -1234), positive as positive
-- If you see parentheses like "(123)" or unicode minus "−123", these are NEGATIVE numbers
-- burn_rate should always be POSITIVE (cash outflow amount, never negative)
-- If you see "Net (in-out)" with negative value, that means cash OUTFLOW (company is burning cash)
-- Percentages as numbers (e.g. 10.5 for 10.5%).
+Profit and burn are two sides of the same thing. If the sheet has a net result, put it in net_cash_flow: positive = money in, negative = money out. Use your judgment. Numbers as real values, percentages like 10.5 for 10.5%.
 
-Do NOT return formatted strings - only numeric values.`;
+Return JSON: { "rows": [ ... ] }, max ${maxDataRows} rows.`;
 
   try {
     const openai = getOpenAI();
@@ -494,20 +345,26 @@ Do NOT return formatted strings - only numeric values.`;
           values[key] = null;
         }
       }
-      if (Object.values(values).some((v) => v !== null)) {
-        parsed.push({ periodDate, values });
+      let net_cash_flow: number | null = null;
+      const ncf = row.net_cash_flow;
+      if (typeof ncf === "number" && !Number.isNaN(ncf)) {
+        net_cash_flow = ncf;
+      } else if (typeof ncf === "string") {
+        const parsedNcf = parseNumber(ncf, false);
+        if (parsedNcf !== null) net_cash_flow = parsedNcf;
+      }
+      if (Object.values(values).some((v) => v !== null) || net_cash_flow !== null) {
+        parsed.push({ periodDate, values, net_cash_flow: net_cash_flow ?? undefined });
       }
     }
 
     if (parsed.length > 0) {
-      console.log(`[extractSheetDataWithAI] Extracted ${parsed.length} rows semantically`);
-      
       // POST-PROCESSING: Apply hard finance rules to prevent sign confusion
       for (const row of parsed) {
         const { values } = row;
         
         // Look for net_cash_flow column (might be in data even if not in KPI_KEYS)
-        const netCashFlow = (row as any).net_cash_flow ?? null;
+        const netCashFlow = row.net_cash_flow ?? null;
         
         // Apply finance rules if we have the necessary data
         if (netCashFlow !== null || values.burn_rate !== null || values.cash_balance !== null) {
@@ -707,7 +564,7 @@ function scoreHeaderRow(
     if (kpiKey === "month") {
       hasMonth = true;
       score += 10;
-    } else if (kpiKey && knownKpiKeys.includes(kpiKey)) {
+    } else if (kpiKey && kpiKey !== "net_cash_flow" && knownKpiKeys.includes(kpiKey)) {
       columnMap.set(i, kpiKey);
       score += 5;
     }
@@ -793,11 +650,11 @@ function extractDataRegion(
 async function parseHorizontalLayout(
   rows: SheetRows
 ): Promise<{ parsed: ParsedRow[]; debug: ParseDebug }> {
-  const parsed: Array<{ periodDate: string; values: Record<string, number | null> }> = [];
+  const parsed: ParsedRow[] = [];
   let skippedRows = 0;
 
   let headerRowIndex: number;
-  let columnMap: Map<number, KpiKey>;
+  let columnMap: Map<number, ColumnMapKey>;
   let monthColumnIndex: number;
 
   // All via LLM: find numbers, find information, interpret – no static HEADER_MAP or findBestHeaderRow
@@ -848,16 +705,21 @@ async function parseHorizontalLayout(
     }
 
     const values: Record<string, number | null> = {};
+    let rowNetCashFlow: number | null = null;
 
-    for (const [colIndex, kpiKey] of columnMap.entries()) {
+    for (const [colIndex, fieldKey] of columnMap.entries()) {
       const rawValue = row[parseInt(String(colIndex))];
-      const isPercent = kpiKey === "churn" || kpiKey === "mrr_growth_mom";
+      const isPercent = fieldKey === "churn" || fieldKey === "mrr_growth_mom";
       const parsedValue = parseNumber(rawValue, isPercent);
-      values[kpiKey] = parsedValue;
+      if (fieldKey === "net_cash_flow") {
+        rowNetCashFlow = parsedValue;
+      } else {
+        values[fieldKey] = parsedValue;
+      }
     }
 
-    if (Object.values(values).some(v => v !== null)) {
-      parsed.push({ periodDate, values });
+    if (Object.values(values).some(v => v !== null) || rowNetCashFlow !== null) {
+      parsed.push({ periodDate, values, net_cash_flow: rowNetCashFlow ?? undefined });
     } else {
       skippedRows++;
     }
@@ -866,14 +728,14 @@ async function parseHorizontalLayout(
   // POST-PROCESSING: Apply hard finance rules to all parsed rows
   for (const row of parsed) {
     const { values } = row;
+    const netCashFlow = row.net_cash_flow ?? null;
     
-    // Apply finance rules
-    if (values.burn_rate !== null || values.cash_balance !== null) {
+    if (netCashFlow !== null || values.burn_rate !== null || values.cash_balance !== null) {
       const financeMetrics = applyFinanceRules(
-        null, // No net_cash_flow in column mapping fallback
+        netCashFlow,
         values.burn_rate,
         values.cash_balance,
-        { preferReportedBurn: true }
+        { preferReportedBurn: netCashFlow === null }
       );
       
       // Validate
@@ -951,7 +813,7 @@ function detectVerticalLayout(rows: SheetRows): boolean {
 function parseVerticalLayout(
   rows: SheetRows
 ): { parsed: ParsedRow[]; debug: ParseDebug } {
-  const parsed: Array<{ periodDate: string; values: Record<string, number | null> }> = [];
+  const parsed: ParsedRow[] = [];
   let skippedRows = 0;
 
   if (rows.length < 2) {
@@ -990,15 +852,15 @@ function parseVerticalLayout(
     };
   }
 
-  const kpiLabelMap = new Map<number, KpiKey>();
+  const kpiLabelMap = new Map<number, ColumnMapKey>();
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
     if (!row || !row[0]) continue;
 
     const normalized = normalizeHeader(String(row[0]));
-    const kpiKey = HEADER_MAP[normalized];
-    if (kpiKey && kpiKey !== "month") {
-      kpiLabelMap.set(i, kpiKey);
+    const fieldKey = HEADER_MAP[normalized];
+    if (fieldKey && fieldKey !== "month") {
+      kpiLabelMap.set(i, fieldKey);
     }
   }
 
@@ -1016,22 +878,43 @@ function parseVerticalLayout(
 
   for (const { index: monthColIndex, periodDate } of monthColumns) {
     const values: Record<string, number | null> = {};
+    let rowNetCashFlow: number | null = null;
 
-    for (const [rowIndex, kpiKey] of kpiLabelMap.entries()) {
+    for (const [rowIndex, fieldKey] of kpiLabelMap.entries()) {
       const row = rows[rowIndex];
       if (!row) continue;
 
       const rawValue = row[monthColIndex];
-      const isPercent = kpiKey === "churn" || kpiKey === "mrr_growth_mom";
+      const isPercent = fieldKey === "churn" || fieldKey === "mrr_growth_mom";
       const parsedValue = parseNumber(rawValue, isPercent);
-      values[kpiKey] = parsedValue;
+      if (fieldKey === "net_cash_flow") {
+        rowNetCashFlow = parsedValue;
+      } else {
+        values[fieldKey] = parsedValue;
+      }
     }
 
-    if (Object.values(values).some(v => v !== null)) {
-      parsed.push({ periodDate, values });
+    if (Object.values(values).some(v => v !== null) || rowNetCashFlow !== null) {
+      parsed.push({ periodDate, values, net_cash_flow: rowNetCashFlow ?? undefined });
     } else {
       skippedRows++;
     }
+  }
+
+  // Apply finance rules (same as horizontal fallback)
+  for (const row of parsed) {
+    const { values } = row;
+    const netCashFlow = row.net_cash_flow ?? null;
+    if (netCashFlow === null && values.burn_rate === null && values.cash_balance === null) continue;
+    const financeMetrics = applyFinanceRules(
+      netCashFlow,
+      values.burn_rate,
+      values.cash_balance,
+      { preferReportedBurn: netCashFlow === null }
+    );
+    if (financeMetrics.burn_rate !== null) values.burn_rate = financeMetrics.burn_rate;
+    if (financeMetrics.runway_months !== null) values.runway_months = financeMetrics.runway_months;
+    else if (financeMetrics.runway_status === "not_applicable") values.runway_months = null;
   }
 
   return {
