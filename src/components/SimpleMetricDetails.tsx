@@ -20,8 +20,12 @@ const METRIC_LABELS: Record<MetricResult["key"], string> = {
   arr: "ARR",
   growth_mom: "MoM Growth",
   burn: "Burn Rate",
+  burn_rate: "Burn Rate",
   runway: "Runway",
+  runway_months: "Runway",
   churn: "Churn",
+  cash: "Cash",
+  cash_balance: "Cash Balance",
 };
 
 const METRIC_DEFINITIONS: Record<MetricResult["key"], string> = {
@@ -29,8 +33,12 @@ const METRIC_DEFINITIONS: Record<MetricResult["key"], string> = {
   arr: "Annual Recurring Revenue: Yearly run-rate (MRR × 12)",
   growth_mom: "Month-over-Month Growth: % change in MRR vs previous month",
   burn: "Cash Outflow (Burn): Net cash spent per month. Zero when profitable.",
+  burn_rate: "Cash Outflow (Burn): Net cash spent per month. Zero when profitable.",
   runway: "Runway: Months of operation at current burn. N/A when cash-flow positive.",
+  runway_months: "Runway: Months of operation at current burn. N/A when cash-flow positive.",
   churn: "Churn Rate: % of customers lost (lost / starting customers)",
+  cash: "Cash on hand.",
+  cash_balance: "Cash Balance: Cash on hand.",
 };
 
 export function SimpleMetricDetails({ metric, onClose }: SimpleMetricDetailsProps) {
