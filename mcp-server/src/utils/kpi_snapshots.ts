@@ -2,9 +2,15 @@
  * KPI Snapshot utilities for MCP
  * 
  * Handles merging, computing derived metrics, and snapshot operations.
+ * 
+ * FINANCE RULES APPLIED:
+ * - burn_rate is always >= 0 (never negative)
+ * - runway = null when burn <= 0 (cash-flow positive)
+ * - Hard validation prevents sign confusion
  */
 
 import { supabase } from "../db/supabase";
+import { applyFinanceRules, validateFinanceRules } from "./finance_rules";
 
 type KpiSource = "stripe" | "sheet" | "manual" | "computed";
 
@@ -12,6 +18,9 @@ type KpiValue = {
   value: number | null;
   source: KpiSource;
   updated_at: string | null;
+  status?: "active" | "not_applicable" | "derived" | "missing";
+  label?: string;
+  confidence?: "High" | "Medium" | "Low";
 };
 
 export type KpiSnapshotKpis = {
@@ -47,12 +56,20 @@ const KPI_KEYS: Array<keyof KpiSnapshotKpis> = [
 function createKpiValue(
   value: number | null,
   source: KpiSource,
-  updated_at: string | null = null
+  updated_at: string | null = null,
+  options?: {
+    status?: "active" | "not_applicable" | "derived" | "missing";
+    label?: string;
+    confidence?: "High" | "Medium" | "Low";
+  }
 ): KpiValue {
   return {
     value,
     source,
     updated_at: updated_at || (value !== null ? new Date().toISOString() : null),
+    ...(options?.status && { status: options.status }),
+    ...(options?.label && { label: options.label }),
+    ...(options?.confidence && { confidence: options.confidence }),
   };
 }
 
@@ -231,22 +248,91 @@ export function computeDerivedMetrics(
   );
 
   // Runway months = cash_balance / burn_rate
+  // SYSTEM RULE: If burn <= 0, company is cash-flow positive (not burning cash)
   let runwayValue: number | null = null;
-  if (cashBalance !== null && effectiveBurn !== null && effectiveBurn > 0) {
+  let runwayOptions: {
+    status?: "active" | "not_applicable" | "derived" | "missing";
+    label?: string;
+    confidence?: "High" | "Medium" | "Low";
+  } | undefined;
+
+  if (effectiveBurn !== null && effectiveBurn <= 0) {
+    // Cash-flow positive: not burning cash (profitable or breaking even)
+    runwayValue = null;
+    runwayOptions = {
+      status: "not_applicable",
+      label: "Cash-flow positive",
+      confidence: "High",
+    };
+  } else if (cashBalance !== null && effectiveBurn !== null && effectiveBurn > 0) {
+    // Normal case: burning cash, calculate runway
     runwayValue = cashBalance / effectiveBurn;
+    runwayOptions = {
+      status: "active",
+      confidence: "High",
+    };
   }
+
   const runway_months = createKpiValue(
     runwayValue,
     "computed",
-    runwayValue !== null ? now : null
+    runwayValue !== null ? now : null,
+    runwayOptions
   );
 
+  // APPLY HARD FINANCE RULES: Validate and correct burn/runway
+  const burnValue = effectiveBurn;
+  const cashValue = cashBalance;
+  const runwayValueBeforeRules = runwayValue;
+  
+  // Apply finance rules (no net_cash_flow in this context, rely on reported burn)
+  const financeMetrics = applyFinanceRules(
+    null, // no net_cash_flow here
+    burnValue,
+    cashValue,
+    { preferReportedBurn: true }
+  );
+  
+  // Validate the results
+  const validation = validateFinanceRules(financeMetrics);
+  if (!validation.valid) {
+    console.error("[computeDerivedMetrics] Finance rule violations:", validation.errors);
+  }
+  
+  // Apply corrected burn and runway
+  const correctedBurnRate = financeMetrics.burn_rate !== null 
+    ? createKpiValue(financeMetrics.burn_rate, "computed", now)
+    : burn_rate;
+  
+  const correctedRunway = financeMetrics.runway_status === "not_applicable"
+    ? createKpiValue(
+        null,
+        "computed",
+        null,
+        {
+          status: "not_applicable",
+          label: "Cash-flow positive",
+          confidence: "High",
+        }
+      )
+    : financeMetrics.runway_months !== null
+    ? createKpiValue(
+        financeMetrics.runway_months,
+        "computed",
+        now,
+        {
+          status: "active",
+          confidence: "High",
+        }
+      )
+    : createKpiValue(null, "computed");
+  
   return {
     mrr: mrrKpi,
     arr,
     mrr_growth_mom,
-    burn_rate,
-    runway_months,
+    burn_rate: correctedBurnRate,
+    runway_months: correctedRunway,
   };
 }
 

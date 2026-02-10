@@ -31,6 +31,11 @@ export async function GET(
     }
 
     // Try to fetch with branding columns first, fallback to without them if they don't exist
+    // #region agent log
+    const fs = await import('fs');
+    fs.appendFileSync('c:\\Users\\David\\Downloads\\investor-plattform-main\\Ny mappe\\investor-plattform-main (1)\\investor-plattform\\.cursor\\debug.log', JSON.stringify({location:'companies/[id]/route.ts:34',message:'Query attempt with all columns',data:{companyId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'}) + '\n');
+    // #endregion
+    
     let { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
       .select(`
@@ -46,6 +51,7 @@ export async function GET(
         arr,
         burn_rate,
         runway_months,
+        runway_status,
         churn,
         growth_percent,
         lead_velocity,
@@ -62,10 +68,14 @@ export async function GET(
       `)
       .eq("id", companyId)
       .maybeSingle();
+    
+    // #region agent log
+    fs.appendFileSync('c:\\Users\\David\\Downloads\\investor-plattform-main\\Ny mappe\\investor-plattform-main (1)\\investor-plattform\\.cursor\\debug.log', JSON.stringify({location:'companies/[id]/route.ts:66',message:'Query result',data:{hasCompany:!!company,hasError:!!companyError,errorCode:companyError?.code,errorMessage:companyError?.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'}) + '\n');
+    // #endregion
 
-    // If query fails due to missing columns (likely migration not run), try without branding columns
+    // If query fails due to missing columns (likely migration not run), try without new columns
     if (companyError && (companyError.message?.includes("column") || companyError.message?.includes("does not exist") || companyError.code === "42703")) {
-      console.warn("[api/companies/[id]] Branding columns not found, fetching without them. Run migration to enable branding features.");
+      console.warn("[api/companies/[id]] New columns not found (runway_status, branding, etc.), fetching without them. Run migrations to enable all features.");
       const fallbackResult = await supabaseAdmin
         .from("companies")
         .select(`
@@ -97,10 +107,16 @@ export async function GET(
       company = fallbackResult.data as typeof company;
       companyError = fallbackResult.error;
       
+      // #region agent log
+      fs.appendFileSync('c:\\Users\\David\\Downloads\\investor-plattform-main\\Ny mappe\\investor-plattform-main (1)\\investor-plattform\\.cursor\\debug.log', JSON.stringify({location:'companies/[id]/route.ts:99',message:'Fallback query result',data:{hasCompany:!!company,hasError:!!companyError,errorMessage:companyError?.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'}) + '\n');
+      // #endregion
+      
       if (company) {
+        // Set default values for missing columns
         (company as any).logo_url = null;
         (company as any).header_style = "minimal";
         (company as any).brand_color = null;
+        (company as any).runway_status = null; // Default: no special status
         (company as any).investor_view_config = { arrMrr: true, burnRunway: true, growthCharts: true, aiInsights: false, showForecast: true };
       }
     }

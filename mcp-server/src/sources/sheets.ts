@@ -4,12 +4,17 @@
  * Fetches and parses Google Sheets data for company KPIs.
  * This is the ONLY place that fetches sheets data - Next.js is just a gateway.
  * Uses AI to match column headers to KPI fields so any phrasing (e.g. "Monthly recurring revenue (USD)") is understood.
+ * 
+ * ROBUST NUMBER PARSING: Uses robust_number_parser to handle unicode minus, parentheses, currency formats
+ * FINANCE RULES: Applies hard rules to prevent sign confusion (burn always >= 0, runway only when burn > 0)
  */
 
 import * as fs from "fs";
 import * as path from "path";
 import { supabase } from "../db/supabase";
 import { getOpenAI } from "../llm/openai";
+import { parseSheetNumber, getSignedValue } from "../utils/robust_number_parser";
+import { applyFinanceRules, validateFinanceRules } from "../utils/finance_rules";
 
 // #region agent log
 function debugLog(payload: { location: string; message: string; data?: object; hypothesisId?: string }) {
@@ -423,7 +428,16 @@ async function extractSheetDataWithAI(grid: SheetRows): Promise<{ parsed: Parsed
 
 ${gridLines}
 
-Identify where month/period, MRR, ARR, Burn, Cash, Runway, Churn and Customers are, and for each data row: read the values and fill an object with the keys period_date (YYYY-MM-01), mrr, arr, mrr_growth_mom, burn_rate, cash_balance, runway_months, churn, customers. Use null where there is no value. Do not include net_revenue, net_revenue_booked, failed_payment_rate or refund_rate. Return a single JSON object with a "rows" array of such objects—only what actually appears in the sheet, max ${maxDataRows} rows. Percentages as numbers (e.g. 10.5 for 10.5%).`;
+Identify where month/period, MRR, ARR, Burn, Cash, Runway, Churn and Customers are, and for each data row: read the values and fill an object with the keys period_date (YYYY-MM-01), mrr, arr, mrr_growth_mom, burn_rate, cash_balance, runway_months, churn, customers. Use null where there is no value. Do not include net_revenue, net_revenue_booked, failed_payment_rate or refund_rate. Return a single JSON object with a "rows" array of such objects—only what actually appears in the sheet, max ${maxDataRows} rows.
+
+IMPORTANT - NUMBER SIGNS:
+- Return numbers with correct sign: negative as negative number (e.g., -1234), positive as positive
+- If you see parentheses like "(123)" or unicode minus "−123", these are NEGATIVE numbers
+- burn_rate should always be POSITIVE (cash outflow amount, never negative)
+- If you see "Net (in-out)" with negative value, that means cash OUTFLOW (company is burning cash)
+- Percentages as numbers (e.g. 10.5 for 10.5%).
+
+Do NOT return formatted strings - only numeric values.`;
 
   try {
     const openai = getOpenAI();
@@ -487,6 +501,48 @@ Identify where month/period, MRR, ARR, Burn, Cash, Runway, Churn and Customers a
 
     if (parsed.length > 0) {
       console.log(`[extractSheetDataWithAI] Extracted ${parsed.length} rows semantically`);
+      
+      // POST-PROCESSING: Apply hard finance rules to prevent sign confusion
+      for (const row of parsed) {
+        const { values } = row;
+        
+        // Look for net_cash_flow column (might be in data even if not in KPI_KEYS)
+        const netCashFlow = (row as any).net_cash_flow ?? null;
+        
+        // Apply finance rules if we have the necessary data
+        if (netCashFlow !== null || values.burn_rate !== null || values.cash_balance !== null) {
+          const financeMetrics = applyFinanceRules(
+            netCashFlow,
+            values.burn_rate,
+            values.cash_balance,
+            { preferReportedBurn: false } // Prefer net_cash_flow as source of truth
+          );
+          
+          // Validate
+          const validation = validateFinanceRules(financeMetrics);
+          if (!validation.valid) {
+            console.error(`[extractSheetDataWithAI] Finance rule violation in period ${row.periodDate}:`, validation.errors);
+            console.warn(`[extractSheetDataWithAI] Attempting to fix...`);
+          }
+          
+          // Apply corrected values
+          if (financeMetrics.burn_rate !== null) {
+            values.burn_rate = financeMetrics.burn_rate;
+          }
+          if (financeMetrics.runway_months !== null) {
+            values.runway_months = financeMetrics.runway_months;
+          } else if (financeMetrics.runway_status === "not_applicable") {
+            // Explicitly set to null when cash-flow positive
+            values.runway_months = null;
+          }
+          
+          // Log warnings
+          if (financeMetrics.warnings && financeMetrics.warnings.length > 0) {
+            console.log(`[extractSheetDataWithAI] Finance warnings for ${row.periodDate}:`, financeMetrics.warnings);
+          }
+        }
+      }
+      
       return { parsed };
     }
     return null;
@@ -599,53 +655,35 @@ function parseMonthToPeriodDate(
 
 /**
  * Parse number from string, handling various formats
+ * NOW USES ROBUST PARSER to handle unicode minus, parentheses, currency, etc.
  */
 function parseNumber(value: unknown, isPercent = false): number | null {
   if (value === null || value === undefined || value === "") {
     return null;
   }
 
-  if (typeof value === "number") {
-    if (isPercent && value <= 1 && value > 0) {
-      return value * 100;
-    }
-    return isNaN(value) ? null : value;
+  // Handle percentage symbol first
+  if (typeof value === "string" && value.includes("%")) {
+    const cleaned = value.replace(/%/g, "").trim();
+    const parsed = parseSheetNumber(cleaned);
+    return parsed ? Math.abs(parsed.signalValue) : null; // Percentages are always positive
   }
 
-  const str = String(value).trim();
-  if (!str) return null;
-
-  // Remove currency symbols, spaces
-  let cleaned = str
-    .replace(/[$€£kr,\s]/g, "")
-    .replace(/NOK|USD|EUR/gi, "")
-    .trim();
-
-  // Handle percentage
-  const hasPercent = cleaned.includes("%");
-  if (hasPercent) {
-    cleaned = cleaned.replace(/%/g, "");
-    const num = parseFloat(cleaned);
-    return isNaN(num) ? null : num;
+  // Use robust parser for all other numbers
+  const parsed = parseSheetNumber(value);
+  
+  if (parsed === null) {
+    return null;
   }
 
-  // Handle comma as decimal separator (European format)
-  const hasCommaDecimal = /^\d+,\d+$/.test(cleaned);
-  if (hasCommaDecimal) {
-    cleaned = cleaned.replace(",", ".");
-  } else {
-    cleaned = cleaned.replace(/,/g, "");
+  // Handle percent fields: if value is <= 1, treat as fraction and multiply by 100
+  const absoluteValue = Math.abs(parsed.signalValue);
+  if (isPercent && absoluteValue <= 1 && absoluteValue > 0) {
+    return absoluteValue * 100;
   }
 
-  const num = parseFloat(cleaned);
-  if (isNaN(num)) return null;
-
-  // If it's a percent field and value is <= 1, treat as fraction
-  if (isPercent && num <= 1 && num > 0) {
-    return num * 100;
-  }
-
-  return num;
+  // Return signed value (preserves sign from parser)
+  return parsed.signalValue;
 }
 
 /**
@@ -822,6 +860,42 @@ async function parseHorizontalLayout(
       parsed.push({ periodDate, values });
     } else {
       skippedRows++;
+    }
+  }
+
+  // POST-PROCESSING: Apply hard finance rules to all parsed rows
+  for (const row of parsed) {
+    const { values } = row;
+    
+    // Apply finance rules
+    if (values.burn_rate !== null || values.cash_balance !== null) {
+      const financeMetrics = applyFinanceRules(
+        null, // No net_cash_flow in column mapping fallback
+        values.burn_rate,
+        values.cash_balance,
+        { preferReportedBurn: true }
+      );
+      
+      // Validate
+      const validation = validateFinanceRules(financeMetrics);
+      if (!validation.valid) {
+        console.error(`[parseSheetData] Finance rule violation in period ${row.periodDate}:`, validation.errors);
+      }
+      
+      // Apply corrected values
+      if (financeMetrics.burn_rate !== null) {
+        values.burn_rate = financeMetrics.burn_rate;
+      }
+      if (financeMetrics.runway_months !== null) {
+        values.runway_months = financeMetrics.runway_months;
+      } else if (financeMetrics.runway_status === "not_applicable") {
+        values.runway_months = null;
+      }
+      
+      // Log warnings
+      if (financeMetrics.warnings && financeMetrics.warnings.length > 0) {
+        console.log(`[parseSheetData] Finance warnings for ${row.periodDate}:`, financeMetrics.warnings);
+      }
     }
   }
 

@@ -1,0 +1,357 @@
+{
+  "core_kpis": {
+    "mrr": {
+      "status": "missing"
+    },
+    "arr": {
+      "status": "missing"
+    },
+    "burn_rate": {
+      "status": "missing"
+    },
+    "cash_balance": {
+      "status": "missing"
+    },
+    "runway_months": {
+      "status": "missing"
+    },
+    "churn": {
+      "status": "missing"
+    }
+  },
+  "fallback_signals": [
+    {
+      "category": "traction",
+      "title": "Revenue Activity Detected",
+      "summary": "Recurring revenue not yet established, but revenue activity exists. Company is generating sales or invoices.",
+      "evidence": [
+        {
+          "description": "Recurring Revenue: 4 periods with activity, avg 6250",
+          "provenance": {
+            "sheetName": "Revenue Tracking",
+            "range": "A2:E2",
+            "timestamp": "2024-01-15T10:00:00Z",
+            "rawValue": 4500,
+            "parsedValue": 4500
+          },
+          "value": 6250
+        },
+        {
+          "description": "Total Revenue: 4 periods with activity, avg 16250",
+          "provenance": {
+            "sheetName": "Revenue Tracking",
+            "range": "A2:E2",
+            "timestamp": "2024-01-15T10:00:00Z",
+            "rawValue": 4500,
+            "parsedValue": 4500
+          },
+          "value": 16250
+        },
+        {
+          "description": "Invoices Sent: 4 periods with activity, avg 5",
+          "provenance": {
+            "sheetName": "Revenue Tracking",
+            "range": "A2:E2",
+            "timestamp": "2024-01-15T10:00:00Z",
+            "rawValue": 4500,
+            "parsedValue": 4500
+          },
+          "value": 4.5
+        }
+      ],
+      "confidence": "Medium"
+    },
+    {
+      "category": "traction",
+      "title": "Payment Activity Detected",
+      "summary": "Active payment processing via Stripe or similar. Shows customer payment flow.",
+      "evidence": [
+        {
+          "description": "Gross Volume: 4 periods, recent avg 14367",
+          "provenance": {
+            "sheetName": "Stripe Dashboard",
+            "range": "A2:E2",
+            "timestamp": "2024-01-15T10:00:00Z",
+            "rawValue": 18200,
+            "parsedValue": 18200
+          },
+          "value": 14366.666666666666
+        },
+        {
+          "description": "Payouts: 4 periods, recent avg 13667",
+          "provenance": {
+            "sheetName": "Stripe Dashboard",
+            "range": "A2:E2",
+            "timestamp": "2024-01-15T10:00:00Z",
+            "rawValue": 18200,
+            "parsedValue": 18200
+          },
+          "value": 13666.666666666666
+        }
+      ],
+      "confidence": "Medium"
+    },
+    {
+      "category": "traction",
+      "title": "Customer Base Exists",
+      "summary": "Company has measurable customer or user base. Indicates active product usage.",
+      "evidence": [
+        {
+          "description": "Active Customers: 22 as of latest period (4 data points)",
+          "provenance": {
+            "sheetName": "Customer Metrics",
+            "range": "A5:E5",
+            "timestamp": "2024-01-15T10:00:00Z",
+            "rawValue": 22,
+            "parsedValue": 22
+          },
+          "value": 22
+        },
+        {
+          "description": "Total Paid Users: 22 as of latest period (4 data points)",
+          "provenance": {
+            "sheetName": "Customer Metrics",
+            "range": "A5:E5",
+            "timestamp": "2024-01-15T10:00:00Z",
+            "rawValue": 22,
+            "parsedValue": 22
+          },
+          "value": 22
+        }
+      ],
+      "confidence": "High"
+    },
+    {
+      "category": "momentum",
+      "title": "Recurring Revenue Momentum: Growing",
+      "summary": "Recurring Revenue shows up trend over 4 periods (2023-10 to 2024-01).",
+      "evidence": [
+        {
+          "description": "Recurring Revenue: Growing (avg 23.8% MoM growth over 3 periods)",
+          "provenance": {
+            "sheetName": "Revenue Tracking",
+            "range": "A2:E2",
+            "timestamp": "2024-01-15T10:00:00Z",
+            "rawValue": 4500,
+            "parsedValue": 4500
+          },
+          "value": "23.8%"
+        }
+      ],
+      "confidence": "Medium"
+    },
+    {
+      "category": "momentum",
+      "title": "Total Revenue Momentum: Declining",
+      "summary": "Total Revenue shows down trend over 4 periods (2023-10 to 2024-01).",
+      "evidence": [
+        {
+          "description": "Total Revenue: Declining (avg -6.0% MoM growth over 3 periods)",
+          "provenance": {
+            "sheetName": "Revenue Tracking",
+            "range": "A2:E2",
+            "timestamp": "2024-01-15T10:00:00Z",
+            "rawValue": 4500,
+            "parsedValue": 4500
+          },
+          "value": "-6.0%"
+        }
+      ],
+      "confidence": "Medium"
+    },
+    {
+      "category": "momentum",
+      "title": "Customer Acquisition Activity",
+      "summary": "13 new customers in last 3 periods (avg 4/period).",
+      "evidence": [
+        {
+          "description": "New Customers: 13 total, 4 avg/period",
+          "provenance": {
+            "sheetName": "Customer Metrics",
+            "range": "A3:E3",
+            "timestamp": "2024-01-15T10:00:00Z",
+            "rawValue": 14,
+            "parsedValue": 14
+          },
+          "value": 13
+        }
+      ],
+      "confidence": "Medium"
+    },
+    {
+      "category": "momentum",
+      "title": "MRR Target Momentum: Growing",
+      "summary": "MRR Target shows up trend over 3 periods (2024-01 to 2024-03).",
+      "evidence": [
+        {
+          "description": "MRR Target: Growing (avg 22.5% MoM growth over 2 periods)",
+          "provenance": {
+            "sheetName": "Forecast 2024",
+            "range": "A2:D2",
+            "timestamp": "2024-01-15T10:00:00Z",
+            "rawValue": 15000,
+            "parsedValue": 15000
+          },
+          "value": "22.5%"
+        }
+      ],
+      "confidence": "Medium"
+    },
+    {
+      "category": "revenue_quality",
+      "title": "Customer Retention Proxy",
+      "summary": "Approximately 95.7% of customers are active (stickiness proxy). Not a direct churn measure, but indicates customer base health.",
+      "evidence": [
+        {
+          "description": "Active Customers: 22 (latest period)",
+          "provenance": {
+            "sheetName": "Customer Metrics",
+            "range": "A5:E5",
+            "timestamp": "2024-01-15T10:00:00Z",
+            "rawValue": 22,
+            "parsedValue": 22
+          },
+          "value": 22
+        },
+        {
+          "description": "Churned: 1 (latest period)",
+          "provenance": {
+            "sheetName": "Customer Metrics",
+            "range": "A5:E5",
+            "timestamp": "2024-01-15T10:00:00Z",
+            "rawValue": 22,
+            "parsedValue": 22
+          },
+          "value": 1
+        }
+      ],
+      "confidence": "Medium"
+    },
+    {
+      "category": "cost_discipline",
+      "title": "Expense Tracking in Place",
+      "summary": "4 expense categories tracked. Company monitors cost structure (cost visibility proxy).",
+      "evidence": [
+        {
+          "description": "Payroll: tracked across 4 periods, avg 19500",
+          "provenance": {
+            "sheetName": "Expenses",
+            "range": "A2:E2",
+            "timestamp": "2024-01-15T10:00:00Z",
+            "rawValue": 18000,
+            "parsedValue": 18000
+          },
+          "value": 19500
+        },
+        {
+          "description": "Cloud & SaaS: tracked across 4 periods, avg 3000",
+          "provenance": {
+            "sheetName": "Expenses",
+            "range": "A2:E2",
+            "timestamp": "2024-01-15T10:00:00Z",
+            "rawValue": 18000,
+            "parsedValue": 18000
+          },
+          "value": 3000
+        },
+        {
+          "description": "Marketing: tracked across 4 periods, avg 4250",
+          "provenance": {
+            "sheetName": "Expenses",
+            "range": "A2:E2",
+            "timestamp": "2024-01-15T10:00:00Z",
+            "rawValue": 18000,
+            "parsedValue": 18000
+          },
+          "value": 4250
+        },
+        {
+          "description": "Total Expenses: tracked across 4 periods, avg 26750",
+          "provenance": {
+            "sheetName": "Expenses",
+            "range": "A2:E2",
+            "timestamp": "2024-01-15T10:00:00Z",
+            "rawValue": 18000,
+            "parsedValue": 18000
+          },
+          "value": 26750
+        }
+      ],
+      "confidence": "High"
+    },
+    {
+      "category": "cost_discipline",
+      "title": "Cash Position Monitored",
+      "summary": "Bank balance tracked over time. Shows financial awareness and cash management.",
+      "evidence": [
+        {
+          "description": "Ending Balance: 138000 (latest), tracked over 4 periods",
+          "provenance": {
+            "sheetName": "Cash Flow",
+            "range": "A5:E5",
+            "timestamp": "2024-01-15T10:00:00Z",
+            "rawValue": 154500,
+            "parsedValue": 154500
+          },
+          "value": 138000
+        }
+      ],
+      "confidence": "High"
+    }
+  ],
+  "maturity_assessment": {
+    "level": "nascent",
+    "explanation": "Company is in early stages of financial reporting. Limited structure or forward planning visible.",
+    "evidence": []
+  },
+  "red_flags": [
+    {
+      "title": "Conflicting MRR Values",
+      "severity": "medium",
+      "evidence": [
+        "Found 3 different MRR values across sheets",
+        "Range: 10000 to 15000 (50% divergence)",
+        "Multiple definitions or sources exist without reconciliation"
+      ],
+      "recommendation": "Clarify which MRR value is the source of truth. Consolidate to single definition."
+    },
+    {
+      "title": "Forecast Potentially Presented as Actuals",
+      "severity": "medium",
+      "evidence": [
+        "Revenue Forecast contains suspiciously round numbers",
+        "No 'Actuals' column found in sheet",
+        "Values may be projections rather than actual results"
+      ],
+      "recommendation": "Clearly separate actuals from forecasts. Label columns explicitly."
+    },
+    {
+      "title": "Forecast Potentially Presented as Actuals",
+      "severity": "medium",
+      "evidence": [
+        "Expenses Budget contains suspiciously round numbers",
+        "No 'Actuals' column found in sheet",
+        "Values may be projections rather than actual results"
+      ],
+      "recommendation": "Clearly separate actuals from forecasts. Label columns explicitly."
+    },
+    {
+      "title": "Revenue vs Payout Mismatch",
+      "severity": "high",
+      "evidence": [
+        "Average revenue: 6250",
+        "Average payouts: 15325",
+        "Ratio: 245% (expected 70-98%)"
+      ],
+      "recommendation": "Reconcile revenue recognition with payment processor data. Check for timing differences or double-counting."
+    }
+  ],
+  "generated_at": "2026-02-01T18:03:40.564Z",
+  "metadata": {
+    "total_sheets_analyzed": 6,
+    "date_range": {
+      "earliest": "2023-10",
+      "latest": "2024-03"
+    }
+  }
+}

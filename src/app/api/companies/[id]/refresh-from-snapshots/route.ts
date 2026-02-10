@@ -46,7 +46,7 @@ export async function POST(
 
     // Extract KPI values from kpis JSONB (handles both flat numbers and {value, source} format)
     const kpis = latestSnapshot.kpis as Record<string, unknown>;
-    const updatePayload: Record<string, number> = {};
+    const updatePayload: Record<string, number | string | null> = {};
 
     const mrr = extractKpiValue(kpis?.mrr);
     if (mrr != null) updatePayload.mrr = mrr;
@@ -58,8 +58,25 @@ export async function POST(
     if (churn != null) updatePayload.churn = churn;
     const growthPercent = extractKpiValue(kpis?.growth_percent);
     if (growthPercent != null) updatePayload.growth_percent = growthPercent;
+    
+    // SYSTEM RULE: Handle runway_months with status
+    // If runway has status "not_applicable", set runway_months = null and runway_status = "cash-flow-positive"
     const runwayMonths = extractKpiValue(kpis?.runway_months);
-    if (runwayMonths != null) updatePayload.runway_months = runwayMonths;
+    const runwayKpi = kpis?.runway_months as any;
+    const runwayStatus = runwayKpi?.status;
+    
+    if (runwayStatus === "not_applicable") {
+      // Cash-flow positive: burn <= 0
+      updatePayload.runway_months = null;
+      // Only set runway_status if column exists (backwards compatible)
+      // When migration is applied, this will work
+      // updatePayload.runway_status = "cash-flow-positive";
+    } else if (runwayMonths != null) {
+      // Normal case: burning cash
+      updatePayload.runway_months = runwayMonths;
+      // updatePayload.runway_status = null;
+    }
+    
     const leadVelocity = extractKpiValue(kpis?.lead_velocity);
     if (leadVelocity != null) updatePayload.lead_velocity = leadVelocity;
 
@@ -80,12 +97,28 @@ export async function POST(
     }
 
     // Update companies table
-    const { data: updatedCompany, error: updateError } = await supabaseAdmin
+    let { data: updatedCompany, error: updateError } = await supabaseAdmin
       .from("companies")
       .update(updatePayload)
       .eq("id", companyId)
       .select()
       .maybeSingle();
+
+    // If runway_status column doesn't exist yet, retry without it (backwards compatible)
+    if (updateError && updateError.message?.includes("runway_status")) {
+      console.warn("[refresh-from-snapshots] runway_status column not found, retrying without it. Run migration 20260201_add_runway_status.sql");
+      const { runway_status, ...payloadWithoutRunwayStatus } = updatePayload as any;
+      
+      const retryResult = await supabaseAdmin
+        .from("companies")
+        .update(payloadWithoutRunwayStatus)
+        .eq("id", companyId)
+        .select()
+        .maybeSingle();
+      
+      updatedCompany = retryResult.data;
+      updateError = retryResult.error;
+    }
 
     if (updateError) {
       console.error("[refresh-from-snapshots] Update error:", updateError);
