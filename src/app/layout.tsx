@@ -14,21 +14,31 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Valyxo",
-  description:
-    "Founder-friendly fundraising, stakeholder communication, and reporting tools for startup founders and the investors who back them.",
-  // Next.js automatically detects favicon.ico in src/app/ directory
+  metadataBase: new URL("https://www.valyxo.com"),
+  title: "Valyxo — Stop explaining your numbers",
+  description: "Connect your systems. Get live metrics — built for startups raising capital.",
   openGraph: {
-    title: "An investor relationship hub for best-in-class founders",
-    description:
-      "Founder-friendly fundraising, stakeholder communication, and reporting tools for startup founders and the investors who back them.",
-    images: ["/_astro/open-graph-main.uAAMy7BU.jpg"],
+    siteName: "Valyxo",
     type: "website",
+    url: "https://www.valyxo.com",
+    title: "Valyxo — Stop explaining your numbers",
+    description: "Connect your systems. Get live metrics — built for startups raising capital.",
+    images: [
+      {
+        url: "/og/valyxo-og.jpg",
+        width: 1200,
+        height: 630,
+        alt: "Valyxo",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     site: "@valyxo",
     creator: "@valyxo",
+    title: "Valyxo — Stop explaining your numbers",
+    description: "Connect your systems. Get live metrics — built for startups raising capital.",
+    images: ["/og/valyxo-og.jpg"],
   },
 };
 
