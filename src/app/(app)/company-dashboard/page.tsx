@@ -26,6 +26,9 @@ import {
 import { MetricsDetailsModal } from "@/components/metrics/MetricsDetailsModal";
 import { FormattedDate } from "@/components/ui/FormattedDate";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { SimpleMetricDetails } from "@/components/SimpleMetricDetails";
+import { normalizeMetricsOutput } from "@/lib/normalizeMetrics";
+import { type MetricResult } from "@/types/metricResult";
 
 type CompanyKpi = {
   id: string;
@@ -139,6 +142,7 @@ function CompanyDashboardContent() {
   const [kpiSources, setKpiSources] = useState<Record<string, string> | null>(null); // Source metadata from latest snapshot
 
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [selectedMetric, setSelectedMetric] = useState<MetricResult | null>(null);
   const [showForecast, setShowForecast] = useState(true);
 
   // Metric inference: AI-suggested key metrics (Level 1–4); when set, key metrics section uses these instead of fixed six
@@ -210,6 +214,9 @@ function CompanyDashboardContent() {
     })();
   }, [isAuthenticated]);
 
+  // Stable primitive for effect deps so we don't re-run on every render (searchParams object identity changes)
+  const stripeQueryParam = searchParams.get("stripe");
+
   useEffect(() => {
     if (!currentCompanyId) return;
     const companyId = currentCompanyId;
@@ -265,7 +272,7 @@ function CompanyDashboardContent() {
     }
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentCompanyId, searchParams]);
+  }, [currentCompanyId, stripeQueryParam]);
 
   async function loadInsights(companyId: string) {
     setLoadingInsights(true);
@@ -454,7 +461,7 @@ function CompanyDashboardContent() {
 
     // 3) Require explicit companyId - no fallback
     const targetCompanyId = companyIdParam || currentCompanyId;
-    
+
     // If no companyId provided, don't fetch KPIs
     if (!targetCompanyId) {
       setInvestorLinks([]);
@@ -531,12 +538,13 @@ function CompanyDashboardContent() {
       const res = await fetch(`/api/companies/${targetCompanyId}`, {
         cache: "no-store",
       });
-      
+
       if (!res.ok) {
         throw new Error(`Failed to fetch company: ${res.status}`);
       }
       
       const apiData = await res.json();
+
       if (apiData?.ok && apiData?.company) {
         companiesData = [apiData.company as CompanyKpi];
         companyError = null;
@@ -722,8 +730,17 @@ function CompanyDashboardContent() {
   const displayMrr = kpis != null ? extractKpiNumber(kpis, "mrr") : null;
   const displayGrowth = kpis != null ? (extractKpiNumber(kpis, "mrr_growth_mom") ?? extractKpiNumber(kpis, "growth_percent")) : null;
   const displayBurnRate = kpis != null ? extractKpiNumber(kpis, "burn_rate") : null;
+  const displayCashBalance = kpis != null ? extractKpiNumber(kpis, "cash_balance") : null;
   const displayRunwayMonths = kpis != null ? extractKpiNumber(kpis, "runway_months") : null;
   const displayChurn = kpis != null ? extractKpiNumber(kpis, "churn") : null;
+  
+  // Calculate net cash flow to determine Profit vs Burn
+  // If burn_rate = 0, assume cash-flow positive (profit)
+  // Otherwise show burn
+  const isProfitable = displayBurnRate === 0;
+  const profitBurnValue = isProfitable ? null : displayBurnRate; // Show profit as null (we don't have exact profit amount)
+  const profitBurnLabel = isProfitable ? "Profit" : "Burn";
+  const profitBurnSublabel = isProfitable ? "Cash-flow positive" : "Monthly cash outflow";
 
   // Map inference metric name → snapshot key (for value) and format type
   const inferenceMetricToSnapshot: Record<string, { key: string; format: "currency" | "percent" | "runway" | "number" }> = {
@@ -743,6 +760,29 @@ function CompanyDashboardContent() {
     Cash: { key: "cash_balance", format: "currency" },
     "Revenue trend": { key: "mrr_growth_mom", format: "percent" },
     "Net profit/loss": { key: "mrr", format: "currency" },
+  };
+
+  // Generate normalized metrics for per-card details
+  const normalizedMetrics = kpis 
+    ? normalizeMetricsOutput(kpis, (company as any)?.kpi_currency || "USD", latestSnapshotRow?.period_date || "")
+    : [];
+  
+  // Helper to get metric by key (handles aliases)
+  const getMetric = (key: string): MetricResult | undefined => {
+    // Direct match
+    let metric = normalizedMetrics.find(m => m.key === key);
+    if (metric) return metric;
+    
+    // Aliases
+    const aliases: Record<string, string> = {
+      "burn_rate": "burn",
+      "runway_months": "runway",
+    };
+    const aliasKey = aliases[key];
+    if (aliasKey) {
+      return normalizedMetrics.find(m => m.key === aliasKey);
+    }
+    return undefined;
   };
 
   type KeyMetricItem = { label: string; value: string; sublabel: string; metricKey: string };
@@ -774,8 +814,8 @@ function CompanyDashboardContent() {
     return [
       { label: "ARR", value: formatMoney(displayArr, currency), sublabel: "Annual recurring revenue", metricKey: "arr" },
       { label: "MRR", value: formatMoney(displayMrr, currency), sublabel: "Monthly recurring revenue", metricKey: "mrr" },
-      { label: "Growth", value: formatPercent(displayGrowth), sublabel: "MRR growth (last 12 months)", metricKey: "mrr_growth_mom" },
-      { label: "Burn", value: formatMoney(displayBurnRate, currency), sublabel: "Monthly burn", metricKey: "burn_rate" },
+      { label: "Cash Balance", value: formatMoney(displayCashBalance, currency), sublabel: "Cash on hand", metricKey: "cash_balance" },
+      { label: profitBurnLabel, value: isProfitable ? "—" : formatMoney(profitBurnValue, currency), sublabel: profitBurnSublabel, metricKey: "burn_rate" },
       { label: "Runway", value: formatRunway(displayRunwayMonths), sublabel: "Estimated runway at current burn", metricKey: "runway_months" },
       { label: "Churn", value: formatPercent(displayChurn), sublabel: "MRR churn rate", metricKey: "churn" },
     ];
@@ -1342,19 +1382,27 @@ function CompanyDashboardContent() {
 
               {/* Key metrics: drag from here to chart slots below */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-                {keyMetricsDisplayList.map((item) => (
-                  <div
-                    key={item.label}
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData("metric", item.metricKey);
-                      e.dataTransfer.effectAllowed = "move";
-                    }}
-                    className="cursor-grab active:cursor-grabbing h-full min-h-0 [&>div]:h-full"
-                  >
-                    <KpiCard label={item.label} value={item.value} sublabel={item.sublabel} />
-                  </div>
-                ))}
+                {keyMetricsDisplayList.map((item) => {
+                  const metric = getMetric(item.metricKey);
+                  return (
+                    <div
+                      key={item.label}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("metric", item.metricKey);
+                        e.dataTransfer.effectAllowed = "move";
+                      }}
+                      className="cursor-grab active:cursor-grabbing h-full min-h-0 [&>div]:h-full"
+                    >
+                      <KpiCard 
+                        label={item.label} 
+                        value={item.value} 
+                        sublabel={item.sublabel}
+                        onDetailsClick={metric ? () => setSelectedMetric(metric) : undefined}
+                      />
+                    </div>
+                  );
+                })}
               </div>
               {metricInference?.whyHigherLevelNotUsed && (
                 <p className="text-xs text-slate-500 light:text-slate-600 mt-1">
@@ -1553,7 +1601,8 @@ function CompanyDashboardContent() {
             </section>
           )}
 
-          {/* COMPUTED INSIGHTS */}
+          {/* COMPUTED INSIGHTS - TEMPORARILY DISABLED */}
+          {/* 
           <section className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/80 to-slate-950/60 p-4 sm:p-6 lg:p-8 shadow-xl space-y-4">
             <div className="flex items-start justify-between">
               <div className="space-y-1">
@@ -1636,6 +1685,7 @@ function CompanyDashboardContent() {
               </div>
             )}
           </section>
+          */}
 
           {/* AGENT ACTIVITY / LOGS - System level, moved lower */}
           <section className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-5 space-y-3 light:border-slate-200 light:bg-white">
@@ -1998,6 +2048,14 @@ function CompanyDashboardContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Per-Metric Details Panel */}
+      {selectedMetric && (
+        <SimpleMetricDetails
+          metric={selectedMetric}
+          onClose={() => setSelectedMetric(null)}
+        />
+      )}
     </>
   );
 }
