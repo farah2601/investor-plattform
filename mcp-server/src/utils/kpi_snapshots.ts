@@ -23,9 +23,21 @@ type KpiValue = {
   confidence?: "High" | "Medium" | "Low";
 };
 
+/** ARR classification: run-rate (MRR×12) vs observed (multi-month average×12). */
+export type ArrType = "run_rate_arr" | "observed_arr";
+/** How ARR was computed: annualized from latest month vs averaged over months. */
+export type ArrMethod = "averaged" | "annualized";
+
+/** ARR KPI may carry classification so UI never shows unlabeled ARR. */
+export type ArrKpiValue = KpiValue & {
+  arr_type?: ArrType;
+  arr_months_used?: number;
+  arr_method?: ArrMethod;
+};
+
 export type KpiSnapshotKpis = {
   mrr: KpiValue;
-  arr: KpiValue;
+  arr: ArrKpiValue;
   mrr_growth_mom: KpiValue;
   churn: KpiValue;
   net_revenue: KpiValue;
@@ -121,6 +133,98 @@ export function extractKpiSource(kpi: unknown): KpiSource | null {
   return null;
 }
 
+/** Structural break threshold: if month-over-month relative change exceeds this, use run-rate. */
+const ARR_STRUCTURAL_BREAK_THRESHOLD = 0.5;
+
+export type ArrWithTypeResult = {
+  value: number | null;
+  arr_type: ArrType;
+  arr_months_used?: number;
+  arr_method: ArrMethod;
+};
+
+/**
+ * Compute ARR with classification (mechanical only, no LLM).
+ * - observed_arr: when >= 6 consecutive months of MRR exist, no large structural break; use avg(MRR)*12.
+ *   If >= 12 months, use last 12 months.
+ * - run_rate_arr: otherwise; latest MRR × 12, labeled as annualized from current MRR.
+ */
+export function computeArrWithType(
+  currentPeriodMrr: number | null,
+  mrrSeries: Array<{ period_date: string; mrr: number }>,
+  currentPeriodDate: string
+): ArrWithTypeResult {
+  if (currentPeriodMrr === null) {
+    return { value: null, arr_type: "run_rate_arr", arr_method: "annualized" };
+  }
+
+  const sorted = [...mrrSeries].filter((p) => p.mrr != null && Number.isFinite(p.mrr));
+  const upToCurrent = sorted.filter((p) => p.period_date <= currentPeriodDate);
+  const descending = [...upToCurrent].sort((a, b) => b.period_date.localeCompare(a.period_date));
+  const last12 = descending.slice(0, 12);
+  const last6 = descending.slice(0, 6);
+
+  const hasStructuralBreak = (window: Array<{ period_date: string; mrr: number }>): boolean => {
+    for (let i = 1; i < window.length; i++) {
+      const prev = window[i].mrr;
+      const curr = window[i - 1].mrr;
+      if (prev <= 0) continue;
+      const pct = Math.abs((curr - prev) / prev);
+      if (pct > ARR_STRUCTURAL_BREAK_THRESHOLD) return true;
+    }
+    return false;
+  };
+
+  if (last12.length >= 12) {
+    const rev = [...last12].reverse();
+    if (!hasStructuralBreak(rev)) {
+      const avg = rev.reduce((s, p) => s + p.mrr, 0) / 12;
+      return {
+        value: avg * 12,
+        arr_type: "observed_arr",
+        arr_months_used: 12,
+        arr_method: "averaged",
+      };
+    }
+  }
+
+  if (last6.length >= 6) {
+    const rev = [...last6].reverse();
+    if (!hasStructuralBreak(rev)) {
+      const avg = rev.reduce((s, p) => s + p.mrr, 0) / 6;
+      return {
+        value: avg * 12,
+        arr_type: "observed_arr",
+        arr_months_used: 6,
+        arr_method: "averaged",
+      };
+    }
+  }
+
+  return {
+    value: currentPeriodMrr * 12,
+    arr_type: "run_rate_arr",
+    arr_method: "annualized",
+  };
+}
+
+export function createArrKpiValue(
+  value: number | null,
+  source: KpiSource,
+  updated_at: string | null,
+  arr_type: ArrType,
+  arr_method: ArrMethod,
+  arr_months_used?: number
+): ArrKpiValue {
+  const base = createKpiValue(value, source, updated_at);
+  return {
+    ...base,
+    arr_type,
+    arr_method,
+    ...(arr_months_used != null && { arr_months_used }),
+  };
+}
+
 /**
  * Merge sheet values into existing snapshot KPIs with safe merge rules
  * 
@@ -193,7 +297,7 @@ export function mergeSheetValuesIntoKpis(
  * when they can be derived from other available data. Churn cannot be derived and is never computed here.
  *
  * Takes numeric values (not KpiValue objects) and returns computed KpiValue objects.
- * - arr from mrr (arr = mrr * 12)
+ * - arr is NOT set here; run_kpi_refresh sets typed ARR (run_rate_arr vs observed_arr).
  * - mrr from arr when mrr missing (mrr = arr / 12)
  * - runway_months from cash_balance / burn_rate
  * - burn_rate from cash_balance / runway_months when burn missing
@@ -219,9 +323,9 @@ export function computeDerivedMetrics(
   const effectiveMrr = mrr !== null ? mrr : (arrFromMerged !== null ? arrFromMerged / 12 : null);
   const mrrKpi = createKpiValue(effectiveMrr, "computed", effectiveMrr !== null ? now : null);
 
-  // ARR = MRR * 12 (run-rate)
+  // ARR is set by run_kpi_refresh with classification (run_rate_arr / observed_arr). Placeholder here.
   const arrValue = effectiveMrr !== null ? effectiveMrr * 12 : null;
-  const arr = createKpiValue(arrValue, "computed", arrValue !== null ? now : null);
+  const arr = createKpiValue(arrValue, "computed", arrValue !== null ? now : null) as ArrKpiValue;
 
   // MRR Growth MoM
   let mrrGrowthValue: number | null = null;

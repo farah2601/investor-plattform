@@ -4,7 +4,9 @@ import { loadSheetsKpisForCompany } from "../../sources/sheets";
 import { loadStripeKpisForCompany } from "../../sources/stripe";
 import {
   applySourcePriority,
+  computeArrWithType,
   computeDerivedMetrics,
+  createArrKpiValue,
   extractKpiValue,
   type KpiSnapshotKpis,
 } from "../../utils/kpi_snapshots";
@@ -153,8 +155,25 @@ export async function runKpiRefresh(input: unknown) {
     effective_date: string;
   }> = [];
 
+  // Build MRR series per period (stripe wins over sheet) for ARR classification
+  const sortedPeriods = Array.from(allPeriodDates).sort();
+  const periodToMrr: Record<string, number> = {};
+  for (const periodDate of sortedPeriods) {
+    const sheetRow = sheetRows.find((r) => r.period_date === periodDate);
+    const stripeRow = stripeRows.find((r) => r.period_date === periodDate);
+    const sheetMrr = sheetRow?.kpis?.mrr ?? null;
+    const stripeMrr = stripeRow?.kpis?.mrr ?? null;
+    const mrr = stripeMrr != null ? stripeMrr : sheetMrr;
+    if (typeof mrr === "number" && Number.isFinite(mrr)) {
+      periodToMrr[periodDate] = mrr;
+    }
+  }
+  const mrrSeries = sortedPeriods
+    .filter((p) => periodToMrr[p] != null)
+    .map((p) => ({ period_date: p, mrr: periodToMrr[p] as number }));
+
   // Process each period
-  for (const periodDate of Array.from(allPeriodDates).sort()) {
+  for (const periodDate of sortedPeriods) {
     // Get sheet data for this period
     const sheetRow = sheetRows.find(r => r.period_date === periodDate);
     const sheetKpis = sheetRow?.kpis || null;
@@ -233,8 +252,25 @@ export async function runKpiRefresh(input: unknown) {
     if (mergedKpis.mrr.value === null || mergedKpis.mrr.source === "computed") {
       mergedKpis.mrr = computedMetrics.mrr;
     }
+
+    // ARR: always set with classification (run_rate_arr or observed_arr)
+    const arrResult = computeArrWithType(mrrVal, mrrSeries, periodDate);
     if (mergedKpis.arr.value === null || mergedKpis.arr.source === "computed") {
-      mergedKpis.arr = computedMetrics.arr;
+      mergedKpis.arr = createArrKpiValue(
+        arrResult.value,
+        "computed",
+        arrResult.value !== null ? nowIso : null,
+        arrResult.arr_type,
+        arrResult.arr_method,
+        arrResult.arr_months_used
+      );
+    } else {
+      // Keep stripe/sheet value but label as run-rate (annualized from current MRR)
+      mergedKpis.arr = {
+        ...mergedKpis.arr,
+        arr_type: "run_rate_arr" as const,
+        arr_method: "annualized" as const,
+      };
     }
     if (mergedKpis.mrr_growth_mom.value === null || mergedKpis.mrr_growth_mom.source === "computed") {
       mergedKpis.mrr_growth_mom = computedMetrics.mrr_growth_mom;

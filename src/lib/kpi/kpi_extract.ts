@@ -55,6 +55,31 @@ export function extractKpiNumber(kpis: unknown, key: string): KPIValue {
   return Number.isFinite(num) ? num : null;
 }
 
+/** ARR classification from snapshot (run_rate_arr = annualized from current MRR; observed_arr = multi-month average). */
+export type ArrMetadata = {
+  arr_type: "run_rate_arr" | "observed_arr";
+  arr_months_used?: number;
+  arr_method: "averaged" | "annualized";
+};
+
+/**
+ * Extract ARR metadata from kpis.arr so UI can show "ARR (run-rate)" vs "ARR (observed)" and details.
+ */
+export function extractArrMetadata(kpis: unknown): ArrMetadata | null {
+  if (!kpis || typeof kpis !== "object" || kpis === null) return null;
+  const k = (kpis as Record<string, unknown>).arr;
+  if (k === null || k === undefined || typeof k !== "object") return null;
+  const o = k as Record<string, unknown>;
+  const arr_type = o.arr_type as "run_rate_arr" | "observed_arr" | undefined;
+  const arr_method = o.arr_method as "averaged" | "annualized" | undefined;
+  if (arr_type !== "run_rate_arr" && arr_type !== "observed_arr") return null;
+  return {
+    arr_type,
+    arr_method: arr_method === "averaged" || arr_method === "annualized" ? arr_method : "annualized",
+    ...(typeof o.arr_months_used === "number" && { arr_months_used: o.arr_months_used }),
+  };
+}
+
 /**
  * Check if a snapshot is valid (has at least one meaningful KPI value)
  * 

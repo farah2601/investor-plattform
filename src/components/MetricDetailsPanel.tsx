@@ -166,9 +166,11 @@ export function MetricDetailsPanel({ metric, isOpen, onClose }: MetricDetailsPan
                           </Badge>
                         </div>
                       )}
-                      <div className="flex items-center gap-2 text-xs text-slate-500">
-                        Updated: {new Date(metric.provenance.timestamp).toLocaleString()}
-                      </div>
+                      {metric.provenance.timestamp && (
+                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                          Updated: {new Date(metric.provenance.timestamp).toLocaleString()}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

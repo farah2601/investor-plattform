@@ -211,33 +211,21 @@ async function matchColumnsWithAI(
       "customers",
     ];
 
-    // Build prompt
-    const prompt = `You are a data mapping assistant. Match the following column headers from a Google Sheet to KPI field names.
+    // Build prompt (Semantic Interpreter: interprets language/structure only; proposes candidates; does not decide truth or compute values)
+    const prompt = `You are a Semantic Interpreter. You interpret language and structure only; you do not decide truth or compute values. You propose candidate mappings and list ambiguity.
 
-Available KPI fields:
-- mrr (Monthly Recurring Revenue)
-- arr (Annual Recurring Revenue)
-- burn_rate (Monthly Burn Rate)
-- churn (Churn Rate)
-- growth_percent (Growth Percentage)
-- runway_months (Runway in Months)
-- lead_velocity (Lead Velocity)
-- cash_balance (Cash Balance)
-- customers (Number of Customers)
+Available KPI field names: mrr, arr, burn_rate, churn, growth_percent, runway_months, lead_velocity, cash_balance, customers.
 
-Column headers to match:
+Column headers to interpret:
 ${headerColumns.map((col, idx) => `${idx}: "${col}"`).join("\n")}
 
-Return a JSON object mapping column index (as string) to KPI field name. Only include matches you're confident about. Skip columns that are "Month", "Year", "Måned", "År", or other date-related columns. If a column doesn't match any KPI field, don't include it.
+Propose a JSON mapping from column index (as string) to KPI field name. OMIT any column you are unsure about. Prefer rejection over guessing. Skip date-only columns ("Month", "Year", "Måned", "År"). If a header could mean multiple things, omit it or pick the best-evidence match.
 
-Example response:
-{
-  "0": "mrr",
-  "2": "burn_rate",
-  "4": "customers"
-}
+Example: {"0":"mrr","2":"burn_rate","4":"customers"}
 
-Response (JSON only, no explanation):`;
+Optionally include rejected_columns (for debug only; not an error): array of {"column_index": number, "header": string, "reason": string}. Populate only for columns you considered but rejected. Reasons must be short and factual (e.g. "ambiguous meaning", "could be forecast or actual", "label too generic").
+
+Return JSON only, no explanation.`;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -263,9 +251,10 @@ Response (JSON only, no explanation):`;
       }
     }
 
-    // Validate and build mapping
+    // Validate and build mapping (skip rejected_columns; it is optional and debug-only)
     const columnMap: { [key: number]: string } = {};
     for (const [indexStr, fieldName] of Object.entries(parsed)) {
+      if (indexStr === "rejected_columns") continue;
       const index = parseInt(indexStr);
       if (isNaN(index) || index < 0 || index >= headerColumns.length) {
         console.warn(`[matchColumnsWithAI] Invalid column index from AI: ${indexStr}`);
@@ -278,6 +267,17 @@ Response (JSON only, no explanation):`;
         console.log(`[matchColumnsWithAI] AI matched column ${index} "${headerColumns[index]}" -> ${field}`);
       } else {
         console.warn(`[matchColumnsWithAI] AI returned invalid field name: "${field}" for column ${index}`);
+      }
+    }
+
+    // Rejected-column logging (debug only; optional; not an error)
+    const rejected = parsed.rejected_columns;
+    if (Array.isArray(rejected) && rejected.length > 0) {
+      for (const item of rejected) {
+        if (item && typeof item === "object" && "column_index" in item && "reason" in item) {
+          const header = typeof (item as { header?: string }).header === "string" ? (item as { header: string }).header : "";
+          console.log("[matchColumnsWithAI] Rejected column:", { column_index: (item as { column_index: number }).column_index, header, reason: (item as { reason: string }).reason });
+        }
       }
     }
 

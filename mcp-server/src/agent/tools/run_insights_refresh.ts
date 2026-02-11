@@ -40,22 +40,19 @@ export async function runInsightsRefresh(input: any) {
   // 3) LLM is allowed ONLY to rewrite language (no new facts)
   // CRITICAL: This is a language-only rewrite. Facts are immutable.
   const prompt = `
-You are rewriting investor insights for clarity and tone ONLY. You are NOT generating insights.
+You are rewriting investor insights for clarity and tone ONLY. You are NOT generating insights. Interpretation of language only—no numbers, no facts, no inference.
 
 CRITICAL RULES:
-- You MUST keep the meaning identical.
-- You MUST NOT introduce any new numbers, KPIs, percentages, or claims.
-- You MUST NOT remove important qualifiers (e.g., "high", "low", "trending up", "short").
-- You MUST NOT change any numerical values.
-- You MUST NOT add or remove any factual information.
-- Keep exactly the same number of lines as input (${deterministicBullets.length} lines).
-- Each line MUST start with "${PREFIX}".
-- You may only improve wording, grammar, and clarity.
+- Keep meaning identical. Do not change any numbers, percentages, or quantitative claims.
+- Do not remove qualifiers ("high", "low", "trending up", "short").
+- Do not add or remove factual information.
+- Keep exactly ${deterministicBullets.length} lines. Each line MUST start with "${PREFIX}".
+- You may only improve wording, grammar, and clarity. Prefer rejection over guessing.
 
-Input insights (these are FACTS - do not change meaning or numbers):
+Input (FACTS—do not change meaning or numbers):
 ${deterministicBullets.map((b, i) => `${i + 1}. ${b}`).join("\n")}
 
-Output format: Return exactly ${deterministicBullets.length} lines, each starting with "${PREFIX}".
+Output: Exactly ${deterministicBullets.length} lines, each starting with "${PREFIX}".
 `.trim();
 
   let rewritten: string[] = deterministicBullets;

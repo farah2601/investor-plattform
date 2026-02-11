@@ -15,7 +15,6 @@ import { extractKpiNumber } from "@/lib/kpi/kpi_extract";
 import { cn } from "@/lib/utils";
 import { useCompanyData } from "@/hooks/useCompanyData";
 import { useUserCompany } from "@/lib/user-company-context";
-import { MetricsDetailsModal } from "@/components/metrics/MetricsDetailsModal";
 
 // Helper functions for formatting metrics
 function formatMoney(value: number | null) {
@@ -157,8 +156,6 @@ function OverviewPageContentInner() {
   const [stripeStatus, setStripeStatus] = useState<{
     status: "not_connected" | "pending" | "connected";
   }>({ status: "not_connected" });
-  const [detailsOpen, setDetailsOpen] = useState(false);
-
   useEffect(() => {
     if (userCompanyLoading) return;
     if (!isAuthenticated) {
@@ -632,15 +629,6 @@ function OverviewPageContentInner() {
           {hasGoogleSheets && (
             <span className="text-[#2B74FF] font-medium">Auto-sync enabled</span>
           )}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="text-xs border-slate-600 text-slate-300 hover:bg-slate-800/50 hover:text-white light:border-slate-300 light:text-slate-700 light:hover:bg-slate-100"
-            onClick={() => setDetailsOpen(true)}
-          >
-            Details
-          </Button>
         </div>
 
         {/* Key metrics: drag from here to the chart below */}
@@ -663,12 +651,6 @@ function OverviewPageContentInner() {
           {metricInference?.whyHigherLevelNotUsed && (
             <p className="text-xs text-slate-500 mt-1">{metricInference.whyHigherLevelNotUsed}</p>
           )}
-          <MetricsDetailsModal
-            companyId={company.id}
-            open={detailsOpen}
-            onOpenChange={setDetailsOpen}
-            companyName={company.name}
-          />
         </div>
 
         {/* Single chart — drag a metric from Key Metrics above to show it here */}

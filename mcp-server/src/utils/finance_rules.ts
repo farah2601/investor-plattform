@@ -1,10 +1,13 @@
 /**
  * Finance rules: profit vs burn
  *
- * - net_cash_flow > 0 => profit (money in). We store this as burn_rate = -net_cash_flow (negative = profit).
- * - net_cash_flow < 0 => burn (money out). burn_rate = -net_cash_flow (positive).
- * So burn_rate = -net_cash_flow when net is known: negative burn = profit, positive burn = burn.
- * - Runway only when burn_rate > 0 (actually burning). When burn_rate <= 0 (profit or break-even), runway = null.
+ * MECHANICAL ONLY—no LLM involvement. All formulas enforced in code:
+ * - burn_rate = -net_cash_flow when net is known (negative burn = profit, positive = burn)
+ * - runway_months = cash_balance / burn_rate when burn > 0
+ * - runway = null when burn <= 0 (profit or break-even)
+ *
+ * LLM never outputs these values—it only proposes column mapping. This module
+ * applies formulas to raw parsed cell values.
  */
 
 import { parseSheetNumber, parseNetCashFlow, type ParsedNumber } from "./robust_number_parser";

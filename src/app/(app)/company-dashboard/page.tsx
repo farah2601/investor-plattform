@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { MetricChart, type MetricChartDataPoint, type MetricFormat } from "@/components/ui/MetricChart";
 import { buildDenseSeries, type SnapshotRow, type ChartPoint } from "@/lib/kpi/kpi_series";
 import { extendWithForecast } from "@/lib/kpi/forecast";
-import { extractKpiNumber } from "@/lib/kpi/kpi_extract";
+import { extractKpiNumber, extractArrMetadata } from "@/lib/kpi/kpi_extract";
 import {
   Dialog,
   DialogContent,
@@ -23,10 +23,9 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { MetricsDetailsModal } from "@/components/metrics/MetricsDetailsModal";
 import { FormattedDate } from "@/components/ui/FormattedDate";
 import { SimpleMetricDetails } from "@/components/SimpleMetricDetails";
-import { Zap } from "lucide-react";
+import { Zap, SlidersHorizontal } from "lucide-react";
 import { normalizeMetricsOutput } from "@/lib/normalizeMetrics";
 import { type MetricResult } from "@/types/metricResult";
 
@@ -59,6 +58,7 @@ type CompanyKpi = {
     aiInsights?: boolean;
     showForecast?: boolean;
   } | null;
+  preferred_metrics?: string[] | null;
 };
 
 type AgentLog = {
@@ -141,8 +141,10 @@ function CompanyDashboardContent() {
   const [snapshotRows, setSnapshotRows] = useState<Array<{ period_date: string; kpis: unknown }>>([]);
   const [kpiSources, setKpiSources] = useState<Record<string, string> | null>(null); // Source metadata from latest snapshot
 
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedMetric, setSelectedMetric] = useState<MetricResult | null>(null);
+  const [metricPickerOpen, setMetricPickerOpen] = useState(false);
+  const [savingPreferredMetrics, setSavingPreferredMetrics] = useState(false);
+  const [pickerSelectedKeys, setPickerSelectedKeys] = useState<Set<string>>(new Set(["cash_balance", "burn_rate", "runway_months", "churn", "mrr", "arr"]));
   const [showForecast, setShowForecast] = useState(true);
 
   // Metric inference: AI-suggested key metrics (Level 1–4); when set, key metrics section uses these instead of fixed six
@@ -152,8 +154,8 @@ function CompanyDashboardContent() {
     whyHigherLevelNotUsed?: string;
   } | null>(null);
 
-  // Drag-and-drop: which metric is shown in each chart slot (default: ARR, MRR, Burn rate)
-  const [chartSlots, setChartSlots] = useState<[string, string, string]>(["arr", "mrr", "burn_rate"]);
+  // Drag-and-drop: which metric is shown in each chart slot (default: Cash Balance, MRR, Burn rate)
+  const [chartSlots, setChartSlots] = useState<[string, string, string]>(["cash_balance", "mrr", "burn_rate"]);
   const [dragOverSlot, setDragOverSlot] = useState<number | null>(null);
 
   // Chat with agent (under metrics)
@@ -264,6 +266,16 @@ function CompanyDashboardContent() {
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentCompanyId, stripeQueryParam]);
+
+  useEffect(() => {
+    if (metricPickerOpen && company) {
+      const def = ["cash_balance", "burn_rate", "runway_months", "churn", "mrr", "arr"];
+      const current = company.preferred_metrics && company.preferred_metrics.length > 0
+        ? company.preferred_metrics
+        : def;
+      setPickerSelectedKeys(new Set(current));
+    }
+  }, [metricPickerOpen, company?.id, company?.preferred_metrics]);
 
   async function loadInsights(companyId: string) {
     setLoadingInsights(true);
@@ -630,6 +642,7 @@ function CompanyDashboardContent() {
 
   // Metrics available for drag-and-drop charts
   const DASHBOARD_METRICS: Array<{ key: string; label: string; format: MetricFormat }> = [
+    { key: "cash_balance", label: "Cash Balance", format: "currency" },
     { key: "arr", label: "ARR", format: "currency" },
     { key: "mrr", label: "MRR", format: "currency" },
     { key: "burn_rate", label: "Burn rate", format: "currency" },
@@ -639,7 +652,20 @@ function CompanyDashboardContent() {
     { key: "mrr_growth_mom", label: "Growth", format: "percent" },
   ];
 
+  const PICKER_METRICS: Array<{ key: string; label: string; format: "currency" | "percent" | "runway" | "number" }> = [
+    { key: "cash_balance", label: "Cash Balance", format: "currency" },
+    { key: "burn_rate", label: "Burn / Profit", format: "currency" },
+    { key: "runway_months", label: "Runway", format: "runway" },
+    { key: "churn", label: "Churn", format: "percent" },
+    { key: "mrr", label: "MRR", format: "currency" },
+    { key: "arr", label: "ARR", format: "currency" },
+    { key: "net_revenue", label: "Net revenue", format: "currency" },
+    { key: "customers", label: "Customers", format: "number" },
+    { key: "mrr_growth_mom", label: "Growth", format: "percent" },
+  ];
+
   // Build chart series for all metrics
+  const cashBalanceSeries = buildDenseSeries(snapshotRows, "cash_balance");
   const arrSeries = buildDenseSeries(snapshotRows, "arr");
   const mrrSeries = buildDenseSeries(snapshotRows, "mrr");
   const burnSeries = buildDenseSeries(snapshotRows, "burn_rate");
@@ -649,6 +675,7 @@ function CompanyDashboardContent() {
   const growthSeries = buildDenseSeries(snapshotRows, "mrr_growth_mom", { percent: true, allowNegative: true });
 
   const seriesByKey: Record<string, ChartPoint[]> = {
+    cash_balance: cashBalanceSeries,
     arr: arrSeries,
     mrr: mrrSeries,
     burn_rate: burnSeries,
@@ -659,6 +686,7 @@ function CompanyDashboardContent() {
   };
 
   // Extend with forecast for currency/number metrics (optional)
+  const cashBalanceExtended = extendWithForecast(cashBalanceSeries, { monthsAhead: 6 });
   const arrExtended = extendWithForecast(arrSeries, { monthsAhead: 6 });
   const mrrExtended = extendWithForecast(mrrSeries, { monthsAhead: 6 });
   const burnExtended = extendWithForecast(burnSeries, { monthsAhead: 6 });
@@ -666,6 +694,7 @@ function CompanyDashboardContent() {
   const runwayExtended = extendWithForecast(runwaySeries, { monthsAhead: 6 });
 
   const extendedByKey: Record<string, ChartPoint[]> = {
+    cash_balance: cashBalanceExtended,
     arr: arrExtended,
     mrr: mrrExtended,
     burn_rate: burnExtended,
@@ -718,6 +747,11 @@ function CompanyDashboardContent() {
   })();
   const kpis = latestSnapshotRow?.kpis ?? null;
   const displayArr = kpis != null ? extractKpiNumber(kpis, "arr") : null;
+  const arrMetadata = kpis != null ? extractArrMetadata(kpis) : null;
+  const arrSublabel =
+    arrMetadata?.arr_type === "observed_arr" && arrMetadata?.arr_months_used != null
+      ? `Observed (${arrMetadata.arr_months_used} mo.)`
+      : "Run-rate";
   const displayMrr = kpis != null ? extractKpiNumber(kpis, "mrr") : null;
   const displayGrowth = kpis != null ? (extractKpiNumber(kpis, "mrr_growth_mom") ?? extractKpiNumber(kpis, "growth_percent")) : null;
   const displayBurnRate = kpis != null ? extractKpiNumber(kpis, "burn_rate") : null;
@@ -775,7 +809,46 @@ function CompanyDashboardContent() {
 
   type KeyMetricItem = { label: string; value: string; sublabel: string; metricKey: string };
   const keyMetricsDisplayList: KeyMetricItem[] = (() => {
-    const currency = (company as any)?.kpi_currency;
+    const currency = (company as any)?.kpi_currency ?? "USD";
+
+    const preferred = company?.preferred_metrics;
+    if (Array.isArray(preferred) && preferred.length > 0) {
+      const metaByKey = Object.fromEntries(PICKER_METRICS.map((m) => [m.key, m]));
+      return preferred
+        .filter((k) => metaByKey[k])
+        .map((metricKey) => {
+          const meta = metaByKey[metricKey];
+          if (!meta) return null;
+          const rawVal = kpis != null ? extractKpiNumber(kpis, metricKey as any) : null;
+          let value: string;
+          let label = meta.label;
+          let sublabel = "";
+          if (meta.format === "currency") {
+            if (metricKey === "burn_rate" && rawVal != null) {
+              if (rawVal < 0) {
+                label = "Profit";
+                value = formatMoney(Math.abs(rawVal), currency);
+                sublabel = "Cash inflow";
+              } else {
+                label = "Burn";
+                value = formatMoney(rawVal, currency);
+                sublabel = "Monthly cash outflow";
+              }
+            } else {
+              value = formatMoney(rawVal, currency);
+            }
+          } else if (meta.format === "percent") value = formatPercent(rawVal);
+          else if (meta.format === "runway") value = formatRunway(rawVal);
+          else value = rawVal != null ? rawVal.toLocaleString("en-US", { maximumFractionDigits: 0 }) : "—";
+          if (metricKey === "arr") {
+            label = "ARR";
+            sublabel = arrSublabel;
+          }
+          return { label, value, sublabel, metricKey };
+        })
+        .filter((x): x is KeyMetricItem => x != null);
+    }
+
     if (metricInference?.primaryMetricsTable && metricInference.primaryMetricsTable.length > 0) {
       const excludeGrowth = (metric: string) =>
         /^(Growth\s*\(?MoM\)?|Growth|Revenue trend)$/i.test(metric.trim());
@@ -814,7 +887,7 @@ function CompanyDashboardContent() {
       { label: profitBurnLabel, value: profitBurnValue != null ? formatMoney(profitBurnValue, currency) : "—", sublabel: profitBurnSublabel, metricKey: "burn_rate" },
       { label: "Runway", value: formatRunway(displayRunwayMonths), sublabel: "Estimated runway at current burn", metricKey: "runway_months" },
       { label: "Churn", value: formatPercent(displayChurn), sublabel: "MRR churn rate", metricKey: "churn" },
-      { label: "ARR", value: formatMoney(displayArr, currency), sublabel: "Annual recurring revenue", metricKey: "arr" },
+      { label: "ARR", value: formatMoney(displayArr, currency), sublabel: arrSublabel, metricKey: "arr" },
       { label: "MRR", value: formatMoney(displayMrr, currency), sublabel: "Monthly recurring revenue", metricKey: "mrr" },
     ];
   })();
@@ -1306,9 +1379,10 @@ function CompanyDashboardContent() {
                     variant="outline"
                     size="sm"
                     className="text-xs border-slate-600 text-slate-300 hover:bg-slate-800/50 hover:text-white light:border-slate-300 light:text-slate-700 light:hover:bg-slate-100"
-                    onClick={() => setDetailsOpen(true)}
+                    onClick={() => setMetricPickerOpen(true)}
                   >
-                    Details
+                    <SlidersHorizontal className="h-3.5 w-3.5 mr-1.5" />
+                    Customize metrics
                   </Button>
                   <p className="text-xs text-slate-500 light:text-slate-600">
                     Powered by <span className="font-medium text-slate-300 light:text-slate-900">Valyxo Agent</span>
@@ -1317,7 +1391,7 @@ function CompanyDashboardContent() {
               </div>
 
               {/* Key metrics: drag from here to chart slots below */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
                 {keyMetricsDisplayList.map((item) => {
                   const metric = getMetric(item.metricKey);
                   return (
@@ -1334,7 +1408,8 @@ function CompanyDashboardContent() {
                         label={item.label} 
                         value={item.value} 
                         sublabel={item.sublabel}
-                        onDetailsClick={metric ? () => setSelectedMetric(metric) : undefined}
+                        metricKey={item.metricKey}
+                        onDetailsClick={metric ? () => setSelectedMetric({ ...metric, source: kpiSources?.[metric.key] ?? undefined }) : undefined}
                       />
                     </div>
                   );
@@ -1345,17 +1420,123 @@ function CompanyDashboardContent() {
                   {metricInference.whyHigherLevelNotUsed}
                 </p>
               )}
-              {company && (
-                <MetricsDetailsModal
-                  companyId={company.id}
-                  open={detailsOpen}
-                  onOpenChange={setDetailsOpen}
-                  companyName={company.name}
-                />
-              )}
+              <Dialog open={metricPickerOpen} onOpenChange={setMetricPickerOpen}>
+                <DialogContent className="max-w-md bg-slate-900 border-slate-700 light:bg-white light:border-slate-200">
+                  <DialogHeader>
+                    <DialogTitle className="text-slate-100 light:text-slate-900">
+                      Customize Key Metrics
+                    </DialogTitle>
+                    <DialogDescription className="text-slate-400 light:text-slate-600">
+                      Choose which metrics to display. Useful when your accounting uses different terms.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid grid-cols-2 gap-3 py-4">
+                    {PICKER_METRICS.map((m) => (
+                      <label
+                        key={m.key}
+                        className="flex items-center gap-2 cursor-pointer rounded-lg px-3 py-2 hover:bg-slate-800/50 light:hover:bg-slate-100"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={pickerSelectedKeys.has(m.key)}
+                          onChange={() => {
+                            setPickerSelectedKeys((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(m.key)) next.delete(m.key);
+                              else next.add(m.key);
+                              return next;
+                            });
+                          }}
+                          className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-[#2B74FF] focus:ring-[#2B74FF] focus:ring-offset-slate-900"
+                        />
+                        <span className="text-sm text-slate-200 light:text-slate-800">{m.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <DialogFooter className="flex flex-col sm:flex-row gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="border-slate-600 text-slate-300 hover:bg-slate-800"
+                      onClick={() => {
+                        setPickerSelectedKeys(new Set(["cash_balance", "burn_rate", "runway_months", "churn", "mrr", "arr"]));
+                      }}
+                    >
+                      Reset checkboxes
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="border-slate-600 text-slate-300 hover:bg-slate-800"
+                      disabled={savingPreferredMetrics}
+                      onClick={async () => {
+                        if (!company?.id || savingPreferredMetrics) return;
+                        setSavingPreferredMetrics(true);
+                        try {
+                          const res = await authedFetch(`/api/companies/${company.id}/preferred-metrics`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ metrics: [] }),
+                          });
+                          const data = await res.json();
+                          if (data?.ok) {
+                            setCompany((prev) => (prev ? { ...prev, preferred_metrics: null } : null));
+                            setMetricPickerOpen(false);
+                          } else {
+                            alert(data?.error || "Failed to clear");
+                          }
+                        } catch (e) {
+                          console.error("Clear preferred metrics failed:", e);
+                          alert("Failed to clear");
+                        } finally {
+                          setSavingPreferredMetrics(false);
+                        }
+                      }}
+                    >
+                      Use AI detection
+                    </Button>
+                    <div className="flex-1" />
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="bg-[#2B74FF] hover:bg-[#2563eb]"
+                      disabled={pickerSelectedKeys.size === 0 || savingPreferredMetrics}
+                      onClick={async () => {
+                        if (!company?.id || savingPreferredMetrics) return;
+                        const ordered = PICKER_METRICS.filter((m) => pickerSelectedKeys.has(m.key)).map((m) => m.key);
+                        if (ordered.length === 0) return;
+                        setSavingPreferredMetrics(true);
+                        try {
+                          const res = await authedFetch(`/api/companies/${company.id}/preferred-metrics`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ metrics: ordered }),
+                          });
+                          const data = await res.json();
+                          if (data?.ok) {
+                            setCompany((prev) => (prev ? { ...prev, preferred_metrics: ordered } : null));
+                            setMetricPickerOpen(false);
+                          } else {
+                            alert(data?.error || "Failed to save");
+                          }
+                        } catch (e) {
+                          console.error("Save preferred metrics failed:", e);
+                          alert("Failed to save");
+                        } finally {
+                          setSavingPreferredMetrics(false);
+                        }
+                      }}
+                    >
+                      {savingPreferredMetrics ? "Saving…" : "Save"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
 
-              {/* Trends — above Chat */}
-              <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 shadow-xl space-y-4 sm:space-y-6 light:border-slate-200 light:bg-white light:shadow-sm mt-8">
+              {/* Trends — same card as Key Metrics */}
+              <div className="mt-8 pt-6 border-t border-slate-700/50 light:border-slate-200 space-y-4 sm:space-y-6">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
                     <h2 className="text-sm sm:text-base font-medium text-slate-200 light:text-slate-950">Trends</h2>
@@ -1439,7 +1620,7 @@ function CompanyDashboardContent() {
                     );
                   })}
                 </div>
-              </section>
+              </div>
 
               {/* Chat with Valyxo Agent — below Trends */}
               <div className="mt-8 pt-6 border-t border-slate-700/50 light:border-slate-200">
@@ -1990,6 +2171,7 @@ function CompanyDashboardContent() {
         <SimpleMetricDetails
           metric={selectedMetric}
           onClose={() => setSelectedMetric(null)}
+          companyId={company?.id ?? undefined}
         />
       )}
     </>

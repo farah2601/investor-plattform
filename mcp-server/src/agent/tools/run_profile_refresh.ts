@@ -150,7 +150,7 @@ export async function runProfileRefresh(input: any) {
   // 3) OpenAI (hvis aktivert)
   if (env.LLM_PROVIDER === "openai") {
     const prompt = `
-You are an expert startup analyst writing an investor-ready company narrative.
+You are an expert startup analyst writing an investor-ready company narrative. Generate narrative text only—do not compute or output any numbers, KPIs, or metrics.
 
 Company:
 - Name: ${company.name ?? "n/a"}
@@ -160,7 +160,7 @@ Company:
 - Website: ${websiteUrl ?? "n/a"}
 - LinkedIn URLs: ${linkedinUrls.length ? linkedinUrls.join(", ") : "n/a"}
 
-KPIs (if present):
+KPIs (if present; use for context only—do not calculate or restate numbers):
 - ${kpiStrings.mrr_str}
 - ${kpiStrings.arr_str}
 - ${kpiStrings.burn_rate_str}
@@ -172,28 +172,15 @@ Latest insights (if present):
 ${latestInsights.length ? latestInsights.join("\n") : "n/a"}
 
 Task:
-Generate investor-ready text for these fields:
-1) problem
-2) solution
-3) why_now
-4) market
-5) product_details
+Generate narrative text for: problem, solution, why_now, market, product_details.
 
 Rules:
-- Each field must be 2–5 sentences max (concise, crisp).
-- Avoid buzzwords and hype. Be specific.
-- Use only information you can infer from the provided data; if something is unknown, write a reasonable neutral version without inventing numbers.
-- Output MUST be valid JSON exactly matching this schema:
+- 2–5 sentences per field. Concise, specific. No buzzwords.
+- Use ONLY information from the provided data. Do not invent numbers or facts.
+- If data is insufficient, write a generic neutral version—prefer rejection over guessing.
+- Output valid JSON: {"problem":"…","solution":"…","why_now":"…","market":"…","product_details":"…"}
 
-{
-  "problem": "string",
-  "solution": "string",
-  "why_now": "string",
-  "market": "string",
-  "product_details": "string"
-}
-
-Return ONLY JSON. No markdown. No bullets. No extra keys.
+Return ONLY JSON. No markdown. No extra keys.
 `.trim();
 
     try {

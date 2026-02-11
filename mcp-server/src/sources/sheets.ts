@@ -119,11 +119,28 @@ function normalizeHeader(header: string): string {
 /** Column map can map to a KPI key or to net_cash_flow (used only for finance rules, not stored in snapshot). */
 type ColumnMapKey = KpiKey | "net_cash_flow";
 
+/** One entry for why a column was selected for a field (audit trail, no chain-of-thought). */
+export type MappingRationaleEntry = {
+  column_index: number;
+  header: string;
+  field: string;
+  reason: string;
+};
+
+/** One entry for a column considered but rejected (audit trail). */
+export type RejectedColumnEntry = {
+  column_index: number;
+  header: string;
+  reason: string;
+};
+
 /** Result of AI grid scan: which row is header, which column is month, and column → field mapping. */
 type MatchColumnsAIResult = {
   headerRowIndex: number;
   columnMap: Map<number, ColumnMapKey>;
   monthColumnIndex: number | null;
+  mappingRationale?: MappingRationaleEntry[];
+  rejectedColumns?: RejectedColumnEntry[];
 };
 
 /** Normalize AI-returned field name to ColumnMapKey (KPI or net_cash_flow). */
@@ -155,7 +172,7 @@ const MAX_GRID_ROWS_CAP = 200;
 const MAX_GRID_COLS_CAP = 50;
 
 /**
- * AI scans a Google Sheets grid to find the header row and map columns to KPI fields.
+ * Semantic Interpreter: proposes column-to-field mapping from a Google Sheets grid.
  * Grid size is dynamic (actual rows/columns from the sheet, up to caps). Header row can be anywhere.
  * Returns null if OPENAI_API_KEY is missing or the API call fails.
  */
@@ -167,7 +184,7 @@ async function matchColumnsWithAI(grid: SheetRows): Promise<MatchColumnsAIResult
   const colsToSend = Math.min(actualMaxCols, MAX_GRID_COLS_CAP);
 
   if (!process.env.OPENAI_API_KEY) {
-    console.log("[matchColumnsWithAI] OPENAI_API_KEY not set, skipping AI matching");
+    console.log("[matchColumnsWithAI] OPENAI_API_KEY not set, skipping column matching");
     return null;
   }
 
@@ -178,15 +195,24 @@ async function matchColumnsWithAI(grid: SheetRows): Promise<MatchColumnsAIResult
 
   try {
     const openai = getOpenAI();
-    const prompt = `Grid from Google Sheets (rows 0–${rowsToSend.length - 1}, cols 0–${colsToSend - 1}). Header row can be anywhere. Find the header row and map each data column to a field by meaning. mrr and arr are for money (revenue); customers is for a count—map accordingly.
+    const prompt = `You are a Semantic Interpreter. You interpret language and structure only; you do not decide truth or compute values. You propose candidate mappings and list ambiguity.
 
-Fields (use these exact strings): mrr, arr, mrr_growth_mom, burn_rate, cash_balance, runway_months, churn, customers.
-Also: net_cash_flow — use for Net, Profit/Loss, P&L, Cash flow, Result (positive = profit, negative = burn).
+Grid from Google Sheets (rows 0–${rowsToSend.length - 1}, cols 0–${colsToSend - 1}). Header row can be anywhere.
+
+TASK: Propose a mapping from column index to field name. Use ONLY interpretation of headers and structure:
+- Identify header row and month/period column.
+- For each data column: interpret the header (e.g. "Net", "Result", "P&L", "Subscription revenue", "MRR", "Monthly recurring") and propose which field it might represent.
+- OMIT any column you are unsure about. Prefer rejection over guessing.
+
+Allowed field names: mrr, arr, mrr_growth_mom, burn_rate, cash_balance, runway_months, churn, customers, net_cash_flow.
+Synonyms for net_cash_flow: Net, Profit/Loss, P&L, Cash flow, Result (the system handles sign mechanically).
 
 Grid:
 ${gridLines}
 
-Return JSON: header_row_index (0-based), month_column (0-based), and mapping from column index "0","1",… to field name. Example: {"header_row_index":0,"month_column":0,"1":"mrr","2":"arr","3":"net_cash_flow"}. At least one data column required.`;
+Return JSON: header_row_index (0-based), month_column (0-based), mapping from column index to field name. Example: {"header_row_index":0,"month_column":0,"1":"mrr","2":"arr","3":"net_cash_flow"}. Include only mappings you are confident about.
+
+Optionally include mapping_rationale: for each column you mapped, one entry {"column_index": number, "header": string, "field": string, "reason": string}. Reasons must be short and factual (e.g. "header suggests subscription revenue", "label matches MRR"). Optionally include rejected_columns: for columns you considered but rejected, {"column_index": number, "header": string, "reason": string} (e.g. "too generic", "looks like forecast").`;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -228,7 +254,7 @@ Return JSON: header_row_index (0-based), month_column (0-based), and mapping fro
     }
 
     for (const [key, value] of Object.entries(toIterate)) {
-      if (key === "month_column" || key === "header_row_index") {
+      if (key === "month_column" || key === "header_row_index" || key === "rejected_columns" || key === "mapping_rationale") {
         if (key === "month_column") {
           const n = typeof value === "number" ? value : parseInt(String(value), 10);
           if (!isNaN(n) && n >= 0 && n < maxCol) monthColumnIndex = n;
@@ -242,6 +268,43 @@ Return JSON: header_row_index (0-based), month_column (0-based), and mapping fro
       columnMap.set(index, canonical);
     }
 
+    // Parse mapping_rationale (audit trail; optional)
+    let mappingRationale: MappingRationaleEntry[] | undefined;
+    const rawRationale = parsed.mapping_rationale;
+    if (Array.isArray(rawRationale) && rawRationale.length > 0) {
+      mappingRationale = [];
+      for (const item of rawRationale) {
+        if (item && typeof item === "object" && "column_index" in item && "field" in item && "reason" in item) {
+          const header = typeof (item as { header?: string }).header === "string" ? (item as { header: string }).header : "";
+          mappingRationale.push({
+            column_index: Number((item as { column_index: number }).column_index),
+            header,
+            field: String((item as { field: string }).field),
+            reason: String((item as { reason: string }).reason),
+          });
+        }
+      }
+      if (mappingRationale.length === 0) mappingRationale = undefined;
+    }
+
+    // Parse rejected_columns (audit trail; optional)
+    let rejectedColumns: RejectedColumnEntry[] | undefined;
+    const rejected = parsed.rejected_columns;
+    if (Array.isArray(rejected) && rejected.length > 0) {
+      rejectedColumns = [];
+      for (const item of rejected) {
+        if (item && typeof item === "object" && "column_index" in item && "reason" in item) {
+          const header = typeof (item as { header?: string }).header === "string" ? (item as { header: string }).header : "";
+          rejectedColumns.push({
+            column_index: Number((item as { column_index: number }).column_index),
+            header,
+            reason: String((item as { reason: string }).reason),
+          });
+        }
+      }
+      if (rejectedColumns.length === 0) rejectedColumns = undefined;
+    }
+
     // month_column might be at top level if mapping was nested
     if (monthColumnIndex === null && typeof parsed.month_column === "number") {
       const n = parsed.month_column;
@@ -252,160 +315,18 @@ Return JSON: header_row_index (0-based), month_column (0-based), and mapping fro
     }
 
     if (columnMap.size >= 2) {
-      return { headerRowIndex, columnMap, monthColumnIndex };
+      return {
+        headerRowIndex,
+        columnMap,
+        monthColumnIndex,
+        mappingRationale: mappingRationale?.length ? mappingRationale : undefined,
+        rejectedColumns: rejectedColumns?.length ? rejectedColumns : undefined,
+      };
     }
     return null;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn("[matchColumnsWithAI] AI matching failed:", msg);
-    return null;
-  }
-}
-
-/**
- * Semantic extraction: AI finds where the metrics are and returns extracted rows directly.
- * No column indices – model understands content and places values in the right KPI fields.
- */
-async function extractSheetDataWithAI(grid: SheetRows): Promise<{ parsed: ParsedRow[] } | null> {
-  if (!grid.length || !process.env.OPENAI_API_KEY) return null;
-
-  const rowsToSend = grid.slice(0, MAX_GRID_ROWS_CAP);
-  const actualMaxCols = Math.max(1, ...rowsToSend.map((r) => (r ?? []).length));
-  const colsToSend = Math.min(actualMaxCols, MAX_GRID_COLS_CAP);
-  const gridLines = rowsToSend.map((row, rowIdx) => {
-    const cells = (row ?? []).slice(0, colsToSend).map((c, colIdx) => `${colIdx}="${String(c ?? "").trim().replace(/"/g, "'")}"`);
-    return `row ${rowIdx}: ${cells.join(", ")}`;
-  }).join("\n");
-
-  const maxDataRows = Math.max(0, rowsToSend.length - 1);
-  const systemPrompt = `You extract numbers from a Google Sheet into a JSON list. Use only what you see; leave null when missing. mrr and arr are currency amounts; customers is a count—do not put counts in mrr/arr or money in customers.`;
-
-  const userPrompt = `Sheet (row index, then cells as columnIndex="value"):
-
-${gridLines}
-
-For each data row, one object with: period_date (YYYY-MM-01), mrr, arr, mrr_growth_mom, burn_rate, cash_balance, runway_months, churn, customers, net_cash_flow. mrr and arr = money; customers = count.
-
-Profit and burn are two sides of the same thing. If the sheet has a net result, put it in net_cash_flow: positive = money in, negative = money out. Use your judgment. Numbers as real values, percentages like 10.5 for 10.5%.
-
-Return JSON: { "rows": [ ... ] }, max ${maxDataRows} rows.`;
-
-  try {
-    const openai = getOpenAI();
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-    });
-    const raw = completion.choices?.[0]?.message?.content ?? "";
-    if (!raw) return null;
-
-    let data: { rows?: Array<Record<string, unknown>> };
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      const jsonMatch = raw.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
-      if (jsonMatch) data = JSON.parse(jsonMatch[1]);
-      else return null;
-    }
-
-    const rows = Array.isArray(data.rows) ? data.rows : [];
-    const parsed: ParsedRow[] = [];
-    const seenPeriods = new Set<string>();
-    const maxRows = Math.max(0, rowsToSend.length - 1); // cap: only as many data rows as possible in grid
-
-    for (const row of rows) {
-      if (parsed.length >= maxRows) break; // do not return more rows than exist in sheet
-      if (!row || typeof row !== "object") continue;
-      let periodDate: string | null = null;
-      const rawDate = row.period_date ?? row.periodDate;
-      if (typeof rawDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
-        periodDate = rawDate;
-      } else if (rawDate != null) {
-        periodDate = parseMonthToPeriodDate(String(rawDate)) ?? null;
-      }
-      if (!periodDate || seenPeriods.has(periodDate)) continue; // one row per period, no duplicates
-      seenPeriods.add(periodDate);
-
-      const values: Record<string, number | null> = {};
-      for (const key of KPI_KEYS) {
-        const v = row[key];
-        if (v === null || v === undefined || v === "") {
-          values[key] = null;
-        } else if (typeof v === "number" && !Number.isNaN(v)) {
-          values[key] = v;
-        } else if (typeof v === "string") {
-          const num = parseNumber(v, key === "churn" || key === "mrr_growth_mom");
-          values[key] = num;
-        } else {
-          values[key] = null;
-        }
-      }
-      let net_cash_flow: number | null = null;
-      const ncf = row.net_cash_flow;
-      if (typeof ncf === "number" && !Number.isNaN(ncf)) {
-        net_cash_flow = ncf;
-      } else if (typeof ncf === "string") {
-        const parsedNcf = parseNumber(ncf, false);
-        if (parsedNcf !== null) net_cash_flow = parsedNcf;
-      }
-      if (Object.values(values).some((v) => v !== null) || net_cash_flow !== null) {
-        parsed.push({ periodDate, values, net_cash_flow: net_cash_flow ?? undefined });
-      }
-    }
-
-    if (parsed.length > 0) {
-      // POST-PROCESSING: Apply hard finance rules to prevent sign confusion
-      for (const row of parsed) {
-        const { values } = row;
-        
-        // Look for net_cash_flow column (might be in data even if not in KPI_KEYS)
-        const netCashFlow = row.net_cash_flow ?? null;
-        
-        // Apply finance rules if we have the necessary data
-        if (netCashFlow !== null || values.burn_rate !== null || values.cash_balance !== null) {
-          const financeMetrics = applyFinanceRules(
-            netCashFlow,
-            values.burn_rate,
-            values.cash_balance,
-            { preferReportedBurn: false } // Prefer net_cash_flow as source of truth
-          );
-          
-          // Validate
-          const validation = validateFinanceRules(financeMetrics);
-          if (!validation.valid) {
-            console.error(`[extractSheetDataWithAI] Finance rule violation in period ${row.periodDate}:`, validation.errors);
-            console.warn(`[extractSheetDataWithAI] Attempting to fix...`);
-          }
-          
-          // Apply corrected values
-          if (financeMetrics.burn_rate !== null) {
-            values.burn_rate = financeMetrics.burn_rate;
-          }
-          if (financeMetrics.runway_months !== null) {
-            values.runway_months = financeMetrics.runway_months;
-          } else if (financeMetrics.runway_status === "not_applicable") {
-            // Explicitly set to null when cash-flow positive
-            values.runway_months = null;
-          }
-          
-          // Log warnings
-          if (financeMetrics.warnings && financeMetrics.warnings.length > 0) {
-            console.log(`[extractSheetDataWithAI] Finance warnings for ${row.periodDate}:`, financeMetrics.warnings);
-          }
-        }
-      }
-      
-      return { parsed };
-    }
-    return null;
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn("[extractSheetDataWithAI] Semantic extraction failed:", msg);
     return null;
   }
 }
@@ -643,13 +564,28 @@ function extractDataRegion(
   return dataRows;
 }
 
+/** Column-mapping rationale from Semantic Interpreter (audit trail, no chain-of-thought). */
+export type ColumnRationale = {
+  mappingRationale?: MappingRationaleEntry[];
+  rejectedColumns?: RejectedColumnEntry[];
+};
+
+/** Per-metric rationale for details panel (selected column + rejected candidates). */
+export type KpiRationale = Record<
+  string,
+  {
+    selected?: { sheetName?: string; column_index?: number; range?: string; header?: string; reason?: string };
+    rejected?: Array<{ column_index: number; header: string; reason: string }>;
+  }
+>;
+
 /**
  * Parse horizontal layout
  * All recognition via LLM: semantic extraction first, then index-based LLM fallback.
  */
 async function parseHorizontalLayout(
   rows: SheetRows
-): Promise<{ parsed: ParsedRow[]; debug: ParseDebug }> {
+): Promise<{ parsed: ParsedRow[]; debug: ParseDebug; columnRationale?: ColumnRationale }> {
   const parsed: ParsedRow[] = [];
   let skippedRows = 0;
 
@@ -665,21 +601,9 @@ async function parseHorizontalLayout(
     };
   }
   const grid = rows.slice(0, MAX_GRID_ROWS_CAP);
-  const semanticResult = await extractSheetDataWithAI(grid);
-  if (semanticResult && semanticResult.parsed.length > 0) {
-    return {
-      parsed: semanticResult.parsed,
-      debug: {
-        detectedLayout: "horizontal",
-        totalRows: rows.length,
-        parsedRows: semanticResult.parsed.length,
-        skippedRows: rows.length - semanticResult.parsed.length,
-      },
-    };
-  }
-  // Fallback: LLM returns column indices, we read cells
+  // LLM proposes column mapping only; all value extraction and calculation is mechanical
   const aiResult = await matchColumnsWithAI(grid);
-  if (!aiResult || aiResult.columnMap.size < 2) {
+  if (!aiResult || aiResult.columnMap.size < 1) {
     return {
       parsed: [],
       debug: { detectedLayout: "horizontal", totalRows: rows.length, parsedRows: 0, skippedRows: rows.length },
@@ -761,6 +685,14 @@ async function parseHorizontalLayout(
     }
   }
 
+  const columnRationale: ColumnRationale | undefined =
+    aiResult.mappingRationale?.length || aiResult.rejectedColumns?.length
+      ? {
+          mappingRationale: aiResult.mappingRationale?.length ? aiResult.mappingRationale : undefined,
+          rejectedColumns: aiResult.rejectedColumns?.length ? aiResult.rejectedColumns : undefined,
+        }
+      : undefined;
+
   return {
     parsed,
     debug: {
@@ -769,6 +701,7 @@ async function parseHorizontalLayout(
       parsedRows: parsed.length,
       skippedRows,
     },
+    columnRationale,
   };
 }
 
@@ -929,12 +862,14 @@ function parseVerticalLayout(
 }
 
 /**
- * Parse sheet rows
- * Uses AI for horizontal layout column matching when OPENAI_API_KEY is set.
+ * Parse sheet rows.
+ * LLM proposes column mapping only; all value extraction and KPI calculation is mechanical.
+ * Exported for metric_inference (shared pipeline).
  */
-async function parseSheetRows(rows: SheetRows): Promise<{
+export async function parseSheetRows(rows: SheetRows): Promise<{
   parsed: ParsedRow[];
   debug: ParseDebug;
+  columnRationale?: ColumnRationale;
 }> {
   if (!rows || rows.length === 0) {
     return {
@@ -1072,9 +1007,8 @@ export async function loadSheetsKpisForCompany(companyId: string): Promise<Array
   }
 
   if (!company.google_sheets_url) {
-    // No sheets configured - return empty array
     console.log(`[loadSheetsKpisForCompany] No Google Sheets URL configured for company ${companyId}`);
-    return [];
+    return { rows: [] };
   }
 
   // Support both old format (single url + tab) and new format (JSON array of sheets)
@@ -1096,7 +1030,7 @@ export async function loadSheetsKpisForCompany(companyId: string): Promise<Array
 
   if (!sheetUrl) {
     console.log(`[loadSheetsKpisForCompany] No valid sheet URL for company ${companyId}`);
-    return [];
+    return { rows: [] };
   }
 
   // Extract sheet ID from URL

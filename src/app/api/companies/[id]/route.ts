@@ -64,7 +64,8 @@ export async function GET(
         logo_url,
         header_style,
         brand_color,
-        investor_view_config
+        investor_view_config,
+        preferred_metrics
       `)
       .eq("id", companyId)
       .maybeSingle();
@@ -118,6 +119,7 @@ export async function GET(
         (company as any).brand_color = null;
         (company as any).runway_status = null; // Default: no special status
         (company as any).investor_view_config = { arrMrr: true, burnRunway: true, growthCharts: true, aiInsights: false, showForecast: true };
+        (company as any).preferred_metrics = null;
       }
     }
 

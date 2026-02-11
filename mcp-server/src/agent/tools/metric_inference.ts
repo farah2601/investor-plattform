@@ -1,7 +1,5 @@
 import { z } from "zod";
-import { getOpenAI } from "../../llm/openai";
-import { getSheetGridForCompany } from "../../sources/sheets";
-import { applyFinanceRules } from "../../utils/finance_rules";
+import { getSheetGridForCompany, parseSheetRows } from "../../sources/sheets";
 import { postProcessKpis, type RowKpiMeta, type KpiKey } from "../../utils/kpi_sanity";
 
 const InputSchema = z.object({
@@ -120,137 +118,28 @@ export async function runMetricInference(input: unknown): Promise<MetricInferenc
     };
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    return {
-      ok: false,
-      companyId,
-      tab,
-      sheetId,
-      kpiTable: [],
-      altCandidatesConsidered: "",
-      whatDataWouldIncreaseConfidence: "",
-      assumptions: [],
-      error: "OPENAI_API_KEY is not set; metric inference requires an LLM.",
-    };
-  }
-
-  const rowsToSend = grid.slice(0, MAX_ROWS);
-  const colsToSend = Math.min(MAX_COLS, Math.max(1, ...rowsToSend.map((r) => (r ?? []).length)));
+  // LLM proposes column mapping only; parseSheetRows does mechanical extraction + finance rules
   const tabLabel = tab ? `Tab: "${tab}"` : "Tab: (default)";
-  const sheetRef = sheetId ? `Sheet ID: ${sheetId}` : "";
-  const gridLines = rowsToSend.map((row, rowIdx) => {
-    const cells = (row ?? []).slice(0, colsToSend).map((c, colIdx) => `col${colIdx}="${String(c ?? "").trim().replace(/"/g, "'")}"`);
-    return `row${rowIdx} ${cells.join(" ")}`;
-  }).join("\n");
-
-  const systemPrompt = `You read a financial sheet and fill one row per period with the numbers you find. Use the meaning of columns, not just labels. Don't invent data; use null when you're not sure. Profit and burn are opposites: profit is money in, burn is money out. Put the net result in net_cash_flow so the system can tell them apart. Important: mrr and arr are money (currency); customers is a head count—only put currency amounts in mrr/arr and counts in customers.`;
-
-  const userPrompt = `Sheet: ${tabLabel}. ${sheetRef}
-
-${gridLines}
-
-For each period, output: period_date (YYYY-MM-01), cash_balance, mrr, arr, burn_rate, runway_months, churn, customers, net_cash_flow. mrr and arr must be money amounts; customers must be a count. Prefer cash_balance when you see cash at period end. For net result (Net, P&L, profit or burn): put it in net_cash_flow—positive for profit, negative for burn. Use your judgment. Percentages as numbers (6.5 for 6.5%). Max ${MAX_DATA_ROWS} rows.
-
-Return JSON with "rows", "assumptions", "whatDataWouldIncreaseConfidence", and optionally "proxiesUsed".`;
 
   try {
-    const openai = getOpenAI();
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-    });
-
-    const raw = completion.choices?.[0]?.message?.content ?? "";
-    if (!raw) {
+    const { parsed: sheetParsed } = await parseSheetRows(grid);
+    const parsedRows: MetricInferenceDataRow[] = sheetParsed.slice(0, MAX_DATA_ROWS).map((row) => {
+      const v = row.values;
       return {
-        ok: true,
-        companyId,
-        tab,
-        sheetId,
-        kpiTable: [],
-        altCandidatesConsidered: "",
-        whatDataWouldIncreaseConfidence: "",
-        assumptions: [],
-        error: "Empty response from model",
-      };
-    }
-
-    type DataRow = {
-      period_date?: string;
-      mrr?: number | null;
-      arr?: number | null;
-      mrr_growth_mom?: number | null;
-      burn_rate?: number | null;
-      runway_months?: number | null;
-      churn?: number | null;
-      customers?: number | null;
-      net_cash_flow?: number | null;
-      cash_balance?: number | null;
-    };
-    let data: {
-      rows?: DataRow[];
-      assumptions?: string[];
-      whatDataWouldIncreaseConfidence?: string;
-      proxiesUsed?: string;
-    };
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      const jsonMatch = raw.match(/\{[\s\S]*\}/);
-      if (jsonMatch) data = JSON.parse(jsonMatch[0]);
-      else {
-        return {
-          ok: true,
-          companyId,
-          tab,
-          sheetId,
-          kpiTable: [],
-          altCandidatesConsidered: "",
-          whatDataWouldIncreaseConfidence: "",
-          assumptions: [],
-          error: "Could not parse model response as JSON",
-        };
-      }
-    }
-
-    const rawRows = Array.isArray(data.rows) ? data.rows : [];
-    const parsedRows: MetricInferenceDataRow[] = rawRows.slice(0, MAX_DATA_ROWS).map((r: DataRow) => {
-      const netCf = r.net_cash_flow;
-      const net_cash_flow = typeof netCf === "number" && !Number.isNaN(netCf) ? netCf : netCf === null ? null : null;
-      const cb = r.cash_balance;
-      const cash_balance = typeof cb === "number" && !Number.isNaN(cb) ? cb : cb === null ? null : null;
-      return {
-        period_date: typeof r.period_date === "string" ? r.period_date : "",
-        mrr: typeof r.mrr === "number" ? r.mrr : r.mrr === null ? null : null,
-        arr: typeof r.arr === "number" ? r.arr : r.arr === null ? null : null,
-        mrr_growth_mom: typeof r.mrr_growth_mom === "number" ? r.mrr_growth_mom : r.mrr_growth_mom === null ? null : null,
-        burn_rate: typeof r.burn_rate === "number" ? r.burn_rate : r.burn_rate === null ? null : null,
-        runway_months: typeof r.runway_months === "number" ? r.runway_months : r.runway_months === null ? null : null,
-        churn: typeof r.churn === "number" ? r.churn : r.churn === null ? null : null,
-        customers: typeof r.customers === "number" ? r.customers : r.customers === null ? null : null,
-        net_cash_flow: net_cash_flow ?? undefined,
-        cash_balance: cash_balance ?? undefined,
+        period_date: row.periodDate,
+        mrr: v.mrr ?? null,
+        arr: v.arr ?? null,
+        mrr_growth_mom: v.mrr_growth_mom ?? null,
+        burn_rate: v.burn_rate ?? null,
+        runway_months: v.runway_months ?? null,
+        churn: v.churn ?? null,
+        customers: v.customers ?? null,
+        net_cash_flow: row.net_cash_flow ?? undefined,
+        cash_balance: v.cash_balance ?? undefined,
       };
     });
 
-    // Apply finance rules so profit periods get burn_rate=0 and runway correct
-    for (const row of parsedRows) {
-      const finance = applyFinanceRules(
-        row.net_cash_flow ?? null,
-        row.burn_rate,
-        row.cash_balance ?? null,
-        { preferReportedBurn: false }
-      );
-      row.burn_rate = finance.burn_rate;
-      row.runway_months = finance.runway_months ?? (finance.runway_status === "not_applicable" ? null : row.runway_months);
-    }
-
-    const { rows: sanityRows, rowMeta, logWarnings } = postProcessKpis(parsedRows, rowsToSend);
+    const { rows: sanityRows, rowMeta, logWarnings } = postProcessKpis(parsedRows, grid);
     if (logWarnings.length > 0) {
       logWarnings.forEach((w) => console.warn("[metric_inference]", w));
     }
@@ -261,7 +150,7 @@ Return JSON with "rows", "assumptions", "whatDataWouldIncreaseConfidence", and o
     const latestMeta: RowKpiMeta | undefined = latestIndex >= 0 ? rowMeta[latestIndex] : undefined;
 
     const evidenceBase = `${tabLabel}`;
-    const rationaleBase = data.proxiesUsed ?? "Values from sheet; sanity checks applied.";
+    const rationaleBase = "Column mapping from LLM; values and KPIs computed mechanically.";
     const kpiLabels: Array<{ key: KpiKey; label: string }> = [
       { key: "cash_balance", label: "Cash Balance" },
       { key: "burn_rate", label: "Burn" },
@@ -306,11 +195,11 @@ Return JSON with "rows", "assumptions", "whatDataWouldIncreaseConfidence", and o
       detectedMaturityLevel: 1,
       primaryMetricsTable,
       secondarySignals: "",
-      whyHigherLevelNotUsed: data.proxiesUsed ?? "",
+      whyHigherLevelNotUsed: "",
       kpiTable,
-      altCandidatesConsidered: data.proxiesUsed ?? "",
-      whatDataWouldIncreaseConfidence: data.whatDataWouldIncreaseConfidence ?? "",
-      assumptions: Array.isArray(data.assumptions) ? data.assumptions : [],
+      altCandidatesConsidered: "Mechanical extraction; no LLM numeric output.",
+      whatDataWouldIncreaseConfidence: "More clearly labeled columns; standard KPI naming.",
+      assumptions: ["LLM proposes column mapping only; all numbers from mechanical parsing."],
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
