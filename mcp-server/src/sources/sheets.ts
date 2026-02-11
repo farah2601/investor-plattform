@@ -1008,7 +1008,7 @@ export async function loadSheetsKpisForCompany(companyId: string): Promise<Array
 
   if (!company.google_sheets_url) {
     console.log(`[loadSheetsKpisForCompany] No Google Sheets URL configured for company ${companyId}`);
-    return { rows: [] };
+    return [];
   }
 
   // Support both old format (single url + tab) and new format (JSON array of sheets)
@@ -1030,7 +1030,7 @@ export async function loadSheetsKpisForCompany(companyId: string): Promise<Array
 
   if (!sheetUrl) {
     console.log(`[loadSheetsKpisForCompany] No valid sheet URL for company ${companyId}`);
-    return { rows: [] };
+    return [];
   }
 
   // Extract sheet ID from URL
