@@ -542,28 +542,31 @@ function CompanyDashboardContent() {
         cache: "no-store",
       });
 
-      if (!res.ok) {
-        throw new Error(`Failed to fetch company: ${res.status}`);
-      }
-      
-      const apiData = await res.json();
+      const apiData = await res.json().catch(() => ({}));
 
-      if (apiData?.ok && apiData?.company) {
+      if (!res.ok) {
+        companiesData = [];
+        const msg = typeof apiData?.error === "string" ? apiData.error : (res.status === 404 ? "Company not found" : `Failed to fetch company (${res.status})`);
+        companyError = { message: msg };
+      } else if (apiData?.ok && apiData?.company) {
         companiesData = [apiData.company as CompanyKpi];
         companyError = null;
       } else {
         companiesData = [];
-        companyError = { message: apiData?.error || "Company not found" };
+        const msg = typeof apiData?.error === "string" ? apiData.error : "Company not found";
+        companyError = { message: msg };
       }
-    } catch (fetchError: any) {
+    } catch (fetchError: unknown) {
       console.error("Error fetching company via API:", fetchError);
       companiesData = [];
-      companyError = { message: fetchError?.message || "Failed to fetch company" };
+      const msg = fetchError instanceof Error ? fetchError.message : "Failed to fetch company";
+      companyError = { message: msg || "Failed to fetch company" };
     }
 
     if (companyError) {
-      console.error("Error fetching company KPI", companyError);
-      setError(companyError.message);
+      const errorMessage = companyError.message || "Company not found";
+      console.error("Error fetching company KPI:", errorMessage);
+      setError(errorMessage);
       setCompany(null);
       setInvestorView({ arrMrr: true, burnRunway: true, growthCharts: true, aiInsights: false, showForecast: true });
       setInsights([]);
@@ -1270,10 +1273,27 @@ function CompanyDashboardContent() {
   }
 
   if (error) {
+    const isNotFound = error === "Company not found";
+    const isServerError = error.includes("500") || error.startsWith("Failed to fetch company");
     return (
-      <main className="min-h-screen text-slate-50 p-10">
-        <h1 className="text-2xl font-bold mb-4">Error</h1>
-        <pre className="text-red-400">{error}</pre>
+      <main className="min-h-screen text-slate-50 flex items-center justify-center p-10">
+        <div className="max-w-md w-full text-center space-y-4">
+          <h1 className="text-2xl font-bold text-slate-50">
+            {isNotFound ? "Company not found" : isServerError ? "Something went wrong" : "Error"}
+          </h1>
+          <p className="text-slate-400">
+            {isNotFound
+              ? "The company may have been removed or you don't have access."
+              : isServerError
+                ? "We're having trouble loading this page. Please try again in a moment or go back to overview."
+                : error}
+          </p>
+          <Link href="/overview">
+            <Button variant="outline" className="border-slate-600 text-slate-300 hover:bg-slate-800">
+              Back to overview
+            </Button>
+          </Link>
+        </div>
       </main>
     );
   }

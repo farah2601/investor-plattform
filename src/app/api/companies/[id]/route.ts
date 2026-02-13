@@ -5,6 +5,12 @@ import { getAuthenticatedUser } from "@/lib/server/auth";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+  "Pragma": "no-cache",
+  "Expires": "0",
+} as const;
+
 function isValidUUID(str: string | null | undefined): boolean {
   if (!str) return false;
   const uuidRegex =
@@ -12,31 +18,46 @@ function isValidUUID(str: string | null | undefined): boolean {
   return uuidRegex.test(str);
 }
 
+type CompanyRow = Record<string, unknown> & {
+  investor_view_config?: Record<string, unknown> | null;
+};
+
 export async function GET(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id: companyId } = await params;
+    console.log("[api/companies] companyId:", companyId);
+    console.log("[api/companies] hasServiceRole:", !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+    console.log("[api/companies] hasUrl:", !!process.env.NEXT_PUBLIC_SUPABASE_URL);
 
     if (!companyId) {
-      return NextResponse.json({ error: "Missing company ID" }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: "Missing company ID" },
+        { status: 400, headers: NO_STORE_HEADERS }
+      );
     }
 
     if (!isValidUUID(companyId)) {
       return NextResponse.json(
-        { error: "Invalid company ID format (must be UUID)" },
-        { status: 400 }
+        { ok: false, error: "Invalid company ID format (must be UUID)" },
+        { status: 400, headers: NO_STORE_HEADERS }
       );
     }
 
-    // Try to fetch with branding columns first, fallback to without them if they don't exist
-    // #region agent log
-    const fs = await import('fs');
-    fs.appendFileSync('c:\\Users\\David\\Downloads\\investor-plattform-main\\Ny mappe\\investor-plattform-main (1)\\investor-plattform\\.cursor\\debug.log', JSON.stringify({location:'companies/[id]/route.ts:34',message:'Query attempt with all columns',data:{companyId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'}) + '\n');
-    // #endregion
-    
-    let { data: company, error: companyError } = await supabaseAdmin
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.warn("[api/companies] Missing Supabase env (url or service role)");
+      return NextResponse.json(
+        { ok: false, error: "Server misconfigured: missing Supabase env" },
+        { status: 500, headers: NO_STORE_HEADERS }
+      );
+    }
+
+    let company: CompanyRow | null = null;
+    let companyError: { message?: string; code?: string } | null = null;
+
+    let result = await supabaseAdmin
       .from("companies")
       .select(`
         id,
@@ -69,14 +90,12 @@ export async function GET(
       `)
       .eq("id", companyId)
       .maybeSingle();
-    
-    // #region agent log
-    fs.appendFileSync('c:\\Users\\David\\Downloads\\investor-plattform-main\\Ny mappe\\investor-plattform-main (1)\\investor-plattform\\.cursor\\debug.log', JSON.stringify({location:'companies/[id]/route.ts:66',message:'Query result',data:{hasCompany:!!company,hasError:!!companyError,errorCode:companyError?.code,errorMessage:companyError?.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'}) + '\n');
-    // #endregion
 
-    // If query fails due to missing columns (likely migration not run), try without new columns
+    company = result.data as CompanyRow | null;
+    companyError = result.error;
+
     if (companyError && (companyError.message?.includes("column") || companyError.message?.includes("does not exist") || companyError.code === "42703")) {
-      console.warn("[api/companies/[id]] New columns not found (runway_status, branding, etc.), fetching without them. Run migrations to enable all features.");
+      console.warn("[api/companies/[id]] New columns not found, fetching without them. Run migrations to enable all features.");
       const fallbackResult = await supabaseAdmin
         .from("companies")
         .select(`
@@ -104,62 +123,50 @@ export async function GET(
         `)
         .eq("id", companyId)
         .maybeSingle();
-      
-      company = fallbackResult.data as typeof company;
+
+      company = fallbackResult.data as CompanyRow | null;
       companyError = fallbackResult.error;
-      
-      // #region agent log
-      fs.appendFileSync('c:\\Users\\David\\Downloads\\investor-plattform-main\\Ny mappe\\investor-plattform-main (1)\\investor-plattform\\.cursor\\debug.log', JSON.stringify({location:'companies/[id]/route.ts:99',message:'Fallback query result',data:{hasCompany:!!company,hasError:!!companyError,errorMessage:companyError?.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'}) + '\n');
-      // #endregion
-      
+
       if (company) {
-        // Set default values for missing columns
-        (company as any).logo_url = null;
-        (company as any).header_style = "minimal";
-        (company as any).brand_color = null;
-        (company as any).runway_status = null; // Default: no special status
-        (company as any).investor_view_config = { arrMrr: true, burnRunway: true, growthCharts: true, aiInsights: false, showForecast: true };
-        (company as any).preferred_metrics = null;
+        company.logo_url = null;
+        company.header_style = "minimal";
+        company.brand_color = null;
+        company.runway_status = null;
+        company.investor_view_config = { arrMrr: true, burnRunway: true, growthCharts: true, aiInsights: false, showForecast: true };
+        company.preferred_metrics = null;
       }
     }
 
     if (companyError) {
-      console.error("[api/companies/[id]] Database error:", companyError);
+      console.error("[api/companies] Supabase error:", companyError);
+      const message = typeof companyError.message === "string" ? companyError.message : "Failed to fetch company";
       return NextResponse.json(
-        { error: "Failed to fetch company", details: companyError.message },
-        { status: 500 }
+        { ok: false, error: message },
+        { status: 500, headers: NO_STORE_HEADERS }
       );
     }
 
     if (!company) {
-      return NextResponse.json({ error: "Company not found" }, { status: 404 });
+      return NextResponse.json(
+        { ok: false, error: "Company not found" },
+        { status: 404, headers: NO_STORE_HEADERS }
+      );
     }
 
-    const c = company as any;
-    if (!c.investor_view_config || typeof c.investor_view_config !== "object") {
-      c.investor_view_config = { arrMrr: true, burnRunway: true, growthCharts: true, aiInsights: false, showForecast: true };
+    if (!company.investor_view_config || typeof company.investor_view_config !== "object") {
+      company.investor_view_config = { arrMrr: true, burnRunway: true, growthCharts: true, aiInsights: false, showForecast: true };
     }
 
     return NextResponse.json(
-      { ok: true, company: c },
-      {
-        headers: {
-          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-          "Pragma": "no-cache",
-          "Expires": "0",
-        },
-      }
+      { ok: true, company },
+      { headers: NO_STORE_HEADERS }
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[api/companies/[id]] Unexpected error:", err);
+    const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json(
-      { error: err?.message || "Unknown error" },
-      { 
-        status: 500,
-        headers: {
-          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-        },
-      }
+      { ok: false, error: message },
+      { status: 500, headers: NO_STORE_HEADERS }
     );
   }
 }
